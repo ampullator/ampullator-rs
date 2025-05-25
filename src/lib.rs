@@ -1,7 +1,7 @@
 use std::collections::HashMap;
+use std::collections::VecDeque;
 
 pub type Sample = f32;
-
 
 //------------------------------------------------------------------------------
 
@@ -10,7 +10,6 @@ pub trait GenNode {
     fn num_inputs(&self) -> usize;
     fn input_names(&self) -> &[&'static str];
 }
-
 
 //------------------------------------------------------------------------------
 
@@ -35,7 +34,9 @@ impl SineOscillator {
 }
 
 impl GenNode for SineOscillator {
-    fn num_inputs(&self) -> usize { 4 } // freq, phase, min, max
+    fn num_inputs(&self) -> usize {
+        4
+    } // freq, phase, min, max
 
     fn input_names(&self) -> &[&'static str] {
         &["freq", "phase", "min", "max"]
@@ -50,7 +51,10 @@ impl GenNode for SineOscillator {
 
         for (i, out) in output.iter_mut().enumerate() {
             let freq = freq_in.get(i).copied().unwrap_or(self.default_freq);
-            let phase_offset = phase_in.get(i).copied().unwrap_or(self.default_phase_offset);
+            let phase_offset = phase_in
+                .get(i)
+                .copied()
+                .unwrap_or(self.default_phase_offset);
             let min = min_in.get(i).copied().unwrap_or(self.default_min);
             let max = max_in.get(i).copied().unwrap_or(self.default_max);
 
@@ -67,7 +71,6 @@ impl GenNode for SineOscillator {
 
 //------------------------------------------------------------------------------
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub usize);
 
@@ -75,7 +78,6 @@ pub struct NodeEdge {
     pub input_index: usize, // e.g., 0 for frequency, 1 for phase
     pub source: NodeId,
 }
-
 
 pub struct GraphNode {
     pub id: NodeId,
@@ -85,41 +87,6 @@ pub struct GraphNode {
 }
 
 //------------------------------------------------------------------------------
-
-// dependency-respecting order (DAG topological sort):
-pub fn build_execution_order(&self) -> Vec<NodeId> {
-    let mut indegree = vec![0; self.nodes.len()];
-    for node in &self.nodes {
-        for edge in &node.inputs {
-            indegree[node.id.0] += 1;
-        }
-    }
-
-    let mut queue: VecDeque<NodeId> = indegree
-        .iter()
-        .enumerate()
-        .filter(|(_, &d)| d == 0)
-        .map(|(i, _)| NodeId(i))
-        .collect();
-
-    let mut order = Vec::new();
-
-    while let Some(nid) = queue.pop_front() {
-        order.push(nid);
-        for target in self.nodes.iter() {
-            for edge in &target.inputs {
-                if edge.source == nid {
-                    indegree[target.id.0] -= 1;
-                    if indegree[target.id.0] == 0 {
-                        queue.push_back(target.id);
-                    }
-                }
-            }
-        }
-    }
-
-    order
-}
 
 //------------------------------------------------------------------------------
 pub struct GenGraph {
@@ -133,12 +100,17 @@ impl GenGraph {
     pub fn new(sample_rate: f32, buffer_size: usize) -> Self {
         Self {
             nodes: Vec::new(),
+            node_names: HashMap::new(),
             sample_rate,
             buffer_size,
         }
     }
 
-    pub fn add_node<N: Into<String>>(&mut self, name: N, node: Box<dyn GenNode>) -> NodeId {
+    pub fn add_node<N: Into<String>>(
+        &mut self,
+        name: N,
+        node: Box<dyn GenNode>,
+    ) -> NodeId {
         let id = NodeId(self.nodes.len());
         self.node_names.insert(name.into(), id);
         self.nodes.push(GraphNode {
@@ -159,16 +131,81 @@ impl GenGraph {
         }
     }
 
+    pub fn connect_named(
+        &mut self,
+        target_name: &str,
+        input_name: &str,
+        source_name: &str,
+    ) {
+        let target_id = self.node_names[target_name];
+        let source_id = self.node_names[source_name];
+        let target_node = &self.nodes[target_id.0];
+
+        let index = target_node
+            .node
+            .input_names()
+            .iter()
+            .position(|&name| name == input_name)
+            .expect("Invalid input name");
+
+        self.connect(target_id, index, source_id);
+    }
+
+    // dependency-respecting order (DAG topological sort):
+    pub fn build_execution_order(&self) -> Vec<NodeId> {
+        let mut indegree = vec![0; self.nodes.len()];
+        for node in &self.nodes {
+            let target_idx = node.id.0;
+            indegree[target_idx] = node.inputs.len();
+        }
+
+        let mut queue: VecDeque<NodeId> = indegree
+            .iter()
+            .enumerate()
+            .filter(|&(_, d)| *d == 0)
+            .map(|(i, _)| NodeId(i))
+            .collect();
+
+        let mut order = Vec::new();
+
+        while let Some(nid) = queue.pop_front() {
+            order.push(nid);
+            for target in self.nodes.iter() {
+                for edge in &target.inputs {
+                    if edge.source == nid {
+                        indegree[target.id.0] -= 1;
+                        if indegree[target.id.0] == 0 {
+                            queue.push_back(target.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        order
+    }
+
     pub fn process(&mut self) {
         let execution_order = self.build_execution_order();
         for &nid in &execution_order {
-            let node = &self.nodes[nid.0];
-            let mut input_slices: Vec<&[Sample]> = vec![&[]; node.node.num_inputs()];
+            // let len = self.nodes.len();
+            let node_index = nid.0;
+
+            // Safely borrow `self.nodes[node_index]` mutably and the rest immutably
+            let (left, right) = self.nodes.split_at_mut(node_index);
+            let (node, rest) = right.split_first_mut().expect("valid index");
+
+            let mut input_slices: Vec<&[Sample]> =
+                vec![&[]; node.node.input_names().len()];
             for edge in &node.inputs {
-                input_slices[edge.input_index] = &self.nodes[edge.source.0].buffer;
+                input_slices[edge.input_index] = &if edge.source.0 < node_index {
+                    left[edge.source.0].buffer.as_slice()
+                } else {
+                    rest[edge.source.0 - node_index - 1].buffer.as_slice()
+                };
             }
 
-            let output = &mut self.nodes[nid.0].buffer;
+            let output = &mut node.buffer;
             node.node.process(&input_slices, output, self.sample_rate);
         }
     }
