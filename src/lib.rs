@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::str::FromStr;
 
 pub type Sample = f32;
 
@@ -17,6 +18,113 @@ pub trait GenNode {
     fn input_names(&self) -> &[&'static str];
     fn output_names(&self) -> &[&'static str];
 }
+
+
+//------------------------------------------------------------------------------
+
+pub struct ConstantNode {
+    value: Sample,
+}
+
+impl ConstantNode {
+    pub fn new(value: Sample) -> Self {
+        Self { value }
+    }
+}
+
+impl GenNode for ConstantNode {
+    fn input_names(&self) -> &[&'static str] {
+        &[]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        _inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let out = &mut outputs[0];
+        for v in out.iter_mut() {
+            *v = self.value;
+        }
+    }
+}
+
+
+//------------------------------------------------------------------------------
+
+
+#[derive(Clone, Copy, Debug)]
+pub enum FreqUnit {
+    Hz,
+    Seconds,
+    Samples,
+    Midi,
+    Bpm,
+}
+
+impl FromStr for FreqUnit {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "hz" => Ok(FreqUnit::Hz),
+            "sec" | "seconds" => Ok(FreqUnit::Seconds),
+            "samples" | "spc" => Ok(FreqUnit::Samples),
+            "midi" => Ok(FreqUnit::Midi),
+            "bpm" => Ok(FreqUnit::Bpm),
+            _ => Err(format!("Unknown frequency unit: {}", s)),
+        }
+    }
+}
+
+pub struct FreqConverterNode {
+    mode: FreqUnit,
+}
+
+impl FreqConverterNode {
+    pub fn new(mode: FreqUnit) -> Self {
+        Self { mode }
+    }
+}
+
+impl GenNode for FreqConverterNode {
+    fn input_names(&self) -> &[&'static str] {
+        &["in"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["hz"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs.get(0).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let x = input.get(i).copied().unwrap_or(0.0);
+            out[i] = match self.mode {
+                FreqUnit::Hz => x,
+                FreqUnit::Seconds => if x != 0.0 { 1.0 / x } else { 0.0 },
+                FreqUnit::Samples => if x != 0.0 { sample_rate / x } else { 0.0 },
+                FreqUnit::Midi => 440.0 * 2f32.powf((x - 69.0) / 12.0),
+                FreqUnit::Bpm => x / 60.0,
+            };
+        }
+    }
+}
+
 
 //------------------------------------------------------------------------------
 
