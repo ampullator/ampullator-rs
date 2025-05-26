@@ -5,7 +5,6 @@ pub type Sample = f32;
 
 //------------------------------------------------------------------------------
 
-
 pub trait GenNode {
     fn process(
         &mut self,
@@ -17,6 +16,71 @@ pub trait GenNode {
 
     fn input_names(&self) -> &[&'static str];
     fn output_names(&self) -> &[&'static str];
+}
+
+//------------------------------------------------------------------------------
+
+pub struct SumNode {
+    input_labels: Vec<String>,
+    input_refs: Vec<&'static str>,
+}
+
+impl SumNode {
+    pub fn new(input_count: usize) -> Self {
+        let input_labels: Vec<String> =
+            (0..input_count).map(|i| format!("in{}", i)).collect();
+
+        // Promote to 'static using Box::leak safely
+        let input_refs: Vec<&'static str> = input_labels
+            .iter()
+            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
+            .collect();
+
+        Self {
+            input_labels,
+            input_refs,
+        }
+    }
+}
+
+impl GenNode for SumNode {
+    fn input_names(&self) -> &[&'static str] {
+        &self.input_refs
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["sum"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let out = &mut outputs[0];
+        let len = out.len();
+
+        match inputs.len() {
+            2 => {
+                let a = inputs[0];
+                let b = inputs[1];
+                for i in 0..len {
+                    out[i] = a[i] + b[i];
+                }
+            }
+            _ => {
+                for i in 0..len {
+                    let mut acc = 0.0;
+                    for input in inputs {
+                        acc += input[i];
+                    }
+                    out[i] = acc;
+                }
+            }
+        }
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -72,7 +136,10 @@ impl GenNode for SineOscillator {
             // let global_sample = time_sample + i;
 
             let freq = freq_in.get(i).copied().unwrap_or(self.default_freq);
-            let phase_offset = phase_in.get(i).copied().unwrap_or(self.default_phase_offset);
+            let phase_offset = phase_in
+                .get(i)
+                .copied()
+                .unwrap_or(self.default_phase_offset);
             let min = min_in.get(i).copied().unwrap_or(self.default_min);
             let max = max_in.get(i).copied().unwrap_or(self.default_max);
 
@@ -127,7 +194,11 @@ impl GenGraph {
             time_sample: 0,
         }
     }
-    pub fn add_node<N: Into<String>>(&mut self, name: N, node: Box<dyn GenNode>) -> NodeId {
+    pub fn add_node<N: Into<String>>(
+        &mut self,
+        name: N,
+        node: Box<dyn GenNode>,
+    ) -> NodeId {
         let id = NodeId(self.nodes.len());
         let output_count = node.output_names().len();
         self.node_names.insert(name.into(), id);
@@ -140,8 +211,25 @@ impl GenGraph {
         id
     }
 
-    pub fn connect(&mut self, target: NodeId, input_index: usize, source: NodeId, output_index: usize) {
+    pub fn connect(
+        &mut self,
+        target: NodeId,
+        input_index: usize,
+        source: NodeId,
+        output_index: usize,
+    ) {
         if let Some(target_node) = self.nodes.get_mut(target.0) {
+            if target_node
+                .inputs
+                .iter()
+                .any(|e| e.input_index == input_index)
+            {
+                panic!(
+                    "Input {} on node {:?} is already connected. \
+                     Only one connection per input is allowed.",
+                    input_index, target
+                );
+            }
             target_node.inputs.push(NodeEdge {
                 input_index,
                 source,
@@ -149,6 +237,7 @@ impl GenGraph {
             });
         }
     }
+
     pub fn connect_named(
         &mut self,
         target_name: &str,
@@ -228,8 +317,11 @@ impl GenGraph {
                 };
             }
 
-            let mut output_slices: Vec<&mut [Sample]> =
-                node.outputs.iter_mut().map(|buf| buf.as_mut_slice()).collect();
+            let mut output_slices: Vec<&mut [Sample]> = node
+                .outputs
+                .iter_mut()
+                .map(|buf| buf.as_mut_slice())
+                .collect();
 
             node.node.process(
                 &input_slices,
@@ -253,7 +345,6 @@ impl GenGraph {
             .expect("Invalid output name");
         &node.outputs[index]
     }
-
 }
 
 // pub fn greet(name: &str) {
