@@ -1,20 +1,17 @@
+use ampullator::UGConst;
+use ampullator::UGAsHz;
+use ampullator::UnitRate;
 use ampullator::GenGraph;
-use ampullator::OscSine;
-use ampullator::SumNode;
-use ampullator::FreqConverterNode;
-use ampullator::FreqUnit;
-use ampullator::ConstantNode;
-
-
-
+use ampullator::UGSine;
+use ampullator::UGSum;
 
 fn test1() {
     let mut graph = GenGraph::new(44100.0, 128);
 
     // Add nodes
-    graph.add_node("lfo", Box::new(OscSine::new()));
-    graph.add_node("osc", Box::new(OscSine::new()));
-    graph.add_node("mix", Box::new(SumNode::new(2))); // 2-input sum
+    graph.add_node("lfo", Box::new(UGSine::new()));
+    graph.add_node("osc", Box::new(UGSine::new()));
+    graph.add_node("mix", Box::new(UGSum::new(2))); // 2-input sum
 
     // Connections
     graph.connect_named("osc", "freq", "lfo", "wave"); // modulate osc with lfo
@@ -44,32 +41,28 @@ fn test1() {
     // }
 
     println!("{}", graph.describe());
-
 }
-
 
 fn test2() {
     let mut graph = GenGraph::new(44100.0, 128);
 
     // Mock source for MIDI note or BPM (e.g. 60 bpm = 1Hz)
-    graph.add_node("note", Box::new(ConstantNode::new(69.0))); // A4
-    graph.add_node("conv", Box::new(FreqConverterNode::new(FreqUnit::Midi)));
-    graph.add_node("osc", Box::new(OscSine::new()));
+    graph.add_node("note", Box::new(UGConst::new(69.0))); // A4
+    graph.add_node("conv", Box::new(UGAsHz::new(UnitRate::Midi)));
+    graph.add_node("osc", Box::new(UGSine::new()));
 
     graph.connect_named("conv", "in", "note", "out");
     graph.connect_named("osc", "freq", "conv", "hz");
 
     for _ in 0..10 {
         graph.process();
-        let wave = graph.get_output("osc", "wave");
+        // let wave = graph.get_output("osc", "wave");
         // println!("{:.3?}", &wave[..8.min(wave.len())]);
     }
     println!("{}", graph.describe());
 }
 
-
 fn main() {
     test1();
     test2();
 }
-

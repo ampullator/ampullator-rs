@@ -1,3 +1,4 @@
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::str::FromStr;
@@ -5,8 +6,10 @@ use std::str::FromStr;
 pub type Sample = f32;
 
 //------------------------------------------------------------------------------
+// Alt names: UnitGen
 
-pub trait GenNode {
+
+pub trait UGen {
     fn process(
         &mut self,
         inputs: &[&[Sample]],
@@ -27,19 +30,19 @@ pub trait GenNode {
 
 //------------------------------------------------------------------------------
 
-pub struct ConstantNode {
+pub struct UGConst {
     value: Sample,
 }
 
-impl ConstantNode {
+impl UGConst {
     pub fn new(value: Sample) -> Self {
         Self { value }
     }
 }
 
-impl GenNode for ConstantNode {
+impl UGen for UGConst {
     fn type_name(&self) -> &'static str {
-        "Constant"
+        "UGConst"
     }
 
     fn describe_config(&self) -> Option<String> {
@@ -68,12 +71,10 @@ impl GenNode for ConstantNode {
     }
 }
 
-
 //------------------------------------------------------------------------------
 
-
 #[derive(Clone, Copy, Debug)]
-pub enum FreqUnit {
+pub enum UnitRate {
     Hz,
     Seconds,
     Samples,
@@ -81,34 +82,34 @@ pub enum FreqUnit {
     Bpm,
 }
 
-impl FromStr for FreqUnit {
+impl FromStr for UnitRate {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "hz" => Ok(FreqUnit::Hz),
-            "sec" | "seconds" => Ok(FreqUnit::Seconds),
-            "samples" | "spc" => Ok(FreqUnit::Samples),
-            "midi" => Ok(FreqUnit::Midi),
-            "bpm" => Ok(FreqUnit::Bpm),
+            "hz" => Ok(UnitRate::Hz),
+            "sec" | "seconds" => Ok(UnitRate::Seconds),
+            "samples" | "spc" => Ok(UnitRate::Samples),
+            "midi" => Ok(UnitRate::Midi),
+            "bpm" => Ok(UnitRate::Bpm),
             _ => Err(format!("Unknown frequency unit: {}", s)),
         }
     }
 }
 
-pub struct FreqConverterNode {
-    mode: FreqUnit,
+pub struct UGAsHz {
+    mode: UnitRate,
 }
 
-impl FreqConverterNode {
-    pub fn new(mode: FreqUnit) -> Self {
+impl UGAsHz {
+    pub fn new(mode: UnitRate) -> Self {
         Self { mode }
     }
 }
 
-impl GenNode for FreqConverterNode {
+impl UGen for UGAsHz {
     fn type_name(&self) -> &'static str {
-        "FreqConverter"
+        "UGAsHz"
     }
 
     fn describe_config(&self) -> Option<String> {
@@ -136,25 +137,36 @@ impl GenNode for FreqConverterNode {
         for i in 0..out.len() {
             let x = input.get(i).copied().unwrap_or(0.0);
             out[i] = match self.mode {
-                FreqUnit::Hz => x,
-                FreqUnit::Seconds => if x != 0.0 { 1.0 / x } else { 0.0 },
-                FreqUnit::Samples => if x != 0.0 { sample_rate / x } else { 0.0 },
-                FreqUnit::Midi => 440.0 * 2f32.powf((x - 69.0) / 12.0),
-                FreqUnit::Bpm => x / 60.0,
+                UnitRate::Hz => x,
+                UnitRate::Seconds => {
+                    if x != 0.0 {
+                        1.0 / x
+                    } else {
+                        0.0
+                    }
+                }
+                UnitRate::Samples => {
+                    if x != 0.0 {
+                        sample_rate / x
+                    } else {
+                        0.0
+                    }
+                }
+                UnitRate::Midi => 440.0 * 2f32.powf((x - 69.0) / 12.0),
+                UnitRate::Bpm => x / 60.0,
             };
         }
     }
 }
 
-
 //------------------------------------------------------------------------------
 
-pub struct SumNode {
+pub struct UGSum {
     input_labels: Vec<String>,
     input_refs: Vec<&'static str>,
 }
 
-impl SumNode {
+impl UGSum {
     pub fn new(input_count: usize) -> Self {
         let input_labels: Vec<String> =
             (0..input_count).map(|i| format!("in{}", i)).collect();
@@ -172,9 +184,9 @@ impl SumNode {
     }
 }
 
-impl GenNode for SumNode {
+impl UGen for UGSum {
     fn type_name(&self) -> &'static str {
-        "Sum"
+        "UGSum"
     }
 
     fn input_names(&self) -> &[&'static str] {
@@ -218,7 +230,7 @@ impl GenNode for SumNode {
 
 //------------------------------------------------------------------------------
 
-pub struct OscSine {
+pub struct UGSine {
     phase: Sample,
     default_freq: Sample,
     default_phase_offset: Sample,
@@ -226,7 +238,7 @@ pub struct OscSine {
     default_max: Sample,
 }
 
-impl OscSine {
+impl UGSine {
     pub fn new() -> Self {
         Self {
             phase: 0.0,
@@ -238,9 +250,9 @@ impl OscSine {
     }
 }
 
-impl GenNode for OscSine {
+impl UGen for UGSine {
     fn type_name(&self) -> &'static str {
-        "OscSine"
+        "UGSine"
     }
 
     fn input_names(&self) -> &[&'static str] {
@@ -300,9 +312,6 @@ impl GenNode for OscSine {
             wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
             trig_out[i] = if crossed { 1.0 } else { 0.0 };
 
-            // if global_sample == 0 {
-            //     println!("OscSine activated at t=0s");
-            // }
         }
     }
 }
@@ -318,7 +327,7 @@ pub struct NodeEdge {
 }
 pub struct GraphNode {
     pub id: NodeId,
-    pub node: Box<dyn GenNode>,
+    pub node: Box<dyn UGen>,
     pub inputs: Vec<NodeEdge>,
     pub outputs: Vec<Vec<Sample>>,
 }
@@ -344,7 +353,7 @@ impl GenGraph {
     pub fn add_node<N: Into<String>>(
         &mut self,
         name: N,
-        node: Box<dyn GenNode>,
+        node: Box<dyn UGen>,
     ) -> NodeId {
         let id = NodeId(self.nodes.len());
         let output_count = node.output_names().len();
@@ -493,63 +502,8 @@ impl GenGraph {
         &node.outputs[index]
     }
 
-    // pub fn describe(&self) -> String {
-    //     let mut lines = Vec::new();
-
-    //     for node in &self.nodes {
-    //         let name = self
-    //             .node_names
-    //             .iter()
-    //             .find(|&(_, id)| *id == node.id)
-    //             .map(|(name, _)| name.as_str())
-    //             .unwrap_or("(unnamed)");
-
-    //         lines.push(format!("[{}] {}", node.node.type_name(), name));
-
-    //         // Input section
-    //         if !node.node.input_names().is_empty() {
-    //             lines.push("  input:".to_string());
-
-    //             for (i, input_name) in node.node.input_names().iter().enumerate() {
-    //                 let source = node.inputs.iter().find(|e| e.input_index == i);
-    //                 if let Some(edge) = source {
-    //                     let source_name = self
-    //                         .node_names
-    //                         .iter()
-    //                         .find(|&(_, id)| *id == edge.source)
-    //                         .map(|(name, _)| name.as_str())
-    //                         .unwrap_or("(unknown)");
-    //                     let source_node = &self.nodes[edge.source.0];
-    //                     let output_name = source_node
-    //                         .node
-    //                         .output_names()
-    //                         .get(edge.output_index)
-    //                         .copied()
-    //                         .unwrap_or("???");
-    //                     lines.push(format!("    {} <- {}.{}", input_name, source_name, output_name));
-    //                 } else {
-    //                     lines.push(format!("    {} <- (unconnected)", input_name));
-    //                 }
-    //             }
-    //         }
-
-    //         // Output section
-    //         let output_names = node.node.output_names();
-    //         if !output_names.is_empty() {
-    //             lines.push(format!(
-    //                 "  output: {}",
-    //                 output_names.join(", ")
-    //             ));
-    //         }
-
-    //         lines.push("".to_string());
-    //     }
-
-    //     lines.join("\n")
-    // }
-
-    pub fn describe(&self) -> String {
-        let mut lines = Vec::new();
+    pub fn describe_json(&self) -> Value {
+        let mut result = Vec::new();
 
         for &node_id in &self.build_execution_order() {
             let node = &self.nodes[node_id.0];
@@ -558,47 +512,118 @@ impl GenGraph {
                 .node_names
                 .iter()
                 .find(|&(_, &id)| id == node_id)
-                .map(|(n, _)| n.as_str())
-                .unwrap_or("(unnamed)");
+                .map(|(n, _)| n.clone())
+                .unwrap_or_else(|| format!("node_{}", node_id.0));
 
             let type_name = node.node.type_name();
-            let config = node.node.describe_config();
-            match config {
-                Some(cfg) => lines.push(format!("[{}] {} {{ {} }}", type_name, name, cfg)),
-                None => lines.push(format!("[{}] {}", type_name, name)),
+            let config_str = node.node.describe_config();
+
+            let inputs: Vec<Value> = node
+                .node
+                .input_names()
+                .iter()
+                .enumerate()
+                .map(|(i, input_name)| {
+                    let source = node.inputs.iter().find(|e| e.input_index == i);
+                    match source {
+                        Some(edge) => {
+                            let source_name = self
+                                .node_names
+                                .iter()
+                                .find(|&(_, id)| *id == edge.source)
+                                .map(|(n, _)| n.clone())
+                                .unwrap_or_else(|| format!("node_{}", edge.source.0));
+
+                            let output_name = self.nodes[edge.source.0]
+                                .node
+                                .output_names()
+                                .get(edge.output_index)
+                                .copied()
+                                .unwrap_or("???");
+
+                            json!({
+                                "name": input_name,
+                                "connected_to": {
+                                    "node": source_name,
+                                    "output": output_name
+                                }
+                            })
+                        }
+                        None => {
+                            let default = node.node.default_input(input_name);
+                            json!({
+                                "name": input_name,
+                                "default": default
+                            })
+                        }
+                    }
+                })
+                .collect();
+
+            let outputs: Vec<Value> = node
+                .node
+                .output_names()
+                .iter()
+                .enumerate()
+                .map(|(i, output_name)| {
+                    let value = node.outputs.get(i).and_then(|buf| buf.last()).copied();
+                    json!({
+                        "name": output_name,
+                        "value": value
+                    })
+                })
+                .collect();
+
+            result.push(json!({
+                "id": node.id.0,
+                "name": name,
+                "type": type_name,
+                "config": config_str,
+                "inputs": inputs,
+                "outputs": outputs
+            }));
+        }
+
+        Value::Array(result)
+    }
+
+    pub fn describe(&self) -> String {
+        let data = self.describe_json();
+        let mut lines = Vec::new();
+
+        for node in data.as_array().expect("JSON array of nodes") {
+            let type_name = node["type"].as_str().unwrap_or("UnknownType");
+            let name = node["name"].as_str().unwrap_or("unknown");
+            let config = node["config"].as_str().unwrap_or("");
+
+            if config.is_empty() {
+                lines.push(format!("[{}] {}", type_name, name));
+            } else {
+                lines.push(format!("[{}] {} {{ {} }}", type_name, name, config));
             }
 
             // Inputs
-            for (i, input_name) in node.node.input_names().iter().enumerate() {
-                let source = node.inputs.iter().find(|e| e.input_index == i);
-                if let Some(edge) = source {
-                    let source_name = self
-                        .node_names
-                        .iter()
-                        .find(|&(_, id)| *id == edge.source)
-                        .map(|(n, _)| n.as_str())
-                        .unwrap_or("(unknown)");
-                    let output_name = self.nodes[edge.source.0]
-                        .node
-                        .output_names()
-                        .get(edge.output_index)
-                        .copied()
-                        .unwrap_or("???");
-                    lines.push(format!("    {:<8} ← {}.{}", input_name, source_name, output_name));
-                } else if let Some(default) = node.node.default_input(input_name) {
-                    lines.push(format!("    {:<8} ← [default: {:.3}]", input_name, default));
+            for input in node["inputs"].as_array().unwrap() {
+                let label = input["name"].as_str().unwrap_or("?");
+                if let Some(obj) = input.get("connected_to") {
+                    let src_node = obj["node"].as_str().unwrap_or("?");
+                    let src_output = obj["output"].as_str().unwrap_or("?");
+                    lines.push(format!("    {} ← {}.{}", label, src_node, src_output));
+                } else if let Some(val) = input.get("default").and_then(|v| v.as_f64()) {
+                    lines.push(format!("    {} ←= {:.3}", label, val));
                 } else {
-                    lines.push(format!("    {:<8} ← (unconnected)", input_name));
+                    lines.push(format!("    {} ← ∅", label));
                 }
             }
 
-            // Outputs with current value
-            for (i, output_name) in node.node.output_names().iter().enumerate() {
-                let value = node.outputs.get(i)
-                    .and_then(|buf| buf.last())
+            // Outputs
+            for output in node["outputs"].as_array().unwrap() {
+                let label = output["name"].as_str().unwrap_or("?");
+                let value = output["value"]
+                    .as_f64()
                     .map(|v| format!("{:.3}", v))
                     .unwrap_or_else(|| "(empty)".to_string());
-                lines.push(format!("    → {:<8} = {}", output_name, value));
+                lines.push(format!("    → {} ≊ {}", label, value));
             }
 
             lines.push("".to_string());
@@ -606,5 +631,36 @@ impl GenGraph {
 
         lines.join("\n")
     }
+}
+
+//------------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gen_graph_describe_json_a() {
+        let mut graph = GenGraph::new(44100.0, 128);
+
+        graph.add_node("note", Box::new(UGConst::new(69.0))); // A4
+        graph.add_node("conv", Box::new(UGAsHz::new(UnitRate::Midi)));
+        graph.add_node("osc", Box::new(UGSine::new()));
+
+        graph.connect_named("conv", "in", "note", "out");
+        graph.connect_named("osc", "freq", "conv", "hz");
+
+        assert_eq!(
+            graph.describe_json().to_string(),
+            r#"[{"config":"value = 69.000","id":0,"inputs":[],"name":"note","outputs":[{"name":"out","value":0.0}],"type":"UGConst"},{"config":"mode = midi","id":1,"inputs":[{"connected_to":{"node":"note","output":"out"},"name":"in"}],"name":"conv","outputs":[{"name":"hz","value":0.0}],"type":"UGAsHz"},{"config":null,"id":2,"inputs":[{"connected_to":{"node":"conv","output":"hz"},"name":"freq"},{"default":0.0,"name":"phase"},{"default":-1.0,"name":"min"},{"default":1.0,"name":"max"}],"name":"osc","outputs":[{"name":"wave","value":0.0},{"name":"trigger","value":0.0}],"type":"UGSine"}]"#
+        );
+    }
+
+
+    #[test]
+    fn test_constant_a() {
+        let n = UGConst::new(3.0);
+        assert_eq!(n.type_name(), "UGConst");
+    }
+
 
 }
