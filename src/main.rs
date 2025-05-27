@@ -1,5 +1,5 @@
 use ampullator::GenGraph;
-use ampullator::SineOscillator;
+use ampullator::OscSine;
 use ampullator::SumNode;
 use ampullator::FreqConverterNode;
 use ampullator::FreqUnit;
@@ -12,8 +12,8 @@ fn test1() {
     let mut graph = GenGraph::new(44100.0, 128);
 
     // Add nodes
-    graph.add_node("lfo", Box::new(SineOscillator::new()));
-    graph.add_node("osc", Box::new(SineOscillator::new()));
+    graph.add_node("lfo", Box::new(OscSine::new()));
+    graph.add_node("osc", Box::new(OscSine::new()));
     graph.add_node("mix", Box::new(SumNode::new(2))); // 2-input sum
 
     // Connections
@@ -33,15 +33,18 @@ fn test1() {
     }
 
     // Print results
-    println!("First 16 mixed samples:");
-    for (i, s) in all_mix.iter().take(16).enumerate() {
-        println!("mix[{:02}]: {:.5}", i, s);
-    }
+    // println!("First 16 mixed samples:");
+    // for (i, s) in all_mix.iter().take(16).enumerate() {
+    //     println!("mix[{:02}]: {:.5}", i, s);
+    // }
 
-    println!("\nFirst 16 trigger samples from osc:");
-    for (i, s) in all_trigger.iter().take(16).enumerate() {
-        println!("trig[{:02}]: {:.5}", i, s);
-    }
+    // println!("\nFirst 16 trigger samples from osc:");
+    // for (i, s) in all_trigger.iter().take(16).enumerate() {
+    //     println!("trig[{:02}]: {:.5}", i, s);
+    // }
+
+    println!("{}", graph.describe());
+
 }
 
 
@@ -51,7 +54,7 @@ fn test2() {
     // Mock source for MIDI note or BPM (e.g. 60 bpm = 1Hz)
     graph.add_node("note", Box::new(ConstantNode::new(69.0))); // A4
     graph.add_node("conv", Box::new(FreqConverterNode::new(FreqUnit::Midi)));
-    graph.add_node("osc", Box::new(SineOscillator::new()));
+    graph.add_node("osc", Box::new(OscSine::new()));
 
     graph.connect_named("conv", "in", "note", "out");
     graph.connect_named("osc", "freq", "conv", "hz");
@@ -59,8 +62,9 @@ fn test2() {
     for _ in 0..10 {
         graph.process();
         let wave = graph.get_output("osc", "wave");
-        println!("{:.3?}", &wave[..8.min(wave.len())]);
+        // println!("{:.3?}", &wave[..8.min(wave.len())]);
     }
+    println!("{}", graph.describe());
 }
 
 

@@ -14,11 +14,16 @@ pub trait GenNode {
         sample_rate: f32,
         time_sample: usize,
     );
-
+    fn type_name(&self) -> &'static str;
     fn input_names(&self) -> &[&'static str];
     fn output_names(&self) -> &[&'static str];
+    fn default_input(&self, _input_name: &str) -> Option<Sample> {
+        None
+    }
+    fn describe_config(&self) -> Option<String> {
+        None
+    }
 }
-
 
 //------------------------------------------------------------------------------
 
@@ -33,6 +38,14 @@ impl ConstantNode {
 }
 
 impl GenNode for ConstantNode {
+    fn type_name(&self) -> &'static str {
+        "Constant"
+    }
+
+    fn describe_config(&self) -> Option<String> {
+        Some(format!("value = {:.3}", self.value))
+    }
+
     fn input_names(&self) -> &[&'static str] {
         &[]
     }
@@ -94,6 +107,14 @@ impl FreqConverterNode {
 }
 
 impl GenNode for FreqConverterNode {
+    fn type_name(&self) -> &'static str {
+        "FreqConverter"
+    }
+
+    fn describe_config(&self) -> Option<String> {
+        Some(format!("mode = {:?}", self.mode).to_lowercase())
+    }
+
     fn input_names(&self) -> &[&'static str] {
         &["in"]
     }
@@ -152,6 +173,10 @@ impl SumNode {
 }
 
 impl GenNode for SumNode {
+    fn type_name(&self) -> &'static str {
+        "Sum"
+    }
+
     fn input_names(&self) -> &[&'static str] {
         &self.input_refs
     }
@@ -193,7 +218,7 @@ impl GenNode for SumNode {
 
 //------------------------------------------------------------------------------
 
-pub struct SineOscillator {
+pub struct OscSine {
     phase: Sample,
     default_freq: Sample,
     default_phase_offset: Sample,
@@ -201,7 +226,7 @@ pub struct SineOscillator {
     default_max: Sample,
 }
 
-impl SineOscillator {
+impl OscSine {
     pub fn new() -> Self {
         Self {
             phase: 0.0,
@@ -213,13 +238,27 @@ impl SineOscillator {
     }
 }
 
-impl GenNode for SineOscillator {
+impl GenNode for OscSine {
+    fn type_name(&self) -> &'static str {
+        "OscSine"
+    }
+
     fn input_names(&self) -> &[&'static str] {
         &["freq", "phase", "min", "max"]
     }
 
     fn output_names(&self) -> &[&'static str] {
         &["wave", "trigger"]
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "freq" => Some(self.default_freq),
+            "phase" => Some(self.default_phase_offset),
+            "min" => Some(self.default_min),
+            "max" => Some(self.default_max),
+            _ => None,
+        }
     }
 
     fn process(
@@ -262,7 +301,7 @@ impl GenNode for SineOscillator {
             trig_out[i] = if crossed { 1.0 } else { 0.0 };
 
             // if global_sample == 0 {
-            //     println!("SineOscillator activated at t=0s");
+            //     println!("OscSine activated at t=0s");
             // }
         }
     }
@@ -453,8 +492,119 @@ impl GenGraph {
             .expect("Invalid output name");
         &node.outputs[index]
     }
-}
 
-// pub fn greet(name: &str) {
-//     println!("Hello, {}!", name);
-// }
+    // pub fn describe(&self) -> String {
+    //     let mut lines = Vec::new();
+
+    //     for node in &self.nodes {
+    //         let name = self
+    //             .node_names
+    //             .iter()
+    //             .find(|&(_, id)| *id == node.id)
+    //             .map(|(name, _)| name.as_str())
+    //             .unwrap_or("(unnamed)");
+
+    //         lines.push(format!("[{}] {}", node.node.type_name(), name));
+
+    //         // Input section
+    //         if !node.node.input_names().is_empty() {
+    //             lines.push("  input:".to_string());
+
+    //             for (i, input_name) in node.node.input_names().iter().enumerate() {
+    //                 let source = node.inputs.iter().find(|e| e.input_index == i);
+    //                 if let Some(edge) = source {
+    //                     let source_name = self
+    //                         .node_names
+    //                         .iter()
+    //                         .find(|&(_, id)| *id == edge.source)
+    //                         .map(|(name, _)| name.as_str())
+    //                         .unwrap_or("(unknown)");
+    //                     let source_node = &self.nodes[edge.source.0];
+    //                     let output_name = source_node
+    //                         .node
+    //                         .output_names()
+    //                         .get(edge.output_index)
+    //                         .copied()
+    //                         .unwrap_or("???");
+    //                     lines.push(format!("    {} <- {}.{}", input_name, source_name, output_name));
+    //                 } else {
+    //                     lines.push(format!("    {} <- (unconnected)", input_name));
+    //                 }
+    //             }
+    //         }
+
+    //         // Output section
+    //         let output_names = node.node.output_names();
+    //         if !output_names.is_empty() {
+    //             lines.push(format!(
+    //                 "  output: {}",
+    //                 output_names.join(", ")
+    //             ));
+    //         }
+
+    //         lines.push("".to_string());
+    //     }
+
+    //     lines.join("\n")
+    // }
+
+    pub fn describe(&self) -> String {
+        let mut lines = Vec::new();
+
+        for &node_id in &self.build_execution_order() {
+            let node = &self.nodes[node_id.0];
+
+            let name = self
+                .node_names
+                .iter()
+                .find(|&(_, &id)| id == node_id)
+                .map(|(n, _)| n.as_str())
+                .unwrap_or("(unnamed)");
+
+            let type_name = node.node.type_name();
+            let config = node.node.describe_config();
+            match config {
+                Some(cfg) => lines.push(format!("[{}] {} {{ {} }}", type_name, name, cfg)),
+                None => lines.push(format!("[{}] {}", type_name, name)),
+            }
+
+            // Inputs
+            for (i, input_name) in node.node.input_names().iter().enumerate() {
+                let source = node.inputs.iter().find(|e| e.input_index == i);
+                if let Some(edge) = source {
+                    let source_name = self
+                        .node_names
+                        .iter()
+                        .find(|&(_, id)| *id == edge.source)
+                        .map(|(n, _)| n.as_str())
+                        .unwrap_or("(unknown)");
+                    let output_name = self.nodes[edge.source.0]
+                        .node
+                        .output_names()
+                        .get(edge.output_index)
+                        .copied()
+                        .unwrap_or("???");
+                    lines.push(format!("    {:<8} ← {}.{}", input_name, source_name, output_name));
+                } else if let Some(default) = node.node.default_input(input_name) {
+                    lines.push(format!("    {:<8} ← [default: {:.3}]", input_name, default));
+                } else {
+                    lines.push(format!("    {:<8} ← (unconnected)", input_name));
+                }
+            }
+
+            // Outputs with current value
+            for (i, output_name) in node.node.output_names().iter().enumerate() {
+                let value = node.outputs.get(i)
+                    .and_then(|buf| buf.last())
+                    .map(|v| format!("{:.3}", v))
+                    .unwrap_or_else(|| "(empty)".to_string());
+                lines.push(format!("    → {:<8} = {}", output_name, value));
+            }
+
+            lines.push("".to_string());
+        }
+
+        lines.join("\n")
+    }
+
+}
