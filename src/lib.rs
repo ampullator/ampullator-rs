@@ -321,10 +321,13 @@ impl UGen for UGSine {
 pub struct NodeId(pub usize);
 
 pub struct NodeEdge {
-    pub input_index: usize,
-    pub source: NodeId,
-    pub output_index: usize,
+    pub src: NodeId,
+    pub output_index: usize, // output in src
+    pub input_index: usize, // index in the Node's inputs
 }
+
+// `inputs` are not sorted; each NodeEdge defines src and an output of that src to be delivered to this nodes's input.
+// `outputs` are sorted in fixed output positions.
 pub struct GraphNode {
     pub id: NodeId,
     pub node: Box<dyn UGen>,
@@ -369,13 +372,13 @@ impl GenGraph {
 
     pub fn connect(
         &mut self,
-        target: NodeId,
-        input_index: usize,
-        source: NodeId,
+        src: NodeId,
         output_index: usize,
+        dst: NodeId,
+        input_index: usize,
     ) {
-        if let Some(target_node) = self.nodes.get_mut(target.0) {
-            if target_node
+        if let Some(dst_node) = self.nodes.get_mut(dst.0) {
+            if dst_node
                 .inputs
                 .iter()
                 .any(|e| e.input_index == input_index)
@@ -383,28 +386,39 @@ impl GenGraph {
                 panic!(
                     "Input {} on node {:?} is already connected. \
                      Only one connection per input is allowed.",
-                    input_index, target
+                    input_index, dst
                 );
             }
-            target_node.inputs.push(NodeEdge {
-                input_index,
-                source,
+            // connect the src.out to dst.in
+            dst_node.inputs.push(NodeEdge {
+                src,
                 output_index,
+                input_index,
             });
         }
     }
 
-    pub fn connect_named(
-        &mut self,
-        target_name: &str,
-        input_name: &str,
-        source_name: &str,
-        output_name: &str,
-    ) {
-        let target_id = self.node_names[target_name];
-        let source_id = self.node_names[source_name];
-        let target_node = &self.nodes[target_id.0];
-        let source_node = &self.nodes[source_id.0];
+
+    pub fn connect_named(&mut self, src: &str, dst: &str) {
+        fn split_name(s: &str) -> (&str, &str) {
+            s.rsplit_once('.')
+                .unwrap_or_else(|| panic!("Expected 'name.port', got: '{}'", s))
+        }
+
+        let (src_name, output_name) = split_name(src);
+        let (dst_name, input_name) = split_name(dst);
+
+    // pub fn connect_named(
+    //     &mut self,
+    //     src_name: &str,
+    //     output_name: &str,
+    //     dst_name: &str,
+    //     input_name: &str,
+    // ) {
+        let dst_id = self.node_names[dst_name];
+        let src_id = self.node_names[src_name];
+        let target_node = &self.nodes[dst_id.0];
+        let src_node = &self.nodes[src_id.0];
 
         let input_index = target_node
             .node
@@ -413,14 +427,14 @@ impl GenGraph {
             .position(|&name| name == input_name)
             .expect("Invalid input name");
 
-        let output_index = source_node
+        let output_index = src_node
             .node
             .output_names()
             .iter()
             .position(|&name| name == output_name)
             .expect("Invalid output name");
 
-        self.connect(target_id, input_index, source_id, output_index);
+        self.connect(src_id, output_index, dst_id, input_index);
     }
 
     // dependency-respecting order (DAG topological sort):
@@ -443,7 +457,7 @@ impl GenGraph {
             order.push(nid);
             for target in &self.nodes {
                 for edge in &target.inputs {
-                    if edge.source == nid {
+                    if edge.src == nid {
                         indegree[target.id.0] -= 1;
                         if indegree[target.id.0] == 0 {
                             queue.push_back(target.id);
@@ -466,10 +480,10 @@ impl GenGraph {
             let mut input_slices: Vec<&[Sample]> =
                 vec![&[]; node.node.input_names().len()];
             for edge in &node.inputs {
-                input_slices[edge.input_index] = if edge.source.0 < node_index {
-                    &left[edge.source.0].outputs[edge.output_index]
+                input_slices[edge.input_index] = if edge.src.0 < node_index {
+                    &left[edge.src.0].outputs[edge.output_index]
                 } else {
-                    &rest[edge.source.0 - node_index - 1].outputs[edge.output_index]
+                    &rest[edge.src.0 - node_index - 1].outputs[edge.output_index]
                 };
             }
 
@@ -524,17 +538,17 @@ impl GenGraph {
                 .iter()
                 .enumerate()
                 .map(|(i, input_name)| {
-                    let source = node.inputs.iter().find(|e| e.input_index == i);
-                    match source {
+                    let src = node.inputs.iter().find(|e| e.input_index == i);
+                    match src {
                         Some(edge) => {
-                            let source_name = self
+                            let src_name = self
                                 .node_names
                                 .iter()
-                                .find(|&(_, id)| *id == edge.source)
+                                .find(|&(_, id)| *id == edge.src)
                                 .map(|(n, _)| n.clone())
-                                .unwrap_or_else(|| format!("node_{}", edge.source.0));
+                                .unwrap_or_else(|| format!("node_{}", edge.src.0));
 
-                            let output_name = self.nodes[edge.source.0]
+                            let output_name = self.nodes[edge.src.0]
                                 .node
                                 .output_names()
                                 .get(edge.output_index)
@@ -544,7 +558,7 @@ impl GenGraph {
                             json!({
                                 "name": input_name,
                                 "connected_to": {
-                                    "node": source_name,
+                                    "node": src_name,
                                     "output": output_name
                                 }
                             })
@@ -646,8 +660,8 @@ mod tests {
         graph.add_node("conv", Box::new(UGAsHz::new(UnitRate::Midi)));
         graph.add_node("osc", Box::new(UGSine::new()));
 
-        graph.connect_named("conv", "in", "note", "out");
-        graph.connect_named("osc", "freq", "conv", "hz");
+        graph.connect_named("note.out", "conv.in");
+        graph.connect_named("conv.hz", "osc.freq");
 
         assert_eq!(
             graph.describe_json().to_string(),
