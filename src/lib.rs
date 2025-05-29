@@ -810,9 +810,6 @@ impl GenGraph {
             .collect::<Vec<_>>();
 
         let d = outputs.len();
-        // let margin = 0.04;
-        // let height = 1.0 / d as f64;
-
         let mut script = String::new();
 
         script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
@@ -873,6 +870,9 @@ set multiplot
         set bmargin screen bottom
         set label textcolor rgb '#c4c5bf'
         set border lc rgb '#c4c5bf'
+        set grid lc rgb '#cccccc'
+
+
         set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
         plot ${} using 1 with linespoints linestyle {}
         "#,
