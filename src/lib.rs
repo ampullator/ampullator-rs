@@ -786,7 +786,7 @@ impl GenGraph {
     }
 
     //--------------------------------------------------------------------------
-    pub fn to_gnuplot(&self, output_png_path: &Path) -> String {
+    pub fn to_gnuplot(&self, output: &Path) -> String {
         let outputs = self
             .build_execution_order()
             .into_iter()
@@ -815,10 +815,11 @@ impl GenGraph {
 
         let mut script = String::new();
 
-        script.push_str("set terminal pdfcairo size 8in,6in\n");
+        script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
+        // script.push_str("set terminal pdfcairo size 8in,6in\n");
         script.push_str(&format!(
             "set output '{}'\n\n",
-            output_png_path.display()
+            output.display()
         ));
         script.push_str(
             r#"# General appearance
@@ -834,7 +835,7 @@ unset xtics
 
 # Color and style setup
 do for [i=1:3] {
-    set style line i lt 1 lw 1 pt 3 lc rgb '#332255'
+    set style line i lt 1 lw 1 pt 3 lc rgb '#5599ff'
 }
 
 # Multiplot setup
@@ -870,6 +871,8 @@ set multiplot
         pos = pos - height
         set tmargin screen top
         set bmargin screen bottom
+        set label textcolor rgb '#c4c5bf'
+        set border lc rgb '#c4c5bf'
         set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
         plot ${} using 1 with linespoints linestyle {}
         "#,
@@ -893,8 +896,8 @@ set multiplot
 
 }
 
-pub fn plot_graph_to_image(graph: &GenGraph, image_path: &str) -> std::io::Result<()> {
-    let script = graph.to_gnuplot(image_path.as_ref());
+pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()> {
+    let script = graph.to_gnuplot(output.as_ref());
     let mut file = NamedTempFile::new()?;
     write!(file, "{script}")?;
     let script_path = file.path();
@@ -987,7 +990,7 @@ mod tests {
             vec![0.7, 1.0, 0.7, -0.0, -0.7, -1.0, -0.7, 0.0]
         );
 
-        plot_graph_to_image(&g, "/tmp/ampullator.pdf").unwrap();
+        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
     }
 
     //--------------------------------------------------------------------------
