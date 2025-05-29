@@ -815,7 +815,7 @@ impl GenGraph {
 
         let mut script = String::new();
 
-        script.push_str("set terminal pngcairo size 800,600\n");
+        script.push_str("set terminal pdfcairo size 8in,6in\n");
         script.push_str(&format!(
             "set output '{}'\n\n",
             output_png_path.display()
@@ -852,27 +852,34 @@ set multiplot
 
         for (i, (label, values)) in outputs.iter().enumerate() {
             let panel = i + 1;
+            let block_label = label.replace(['.', '-', ' '], "_");
+
+            // Data block
+            script.push_str(&format!("${} << EOD\n", block_label));
+            for v in *values {
+                script.push_str(&format!("{}\n", v));
+            }
+            script.push_str("EOD\n");
+
+            // Plot setup
             script.push_str(&format!(
-                r#"# Panel {}
-top = pos - margin * {}
-bottom = pos - height + margin * 0.5
-pos = pos - height
-set tmargin screen top
-set bmargin screen bottom
-set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
-plot '-' using 1 with linespoints linestyle {}
-"#,
+                r#"
+        # Panel {}
+        top = pos - margin * {}
+        bottom = pos - height + margin * 0.5
+        pos = pos - height
+        set tmargin screen top
+        set bmargin screen bottom
+        set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
+        plot ${} using 1 with linespoints linestyle {}
+        "#,
                 panel,
                 if i == 0 { 1.0 } else { 0.5 },
                 panel,
                 label,
-                (i % 3) + 1
+                block_label,
+                (i % 3) + 1,
             ));
-
-            for v in *values {
-                script.push_str(&format!("{}\n", v));
-            }
-            script.push_str("e\n\n");
         }
 
         script.push_str("unset multiplot\n");
@@ -980,7 +987,7 @@ mod tests {
             vec![0.7, 1.0, 0.7, -0.0, -0.7, -1.0, -0.7, 0.0]
         );
 
-        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
+        plot_graph_to_image(&g, "/tmp/ampullator.pdf").unwrap();
     }
 
     //--------------------------------------------------------------------------
