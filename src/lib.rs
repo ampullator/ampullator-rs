@@ -5,9 +5,13 @@ use std::str::FromStr;
 
 pub type Sample = f32;
 
+fn split_name(s: &str) -> (&str, &str) {
+    s.rsplit_once('.')
+        .unwrap_or_else(|| panic!("Expected 'name.port', got: '{}'", s))
+}
+
 //------------------------------------------------------------------------------
 // Alt names: UnitGen
-
 
 pub trait UGen {
     fn process(
@@ -168,9 +172,13 @@ pub struct UGSum {
 
 impl UGSum {
     pub fn new(input_count: usize) -> Self {
+        if input_count <= 1 {
+            panic!("Input count should be greater than 1");
+        }
+        // input labels wil start with in1, ..., inN
         let input_labels: Vec<String> =
-            (0..input_count).map(|i| format!("in{}", i)).collect();
-
+            (1..input_count + 1).map(|i| format!("in{}", i)).collect();
+        println!("{:?}", input_labels);
         // Promote to 'static using Box::leak safely
         let input_refs: Vec<&'static str> = input_labels
             .iter()
@@ -194,7 +202,7 @@ impl UGen for UGSum {
     }
 
     fn output_names(&self) -> &[&'static str] {
-        &["sum"]
+        &["out"]
     }
 
     fn process(
@@ -311,7 +319,6 @@ impl UGen for UGSine {
             let norm = ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
             wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
             trig_out[i] = if crossed { 1.0 } else { 0.0 };
-
         }
     }
 }
@@ -323,7 +330,7 @@ pub struct NodeId(pub usize);
 pub struct NodeEdge {
     pub src: NodeId,
     pub output_index: usize, // output in src
-    pub input_index: usize, // index in the Node's inputs
+    pub input_index: usize,  // index in the Node's inputs
 }
 
 // `inputs` are not sorted; each NodeEdge defines src and an output of that src to be delivered to this nodes's input.
@@ -353,11 +360,7 @@ impl GenGraph {
             time_sample: 0,
         }
     }
-    pub fn add_node<N: Into<String>>(
-        &mut self,
-        name: N,
-        node: Box<dyn UGen>,
-    ) -> NodeId {
+    pub fn add_node<N: Into<String>>(&mut self, name: N, node: Box<dyn UGen>) -> NodeId {
         let id = NodeId(self.nodes.len());
         let output_count = node.output_names().len();
         self.node_names.insert(name.into(), id);
@@ -378,11 +381,7 @@ impl GenGraph {
         input_index: usize,
     ) {
         if let Some(dst_node) = self.nodes.get_mut(dst.0) {
-            if dst_node
-                .inputs
-                .iter()
-                .any(|e| e.input_index == input_index)
-            {
+            if dst_node.inputs.iter().any(|e| e.input_index == input_index) {
                 panic!(
                     "Input {} on node {:?} is already connected. \
                      Only one connection per input is allowed.",
@@ -398,41 +397,30 @@ impl GenGraph {
         }
     }
 
-
     pub fn connect_named(&mut self, src: &str, dst: &str) {
-        fn split_name(s: &str) -> (&str, &str) {
-            s.rsplit_once('.')
-                .unwrap_or_else(|| panic!("Expected 'name.port', got: '{}'", s))
-        }
-
         let (src_name, output_name) = split_name(src);
         let (dst_name, input_name) = split_name(dst);
 
-    // pub fn connect_named(
-    //     &mut self,
-    //     src_name: &str,
-    //     output_name: &str,
-    //     dst_name: &str,
-    //     input_name: &str,
-    // ) {
         let dst_id = self.node_names[dst_name];
         let src_id = self.node_names[src_name];
-        let target_node = &self.nodes[dst_id.0];
+        let dst_node = &self.nodes[dst_id.0];
         let src_node = &self.nodes[src_id.0];
 
-        let input_index = target_node
+        let input_index = dst_node
             .node
             .input_names()
             .iter()
             .position(|&name| name == input_name)
-            .expect("Invalid input name");
+            .expect(format!("For {dst_name}, invalid input name: {input_name}").as_str());
 
         let output_index = src_node
             .node
             .output_names()
             .iter()
             .position(|&name| name == output_name)
-            .expect("Invalid output name");
+            .expect(
+                format!("For {src_name}, invalid output name: {output_name}").as_str(),
+            );
 
         self.connect(src_id, output_index, dst_id, input_index);
     }
@@ -504,7 +492,8 @@ impl GenGraph {
         self.time_sample += self.buffer_size;
     }
 
-    pub fn get_output(&self, node_name: &str, output_name: &str) -> &[Sample] {
+    pub fn get_output_named(&self, name: &str) -> &[Sample] {
+        let (node_name, output_name) = split_name(name);
         let node_id = self.node_names[node_name];
         let node = &self.nodes[node_id.0];
         let index = node
@@ -669,12 +658,37 @@ mod tests {
         );
     }
 
-
     #[test]
     fn test_constant_a() {
-        let n = UGConst::new(3.0);
-        assert_eq!(n.type_name(), "UGConst");
+        let c1 = UGConst::new(3.0);
+        assert_eq!(c1.type_name(), "UGConst");
+
+        let mut g = GenGraph::new(120.0, 8);
+        g.add_node("c1", Box::new(c1));
+        g.process();
+        assert_eq!(
+            g.get_output_named("c1.out"),
+            vec![3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+        )
     }
 
+    #[test]
+    fn test_sum_a() {
+        let c1 = UGConst::new(3.0);
+        let c2 = UGConst::new(2.0);
+        let s1 = UGSum::new(2); // input count
 
+        let mut g = GenGraph::new(120.0, 8);
+        g.add_node("c1", Box::new(c1));
+        g.add_node("c2", Box::new(c2));
+        g.add_node("s1", Box::new(s1));
+        g.connect_named("c1.out", "s1.in1");
+        g.connect_named("c2.out", "s1.in2");
+        g.process();
+
+        assert_eq!(
+            g.get_output_named("s1.out"),
+            vec![5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
+        )
+    }
 }

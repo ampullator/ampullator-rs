@@ -1,9 +1,9 @@
-use ampullator::UGConst;
-use ampullator::UGAsHz;
-use ampullator::UnitRate;
 use ampullator::GenGraph;
+use ampullator::UGAsHz;
+use ampullator::UGConst;
 use ampullator::UGSine;
 use ampullator::UGSum;
+use ampullator::UnitRate;
 
 fn test1() {
     let mut graph = GenGraph::new(44100.0, 128);
@@ -25,8 +25,8 @@ fn test1() {
 
     for _ in 0..frames {
         graph.process();
-        all_mix.extend_from_slice(graph.get_output("mix", "sum"));
-        all_trigger.extend_from_slice(graph.get_output("osc", "trigger"));
+        all_mix.extend_from_slice(graph.get_output_named("mix.sum"));
+        all_trigger.extend_from_slice(graph.get_output_named("osc.trigger"));
     }
 
     // Print results
