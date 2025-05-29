@@ -2,6 +2,8 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::str::FromStr;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 
 pub type Sample = f32;
 
@@ -314,6 +316,72 @@ impl UGen for UGSum {
 
 //------------------------------------------------------------------------------
 
+pub struct UGWhite {
+    default_min: Sample,
+    default_max: Sample,
+    rng: StdRng,
+    seed: Option<u64>,
+}
+
+impl UGWhite {
+    /// Create a new white noise generator. If `seed` is `None`, a random seed is used.
+    pub fn new(seed: Option<u64>) -> Self {
+        let actual_seed = seed.unwrap_or_else(|| rand::rng().random());
+        Self {
+            default_min: -1.0,
+            default_max: 1.0,
+            rng: StdRng::seed_from_u64(actual_seed),
+            seed: seed, // original user-provided seed
+        }
+    }
+}
+
+impl UGen for UGWhite {
+    fn type_name(&self) -> &'static str {
+        "UGWhite"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["min", "max"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "min" => Some(self.default_min),
+            "max" => Some(self.default_max),
+            _ => None,
+        }
+    }
+
+    fn describe_config(&self) -> Option<String> {
+        self.seed.map(|s| format!("seed = {}", s))
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let min_in = inputs.get(0).copied().unwrap_or(&[]);
+        let max_in = inputs.get(1).copied().unwrap_or(&[]);
+
+        let out = &mut outputs[0];
+        for (i, v) in out.iter_mut().enumerate() {
+            let min = min_in.get(i).copied().unwrap_or(self.default_min);
+            let max = max_in.get(i).copied().unwrap_or(self.default_max);
+            *v = self.rng.random_range(min..=max);
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
 pub struct UGSine {
     phase: Sample,
     default_freq: Sample,
@@ -581,6 +649,7 @@ impl GenGraph {
         &node.outputs[index]
     }
 
+    //--------------------------------------------------------------------------
     pub fn describe_json(&self) -> Value {
         let mut result = Vec::new();
 
@@ -790,6 +859,26 @@ mod tests {
         assert_eq!(
             g.get_output_named("r1.out"),
             vec![0.7, 1.0, 0.7, -0.0, -0.7, -1.0, -0.7, 0.0]
+        )
+    }
+
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_white_a() {
+        let n1 = UGWhite::new(Some(42));
+        let r1 = UGRound::new(2, ModeRound::Round);
+
+        let mut g = GenGraph::new(8.0, 8);
+        g.add_node("n1", Box::new(n1));
+        g.add_node("r1", Box::new(r1));
+        g.connect("n1.out", "r1.in");
+
+        g.process();
+
+        assert_eq!(
+            g.get_output_named("r1.out"),
+            vec![-0.73, 0.05, -0.5, 0.09, 0.74, 0.27, 0.98, -0.19]
         )
     }
 
