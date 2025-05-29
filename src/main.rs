@@ -14,9 +14,9 @@ fn test1() {
     graph.add_node("mix", Box::new(UGSum::new(2))); // 2-input sum
 
     // Connections
-    graph.connect_named("lfo.wave", "osc.freq"); // modulate osc with lfo
-    graph.connect_named("osc.wave", "mix.in0");
-    graph.connect_named("lfo.wave", "mix.in1");
+    graph.connect("lfo.wave", "osc.freq"); // modulate osc with lfo
+    graph.connect("osc.wave", "mix.in0");
+    graph.connect("lfo.wave", "mix.in1");
 
     // Collect output over multiple frames
     let frames = 10;
@@ -51,8 +51,8 @@ fn test2() {
     graph.add_node("conv", Box::new(UGAsHz::new(UnitRate::Midi)));
     graph.add_node("osc", Box::new(UGSine::new()));
 
-    graph.connect_named("note.out", "conv.in");
-    graph.connect_named("conv.hz", "osc.freq");
+    graph.connect("note.out", "conv.in");
+    graph.connect("conv.hz", "osc.freq");
 
     for _ in 0..10 {
         graph.process();

@@ -164,6 +164,82 @@ impl UGen for UGAsHz {
 }
 
 //------------------------------------------------------------------------------
+#[derive(Debug)]
+pub enum ModeRound {
+    Round,
+    Floor,
+    Ceil,
+}
+
+#[derive(Debug)]
+pub struct UGRound {
+    places: i32,
+    factor: f32,
+    mode: ModeRound,
+}
+
+impl UGRound {
+    pub fn new(places: i32, mode: ModeRound) -> Self {
+        let factor = 10f32.powi(places);
+        Self { places, factor, mode }
+    }
+}
+
+impl UGen for UGRound {
+    fn type_name(&self) -> &'static str {
+        "UGRound"
+    }
+
+    fn describe_config(&self) -> Option<String> {
+        Some(format!(
+            "places = {}, mode = {:?}",
+            self.places, self.mode
+        ))
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["in"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs.get(0).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        let factor = self.factor;
+        match self.mode {
+            ModeRound::Round => {
+                for (i, v) in out.iter_mut().enumerate() {
+                    let x = input.get(i).copied().unwrap_or(0.0);
+                    *v = (x * factor).round() / factor;
+                }
+            }
+            ModeRound::Floor => {
+                for (i, v) in out.iter_mut().enumerate() {
+                    let x = input.get(i).copied().unwrap_or(0.0);
+                    *v = (x * factor).floor() / factor;
+                }
+            }
+            ModeRound::Ceil => {
+                for (i, v) in out.iter_mut().enumerate() {
+                    let x = input.get(i).copied().unwrap_or(0.0);
+                    *v = (x * factor).ceil() / factor;
+                }
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
 
 pub struct UGSum {
     input_labels: Vec<String>,
@@ -373,7 +449,7 @@ impl GenGraph {
         id
     }
 
-    pub fn connect(
+    fn connect_ids(
         &mut self,
         src: NodeId,
         output_index: usize,
@@ -397,7 +473,7 @@ impl GenGraph {
         }
     }
 
-    pub fn connect_named(&mut self, src: &str, dst: &str) {
+    pub fn connect(&mut self, src: &str, dst: &str) {
         let (src_name, output_name) = split_name(src);
         let (dst_name, input_name) = split_name(dst);
 
@@ -422,7 +498,7 @@ impl GenGraph {
                 format!("For {src_name}, invalid output name: {output_name}").as_str(),
             );
 
-        self.connect(src_id, output_index, dst_id, input_index);
+        self.connect_ids(src_id, output_index, dst_id, input_index);
     }
 
     // dependency-respecting order (DAG topological sort):
@@ -649,8 +725,8 @@ mod tests {
         graph.add_node("conv", Box::new(UGAsHz::new(UnitRate::Midi)));
         graph.add_node("osc", Box::new(UGSine::new()));
 
-        graph.connect_named("note.out", "conv.in");
-        graph.connect_named("conv.hz", "osc.freq");
+        graph.connect("note.out", "conv.in");
+        graph.connect("conv.hz", "osc.freq");
 
         assert_eq!(
             graph.describe_json().to_string(),
@@ -658,6 +734,7 @@ mod tests {
         );
     }
 
+    //--------------------------------------------------------------------------
     #[test]
     fn test_constant_a() {
         let c1 = UGConst::new(3.0);
@@ -672,6 +749,7 @@ mod tests {
         )
     }
 
+    //--------------------------------------------------------------------------
     #[test]
     fn test_sum_a() {
         let c1 = UGConst::new(3.0);
@@ -682,8 +760,8 @@ mod tests {
         g.add_node("c1", Box::new(c1));
         g.add_node("c2", Box::new(c2));
         g.add_node("s1", Box::new(s1));
-        g.connect_named("c1.out", "s1.in1");
-        g.connect_named("c2.out", "s1.in2");
+        g.connect("c1.out", "s1.in1");
+        g.connect("c2.out", "s1.in2");
         g.process();
 
         assert_eq!(
@@ -691,4 +769,28 @@ mod tests {
             vec![5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
         )
     }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sine_a() {
+        let c1 = UGConst::new(1.0);
+        let osc1 = UGSine::new();
+        let r1 = UGRound::new(1, ModeRound::Round);
+
+        let mut g = GenGraph::new(8.0, 8);
+        g.add_node("c1", Box::new(c1));
+        g.add_node("osc1", Box::new(osc1));
+        g.add_node("r1", Box::new(r1));
+
+        g.connect("c1.out", "osc1.freq");
+        g.connect("osc1.wave", "r1.in");
+
+        g.process();
+
+        assert_eq!(
+            g.get_output_named("r1.out"),
+            vec![0.7, 1.0, 0.7, -0.0, -0.7, -1.0, -0.7, 0.0]
+        )
+    }
+
 }
