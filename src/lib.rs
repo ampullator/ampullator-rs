@@ -1,9 +1,13 @@
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::io::Write;
+use std::process::Command;
 use std::str::FromStr;
-use rand::{Rng, SeedableRng};
-use rand::rngs::StdRng;
+use tempfile::NamedTempFile;
+use std::path::Path;
 
 pub type Sample = f32;
 
@@ -183,7 +187,11 @@ pub struct UGRound {
 impl UGRound {
     pub fn new(places: i32, mode: ModeRound) -> Self {
         let factor = 10f32.powi(places);
-        Self { places, factor, mode }
+        Self {
+            places,
+            factor,
+            mode,
+        }
     }
 }
 
@@ -193,10 +201,7 @@ impl UGen for UGRound {
     }
 
     fn describe_config(&self) -> Option<String> {
-        Some(format!(
-            "places = {}, mode = {:?}",
-            self.places, self.mode
-        ))
+        Some(format!("places = {}, mode = {:?}", self.places, self.mode))
     }
 
     fn input_names(&self) -> &[&'static str] {
@@ -779,6 +784,120 @@ impl GenGraph {
 
         lines.join("\n")
     }
+
+    //--------------------------------------------------------------------------
+    pub fn to_gnuplot(&self, output_png_path: &Path) -> String {
+        let outputs = self
+            .build_execution_order()
+            .into_iter()
+            .flat_map(|nid| {
+                let node = &self.nodes[nid.0];
+                let name = self
+                    .node_names
+                    .iter()
+                    .find(|&(_, &id)| id == nid)
+                    .map(|(n, _)| n.clone())
+                    .unwrap_or_else(|| format!("node_{}", nid.0));
+                node.node
+                    .output_names()
+                    .iter()
+                    .enumerate()
+                    .map(move |(i, output_name)| {
+                        let values = &node.outputs[i];
+                        (format!("{}.{}", name, output_name), values)
+                    })
+            })
+            .collect::<Vec<_>>();
+
+        let d = outputs.len();
+        // let margin = 0.04;
+        // let height = 1.0 / d as f64;
+
+        let mut script = String::new();
+
+        script.push_str("set terminal pngcairo size 800,600\n");
+        script.push_str(&format!(
+            "set output '{}'\n\n",
+            output_png_path.display()
+        ));
+        script.push_str(
+            r#"# General appearance
+set style line 11 lc rgb '#ffffff' lt 1
+set tics out nomirror scale 0,0.001
+set format y "%g"
+unset key
+set grid
+set lmargin screen 0.15
+set rmargin screen 0.98
+set ytics font ",8"
+unset xtics
+
+# Color and style setup
+do for [i=1:3] {
+    set style line i lt 1 lw 1 pt 3 lc rgb '#332255'
+}
+
+# Multiplot setup
+set multiplot
+"#
+        );
+
+        script.push_str(&format!("d = {}\n", d));
+        script.push_str("margin = 0.04\n");
+        script.push_str("height = 1.0 / d\n");
+        script.push_str("pos = 1.0\n\n");
+
+        script.push_str("label_x = 0.06\n");
+        script.push_str("label_font = \",9\"\n\n");
+
+        for (i, (label, values)) in outputs.iter().enumerate() {
+            let panel = i + 1;
+            script.push_str(&format!(
+                r#"# Panel {}
+top = pos - margin * {}
+bottom = pos - height + margin * 0.5
+pos = pos - height
+set tmargin screen top
+set bmargin screen bottom
+set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
+plot '-' using 1 with linespoints linestyle {}
+"#,
+                panel,
+                if i == 0 { 1.0 } else { 0.5 },
+                panel,
+                label,
+                (i % 3) + 1
+            ));
+
+            for v in *values {
+                script.push_str(&format!("{}\n", v));
+            }
+            script.push_str("e\n\n");
+        }
+
+        script.push_str("unset multiplot\n");
+        for i in 1..=d {
+            script.push_str(&format!("unset label {}\n", i));
+        }
+
+        script
+    }
+
+
+}
+
+pub fn plot_graph_to_image(graph: &GenGraph, image_path: &str) -> std::io::Result<()> {
+    let script = graph.to_gnuplot(image_path.as_ref());
+    let mut file = NamedTempFile::new()?;
+    write!(file, "{script}")?;
+    let script_path = file.path();
+    let status = Command::new("gnuplot").arg(script_path).status()?;
+
+    if !status.success() {
+        eprintln!("gnuplot failed with exit code: {:?}", status.code());
+    }
+
+    Ok(())
 }
 
 //------------------------------------------------------------------------------
@@ -859,9 +978,10 @@ mod tests {
         assert_eq!(
             g.get_output_named("r1.out"),
             vec![0.7, 1.0, 0.7, -0.0, -0.7, -1.0, -0.7, 0.0]
-        )
-    }
+        );
 
+        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
+    }
 
     //--------------------------------------------------------------------------
     #[test]
@@ -881,5 +1001,4 @@ mod tests {
             vec![-0.73, 0.05, -0.5, 0.09, 0.74, 0.27, 0.98, -0.19]
         )
     }
-
 }
