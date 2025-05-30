@@ -6,13 +6,12 @@ use std::path::Path;
 use std::process::Command;
 use tempfile::NamedTempFile;
 
+use crate::ugen_core::UGen;
 use crate::util::Sample;
 use crate::util::split_name;
-use crate::ugen_core::UGen;
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub usize);

@@ -4,7 +4,6 @@ use std::str::FromStr;
 
 use crate::util::Sample;
 
-
 //------------------------------------------------------------------------------
 // Alt names: UnitGen
 
