@@ -442,3 +442,29 @@ pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()
 
     Ok(())
 }
+
+//------------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        ModeRound, UGAsHz, UGConst, UGRound, UGSine, UGSum, UGWhite, UGen, UnitRate,
+    };
+
+    #[test]
+    fn test_gen_graph_describe_json_a() {
+        let mut graph = GenGraph::new(44100.0, 128);
+
+        graph.add_node("note", Box::new(UGConst::new(69.0))); // A4
+        graph.add_node("conv", Box::new(UGAsHz::new(UnitRate::Midi)));
+        graph.add_node("osc", Box::new(UGSine::new()));
+
+        graph.connect("note.out", "conv.in");
+        graph.connect("conv.hz", "osc.freq");
+
+        assert_eq!(
+            graph.describe_json().to_string(),
+            r#"[{"config":"value = 69.000","id":0,"inputs":[],"name":"note","outputs":[{"name":"out","value":0.0}],"type":"UGConst"},{"config":"mode = midi","id":1,"inputs":[{"connected_to":{"node":"note","output":"out"},"name":"in"}],"name":"conv","outputs":[{"name":"hz","value":0.0}],"type":"UGAsHz"},{"config":null,"id":2,"inputs":[{"connected_to":{"node":"conv","output":"hz"},"name":"freq"},{"default":0.0,"name":"phase"},{"default":-1.0,"name":"min"},{"default":1.0,"name":"max"}],"name":"osc","outputs":[{"name":"wave","value":0.0},{"name":"trigger","value":0.0}],"type":"UGSine"}]"#
+        );
+    }
+}
