@@ -430,11 +430,24 @@ set multiplot
 }
 
 //------------------------------------------------------------------------------
+
+#[macro_export]
+macro_rules! register_one {
+    // If value is a number literal, convert to f32
+    ($graph:expr, $name:expr, $val:literal) => {
+        $graph.add_node($name, Box::new($crate::UGConst::new($val as Sample)));
+    };
+    // For all other expressions (e.g., full UGen constructors)
+    ($graph:expr, $name:expr, $ugen:expr) => {
+        $graph.add_node($name, Box::new($ugen));
+    };
+}
+
 #[macro_export]
 macro_rules! register_many {
     ($graph:expr, $( $name:expr => $ugen:expr ),+ $(,)?) => {
         $(
-            $graph.add_node($name, Box::new($ugen));
+            $crate::register_one!($graph, $name, $ugen);
         )+
     };
 }

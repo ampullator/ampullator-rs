@@ -603,8 +603,8 @@ mod tests {
 
         let mut g = GenGraph::new(120.0, 8);
         register_many![g,
-            "c1" => UGConst::new(3.0),
-            "c2" => UGConst::new(2.0),
+            "c1" => 3,
+            "c2" => 2,
             "s1" => UGSum::new(2),
         ];
         connect_many![g,
@@ -623,7 +623,7 @@ mod tests {
     fn test_sine_a() {
         let mut g = GenGraph::new(8.0, 8);
         register_many![g,
-            "c1" => UGConst::new(1.0),
+            "c1" => 1.0,
             "osc1" => UGSine::new(),
             "r1" => UGRound::new(1, ModeRound::Round),
         ];
@@ -666,7 +666,7 @@ mod tests {
                 vec![3.0, 10.0, 20.0, 50.0, 999.0],
                 ModeSelect::Cycle,
                 Some(42)),
-            "c1" => UGConst::new(1.0),
+            "c1" => 1,
         ];
         g.connect("c1.out", "s1.trigger");
         g.process();
@@ -682,7 +682,7 @@ mod tests {
         let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "s1" => UGSelect::new(vec![3.0, 10.0, 20.0, 50.0], ModeSelect::Walk, Some(42)),
-            "c1" => UGConst::new(1.0),
+            "c1" => 1.0,
         ];
         g.connect("c1.out", "s1.trigger");
         g.process();
@@ -705,7 +705,7 @@ mod tests {
                 vec![3.0, 10.0, 20.0, 50.0, 99.0],
                 ModeSelect::Shuffle,
                 Some(42)),
-            "c1" => UGConst::new(1.0),
+            "c1" => 1,
         ];
         connect_many![g, "c1.out" -> "s1.trigger"];
         g.process();
