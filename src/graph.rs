@@ -447,9 +447,7 @@ pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        ModeRound, UGAsHz, UGConst, UGRound, UGSine, UGSum, UGWhite, UGen, UnitRate,
-    };
+    use crate::{UGAsHz, UGConst, UGSine, UnitRate};
 
     #[test]
     fn test_gen_graph_describe_json_a() {

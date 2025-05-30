@@ -1,5 +1,6 @@
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng, rngs::StdRng};
+
 use std::str::FromStr;
 
 use crate::util::Sample;
@@ -237,7 +238,6 @@ impl UGen for UGRound {
 //------------------------------------------------------------------------------
 
 pub struct UGSum {
-    input_labels: Vec<String>,
     input_refs: Vec<&'static str>,
 }
 
@@ -249,17 +249,14 @@ impl UGSum {
         // input labels wil start with in1, ..., inN
         let input_labels: Vec<String> =
             (1..input_count + 1).map(|i| format!("in{}", i)).collect();
-        println!("{:?}", input_labels);
+        // println!("{:?}", input_labels);
         // Promote to 'static using Box::leak safely
         let input_refs: Vec<&'static str> = input_labels
             .iter()
             .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
             .collect();
 
-        Self {
-            input_labels,
-            input_refs,
-        }
+        Self { input_refs }
     }
 }
 
@@ -461,6 +458,117 @@ impl UGen for UGSine {
 }
 
 //------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy)]
+pub enum ModeSelect {
+    Cycle,
+    Random,
+    Shuffle,
+    Walk,
+}
+
+pub struct UGSelect {
+    values: Vec<Sample>,
+    mode: ModeSelect,
+    index: usize,
+    shuffle_remaining: Vec<usize>,
+    rng: StdRng,
+}
+
+impl UGSelect {
+    pub fn new(values: Vec<Sample>, mode: ModeSelect, seed: Option<u64>) -> Self {
+        let rng = match seed {
+            Some(s) => StdRng::seed_from_u64(s),
+            None => StdRng::from_rng(&mut rand::rng()),
+        };
+        let len = values.len().max(1);
+        UGSelect {
+            values,
+            mode,
+            index: len - 1, // not optimal
+            shuffle_remaining: Vec::new(),
+            rng,
+        }
+    }
+}
+
+impl UGen for UGSelect {
+    fn type_name(&self) -> &'static str {
+        "UGSelect"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["trigger", "step"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "trigger" => Some(0.0),
+            "step" => Some(1.0),
+            _ => None,
+        }
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let trigger = inputs.get(0).copied().unwrap_or(&[]);
+        let step = inputs.get(1).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        let n = self.values.len();
+        if n == 0 {
+            for o in out.iter_mut() {
+                *o = 0.0;
+            }
+            return;
+        }
+
+        for i in 0..out.len() {
+            if trigger.get(i).copied().unwrap_or(0.0) == 1.0 {
+                let step_size =
+                    step.get(i).copied().unwrap_or(1.0).round().max(1.0) as usize;
+
+                match self.mode {
+                    ModeSelect::Cycle => {
+                        self.index = (self.index + step_size) % n;
+                    }
+                    ModeSelect::Random => {
+                        self.index = self.rng.random_range(0..n);
+                    }
+                    ModeSelect::Shuffle => {
+                        for _ in 0..step_size {
+                            if self.shuffle_remaining.is_empty() {
+                                self.shuffle_remaining = (0..n).collect();
+                                self.shuffle_remaining.shuffle(&mut self.rng);
+                            }
+                            self.index = self.shuffle_remaining.pop().unwrap();
+                        }
+                    }
+                    ModeSelect::Walk => {
+                        let direction = if self.rng.random_bool(0.5) { 1 } else { -1 };
+                        let step_signed = step_size as isize * direction as isize;
+                        let new_index = ((self.index as isize + step_signed)
+                            .rem_euclid(n as isize))
+                            as usize;
+                        self.index = new_index;
+                    }
+                }
+            }
+            out[i] = self.values[self.index];
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,5 +653,83 @@ mod tests {
             g.get_output_named("r1.out"),
             vec![-0.73, 0.05, -0.5, 0.09, 0.74, 0.27, 0.98, -0.19]
         )
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_select_a() {
+        let s1 = UGSelect::new(
+            vec![3.0, 10.0, 20.0, 50.0, 999.0],
+            ModeSelect::Cycle,
+            Some(42),
+        );
+        let c1 = UGConst::new(1.0);
+
+        let mut g = GenGraph::new(8.0, 8);
+        g.add_node("s1", Box::new(s1));
+        g.add_node("c1", Box::new(c1));
+        g.connect("c1.out", "s1.trigger");
+        g.process();
+
+        assert_eq!(
+            g.get_output_named("s1.out"),
+            vec![3.0, 10.0, 20.0, 50.0, 999.0, 3.0, 10.0, 20.0]
+        )
+    }
+
+    #[test]
+    fn test_select_b() {
+        let s1 = UGSelect::new(vec![3.0, 10.0, 20.0, 50.0], ModeSelect::Walk, Some(42));
+        let c1 = UGConst::new(1.0);
+
+        let mut g = GenGraph::new(8.0, 16);
+        g.add_node("s1", Box::new(s1));
+        g.add_node("c1", Box::new(c1));
+        g.connect("c1.out", "s1.trigger");
+        g.process();
+
+        assert_eq!(
+            g.get_output_named("s1.out"),
+            vec![
+                20.0, 10.0, 3.0, 10.0, 20.0, 50.0, 20.0, 10.0, 20.0, 50.0, 20.0, 10.0,
+                20.0, 50.0, 20.0, 50.0
+            ]
+        )
+    }
+
+    #[test]
+    fn test_select_c() {
+        let s1 = UGSelect::new(
+            vec![3.0, 10.0, 20.0, 50.0, 99.0],
+            ModeSelect::Shuffle,
+            Some(42),
+        );
+        let c1 = UGConst::new(1.0);
+
+        let mut g = GenGraph::new(8.0, 20);
+        g.add_node("s1", Box::new(s1));
+        g.add_node("c1", Box::new(c1));
+        g.connect("c1.out", "s1.trigger");
+        g.process();
+
+        assert_eq!(
+            g.get_output_named("s1.out"),
+            vec![
+                10.0, 20.0, 50.0, 3.0, 99.0, 20.0, 99.0, 10.0, 50.0, 3.0, 50.0, 20.0,
+                10.0, 3.0, 99.0, 10.0, 50.0, 3.0, 99.0, 20.0
+            ]
+        );
+        println!("{}", g.describe());
+        assert_eq!(
+            g.describe(),
+            r#"[UGConst] c1 { value = 1.000 }
+    → out ≊ 1.000
+
+[UGSelect] s1
+    trigger ← c1.out
+    step ←= 1.000
+    → out ≊ 20.000
+"#
+        );
     }
 }
