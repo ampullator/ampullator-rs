@@ -2,13 +2,8 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::str::FromStr;
 
-//------------------------------------------------------------------------------
-pub type Sample = f32;
+use crate::util::Sample;
 
-fn split_name(s: &str) -> (&str, &str) {
-    s.rsplit_once('.')
-        .unwrap_or_else(|| panic!("Expected 'name.port', got: '{}'", s))
-}
 
 //------------------------------------------------------------------------------
 // Alt names: UnitGen
