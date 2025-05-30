@@ -429,6 +429,21 @@ set multiplot
     }
 }
 
+//------------------------------------------------------------------------------
+#[macro_export]
+macro_rules! add_nodes {
+    ($graph:expr, $( $name:expr => $ugen:expr ),+ $(,)?) => {
+        $(
+            $graph.add_node($name, Box::new($ugen));
+        )+
+    };
+}
+
+
+
+
+//------------------------------------------------------------------------------
+
 pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()> {
     let script = graph.to_gnuplot(output.as_ref());
     let mut file = NamedTempFile::new()?;

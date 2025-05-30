@@ -577,6 +577,7 @@ impl UGen for UGSelect {
 mod tests {
     use super::*;
     use crate::GenGraph;
+    use crate::add_nodes;
     use crate::plot_graph_to_image;
 
     //--------------------------------------------------------------------------
@@ -703,16 +704,16 @@ mod tests {
 
     #[test]
     fn test_select_c() {
-        let s1 = UGSelect::new(
-            vec![3.0, 10.0, 20.0, 50.0, 99.0],
-            ModeSelect::Shuffle,
-            Some(42),
-        );
-        let c1 = UGConst::new(1.0);
 
         let mut g = GenGraph::new(8.0, 20);
-        g.add_node("s1", Box::new(s1));
-        g.add_node("c1", Box::new(c1));
+        add_nodes![
+            g,
+            "s1" => UGSelect::new(
+                vec![3.0, 10.0, 20.0, 50.0, 99.0],
+                ModeSelect::Shuffle,
+                Some(42)),
+            "c1" => UGConst::new(1.0),
+        ];
         g.connect("c1.out", "s1.trigger");
         g.process();
 
