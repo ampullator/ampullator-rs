@@ -290,9 +290,9 @@ impl GenGraph {
             let config = node["config"].as_str().unwrap_or("");
 
             if config.is_empty() {
-                lines.push(format!("[{}] {}", type_name, name));
+                lines.push(format!("{} <{} {{}}>", name, type_name));
             } else {
-                lines.push(format!("[{}] {} {{ {} }}", type_name, name, config));
+                lines.push(format!("{} <{} {{{}}}>", name, type_name, config));
             }
 
             // Inputs
@@ -301,11 +301,11 @@ impl GenGraph {
                 if let Some(obj) = input.get("connected_to") {
                     let src_node = obj["node"].as_str().unwrap_or("?");
                     let src_output = obj["output"].as_str().unwrap_or("?");
-                    lines.push(format!("    {} ← {}.{}", label, src_node, src_output));
+                    lines.push(format!("{} ← {}.{}", label, src_node, src_output));
                 } else if let Some(val) = input.get("default").and_then(|v| v.as_f64()) {
-                    lines.push(format!("    {} ←= {:.3}", label, val));
+                    lines.push(format!("{} ←= {:.3}", label, val));
                 } else {
-                    lines.push(format!("    {} ← ∅", label));
+                    lines.push(format!("{} ← ∅", label));
                 }
             }
 
@@ -316,7 +316,7 @@ impl GenGraph {
                     .as_f64()
                     .map(|v| format!("{:.3}", v))
                     .unwrap_or_else(|| "(empty)".to_string());
-                lines.push(format!("    → {} ≊ {}", label, value));
+                lines.push(format!("→ {} ≊ {}", label, value));
             }
 
             lines.push("".to_string());

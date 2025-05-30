@@ -513,6 +513,10 @@ impl UGen for UGSelect {
         }
     }
 
+    fn describe_config(&self) -> Option<String> {
+        Some(format!("values = {:?}, mode = {:?}", self.values, self.mode).to_lowercase())
+    }
+
     fn process(
         &mut self,
         inputs: &[&[Sample]],
@@ -719,16 +723,16 @@ mod tests {
                 10.0, 3.0, 99.0, 10.0, 50.0, 3.0, 99.0, 20.0
             ]
         );
-        println!("{}", g.describe());
         assert_eq!(
-            g.describe(),
-            r#"[UGConst] c1 { value = 1.000 }
-    → out ≊ 1.000
+            format!("\n{}", g.describe()),
+            r#"
+c1 <UGConst {value = 1.000}>
+→ out ≊ 1.000
 
-[UGSelect] s1
-    trigger ← c1.out
-    step ←= 1.000
-    → out ≊ 20.000
+s1 <UGSelect {values = [3.0, 10.0, 20.0, 50.0, 99.0], mode = shuffle}>
+trigger ← c1.out
+step ←= 1.000
+→ out ≊ 20.000
 "#
         );
     }
