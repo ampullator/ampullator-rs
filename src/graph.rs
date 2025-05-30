@@ -431,7 +431,7 @@ set multiplot
 
 //------------------------------------------------------------------------------
 #[macro_export]
-macro_rules! add_nodes {
+macro_rules! register_many {
     ($graph:expr, $( $name:expr => $ugen:expr ),+ $(,)?) => {
         $(
             $graph.add_node($name, Box::new($ugen));
@@ -439,8 +439,14 @@ macro_rules! add_nodes {
     };
 }
 
-
-
+#[macro_export]
+macro_rules! connect_many {
+    ($graph:expr, $( $src:literal -> $dst:literal ),+ $(,)?) => {
+        $(
+            $graph.connect($src, $dst);
+        )+
+    };
+}
 
 //------------------------------------------------------------------------------
 

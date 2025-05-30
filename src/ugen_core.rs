@@ -577,7 +577,9 @@ impl UGen for UGSelect {
 mod tests {
     use super::*;
     use crate::GenGraph;
-    use crate::add_nodes;
+    use crate::connect_many;
+    use crate::register_many;
+
     use crate::plot_graph_to_image;
 
     //--------------------------------------------------------------------------
@@ -598,18 +600,18 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_sum_a() {
-        let c1 = UGConst::new(3.0);
-        let c2 = UGConst::new(2.0);
-        let s1 = UGSum::new(2); // input count
 
         let mut g = GenGraph::new(120.0, 8);
-        g.add_node("c1", Box::new(c1));
-        g.add_node("c2", Box::new(c2));
-        g.add_node("s1", Box::new(s1));
-        g.connect("c1.out", "s1.in1");
-        g.connect("c2.out", "s1.in2");
+        register_many![g,
+            "c1" => UGConst::new(3.0),
+            "c2" => UGConst::new(2.0),
+            "s1" => UGSum::new(2),
+        ];
+        connect_many![g,
+            "c1.out" -> "s1.in1",
+            "c2.out" -> "s1.in2",
+            ];
         g.process();
-
         assert_eq!(
             g.get_output_named("s1.out"),
             vec![5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
@@ -619,17 +621,16 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_sine_a() {
-        let c1 = UGConst::new(1.0);
-        let osc1 = UGSine::new();
-        let r1 = UGRound::new(1, ModeRound::Round);
-
         let mut g = GenGraph::new(8.0, 8);
-        g.add_node("c1", Box::new(c1));
-        g.add_node("osc1", Box::new(osc1));
-        g.add_node("r1", Box::new(r1));
-
-        g.connect("c1.out", "osc1.freq");
-        g.connect("osc1.wave", "r1.in");
+        register_many![g,
+            "c1" => UGConst::new(1.0),
+            "osc1" => UGSine::new(),
+            "r1" => UGRound::new(1, ModeRound::Round),
+        ];
+        connect_many![g,
+            "c1.out" -> "osc1.freq",
+            "osc1.wave" -> "r1.in",
+            ];
 
         g.process();
 
@@ -637,21 +638,17 @@ mod tests {
             g.get_output_named("r1.out"),
             vec![0.7, 1.0, 0.7, -0.0, -0.7, -1.0, -0.7, 0.0]
         );
-
-        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
     }
 
     //--------------------------------------------------------------------------
     #[test]
     fn test_white_a() {
-        let n1 = UGWhite::new(Some(42));
-        let r1 = UGRound::new(2, ModeRound::Round);
-
         let mut g = GenGraph::new(8.0, 8);
-        g.add_node("n1", Box::new(n1));
-        g.add_node("r1", Box::new(r1));
+        register_many![g,
+            "n1" => UGWhite::new(Some(42)),
+            "r1" => UGRound::new(2, ModeRound::Round),
+            ];
         g.connect("n1.out", "r1.in");
-
         g.process();
 
         assert_eq!(
@@ -663,16 +660,14 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_select_a() {
-        let s1 = UGSelect::new(
-            vec![3.0, 10.0, 20.0, 50.0, 999.0],
-            ModeSelect::Cycle,
-            Some(42),
-        );
-        let c1 = UGConst::new(1.0);
-
         let mut g = GenGraph::new(8.0, 8);
-        g.add_node("s1", Box::new(s1));
-        g.add_node("c1", Box::new(c1));
+        register_many![g,
+            "s1" => UGSelect::new(
+                vec![3.0, 10.0, 20.0, 50.0, 999.0],
+                ModeSelect::Cycle,
+                Some(42)),
+            "c1" => UGConst::new(1.0),
+        ];
         g.connect("c1.out", "s1.trigger");
         g.process();
 
@@ -684,12 +679,11 @@ mod tests {
 
     #[test]
     fn test_select_b() {
-        let s1 = UGSelect::new(vec![3.0, 10.0, 20.0, 50.0], ModeSelect::Walk, Some(42));
-        let c1 = UGConst::new(1.0);
-
         let mut g = GenGraph::new(8.0, 16);
-        g.add_node("s1", Box::new(s1));
-        g.add_node("c1", Box::new(c1));
+        register_many![g,
+            "s1" => UGSelect::new(vec![3.0, 10.0, 20.0, 50.0], ModeSelect::Walk, Some(42)),
+            "c1" => UGConst::new(1.0),
+        ];
         g.connect("c1.out", "s1.trigger");
         g.process();
 
@@ -704,9 +698,8 @@ mod tests {
 
     #[test]
     fn test_select_c() {
-
         let mut g = GenGraph::new(8.0, 20);
-        add_nodes![
+        register_many![
             g,
             "s1" => UGSelect::new(
                 vec![3.0, 10.0, 20.0, 50.0, 99.0],
@@ -714,7 +707,7 @@ mod tests {
                 Some(42)),
             "c1" => UGConst::new(1.0),
         ];
-        g.connect("c1.out", "s1.trigger");
+        connect_many![g, "c1.out" -> "s1.trigger"];
         g.process();
 
         assert_eq!(
@@ -736,5 +729,8 @@ step ←= 1.000
 → out ≊ 20.000
 "#
         );
+
+        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
+
     }
 }
