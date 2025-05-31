@@ -625,6 +625,99 @@ impl UGen for UGClock {
 }
 
 //------------------------------------------------------------------------------
+#[derive(Clone)]
+pub struct UGSampleTarget {
+    current: Sample,
+    target: Sample,
+    remaining_samples: usize,
+    duration: usize,
+    curve: Sample,
+    is_active: bool,
+    triggered_last: bool,
+}
+
+impl UGSampleTarget {
+    pub fn new() -> Self {
+        Self {
+            current: 0.0,
+            target: 0.0,
+            remaining_samples: 0,
+            duration: 0,
+            curve: 5.0, // Default curve steepness
+            is_active: false,
+            triggered_last: false,
+        }
+    }
+}
+
+impl UGen for UGSampleTarget {
+    fn type_name(&self) -> &'static str {
+        "UGSampleTarget"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["trigger", "level", "duration", "curve"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "trigger" => Some(0.0),
+            "duration" => Some(1.0),
+            "curve" => Some(1.0),
+            _ => None,
+        }
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]], // [0]: trigger, [1]: level, [2]: duration, [3]: curve
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let trigger = inputs[0];
+        let level = inputs[1];
+        let duration = inputs[2];
+        let curve = inputs.get(3).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let trigger_now = trigger[i] > 0.5 && !self.triggered_last;
+            self.triggered_last = trigger[i] > 0.5;
+
+            if trigger_now {
+                self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
+                self.target = level[i];
+                self.duration = duration[i].max(1.0).round() as usize;
+                self.remaining_samples = self.duration;
+                // self.curve = curve[i].max(0.001); // Prevent divide-by-zero or log(0)
+                self.is_active = true;
+            }
+
+            if self.remaining_samples > 0 {
+                let progress =
+                    1.0 - (self.remaining_samples as f32 / self.duration as f32);
+                let shape = if (self.curve - 1.0).abs() < 1e-6 {
+                    progress
+                } else {
+                    1.0 - (-self.curve * progress).exp()
+                };
+                // let shape = 1.0 - (-self.curve * progress).exp();
+                self.current = self.current + (self.target - self.current) * shape;
+                self.remaining_samples -= 1;
+            } else if self.is_active {
+                self.current = self.target;
+                self.is_active = false;
+            }
+
+            out[i] = self.current;
+        }
+    }
+}
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -783,7 +876,7 @@ step ←= 1.000
 "#
         );
 
-        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
+        // plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
     }
 
     //--------------------------------------------------------------------------
@@ -839,6 +932,49 @@ step ←= 1.000
         assert_eq!(
             g.get_output_named("clock1.out"),
             vec![1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sample_target_a() {
+        let mut g = GenGraph::new(8.0, 30);
+        register_many![g,
+            "c1" => 6.0, // samples
+            "x" => UGAsHz::new(UnitRate::Samples),
+            "clock" => UGClock::new(),
+            "level_select" => UGSelect::new(
+                vec![1.0, 0.5, 0.2, 0.8],
+                ModeSelect::Cycle,
+                Some(42)),
+            "dur_select" => UGSelect::new(
+                vec![3.0, 8.0, 6.0, 2.0],
+                ModeSelect::Cycle,
+                Some(42)),
+            "env_st" => UGSampleTarget::new(),
+            "r" => UGRound::new(4, ModeRound::Round),
+        ];
+        connect_many![g,
+            "c1.out" -> "x.in",
+            "x.out" -> "clock.freq",
+            "clock.out" -> "level_select.trigger",
+            "clock.out" -> "dur_select.trigger",
+            "clock.out" -> "env_st.trigger",
+            "level_select.out" -> "env_st.level",
+            "dur_select.out" -> "env_st.duration",
+            "env_st.out" -> "r.in",
+            ];
+
+        g.process();
+        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
+
+        assert_eq!(
+            g.get_output_named("r.out"),
+            vec![
+                0.0, 0.3333, 0.7778, 1.0, 1.0, 1.0, 1.0, 0.9375, 0.8281, 0.7051, 0.6025,
+                0.5385, 0.5385, 0.482, 0.388, 0.294, 0.2313, 0.2052, 0.2052, 0.5026, 0.8,
+                0.8, 0.8, 0.8, 0.8, 0.8667, 0.9556, 1.0, 1.0, 1.0
+            ]
         );
     }
 }
