@@ -571,6 +571,63 @@ impl UGen for UGSelect {
         }
     }
 }
+//------------------------------------------------------------------------------
+pub struct UGClock {
+    phase: f32,
+}
+
+impl UGClock {
+    pub fn new() -> Self {
+        Self { phase: 0.0 }
+    }
+}
+
+impl UGen for UGClock {
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let rate = inputs[0];
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let hz = rate[i].max(0.0); // clamp negative rates to 0
+            let phase_inc = hz / sample_rate;
+
+            self.phase += phase_inc;
+            if self.phase >= 1.0 {
+                self.phase = 0.0;
+                out[i] = 1.0;
+            } else {
+                out[i] = 0.0;
+            }
+        }
+    }
+
+    fn type_name(&self) -> &'static str {
+        "UGClock"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["freq"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        if input_name == "freq" {
+            Some(1.0)
+        } else {
+            None
+        }
+    }
+}
+
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -733,4 +790,23 @@ step ←= 1.000
         plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
 
     }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_clock_a() {
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "c1" => 4.0, // half the sampling rate
+            "clock1" => UGClock::new(),
+        ];
+        connect_many![g,
+            "c1.out" -> "clock1.freq",
+            ];
+        g.process();
+        assert_eq!(
+            g.get_output_named("clock1.out"),
+            vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]
+        );
+    }
+
 }
