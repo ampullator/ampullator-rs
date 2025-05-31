@@ -586,15 +586,12 @@ impl UGen for UGClock {
     fn type_name(&self) -> &'static str {
         "UGClock"
     }
-
     fn input_names(&self) -> &[&'static str] {
         &["freq"]
     }
-
     fn output_names(&self) -> &[&'static str] {
         &["out"]
     }
-
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         if input_name == "freq" {
             Some(1.0)
@@ -612,24 +609,22 @@ impl UGen for UGClock {
         let rate = inputs[0];
         let out = &mut outputs[0];
 
-        for i in 0..out.len() {
+        out[0] = 1.0;
+
+        for i in 1..out.len() {
             let hz = rate[i].max(0.0); // clamp negative rates to 0
             let phase_inc = hz / sample_rate;
 
             self.phase += phase_inc;
             if self.phase >= 1.0 {
                 self.phase = 0.0;
-                out[i] = 1.0;
-            } else {
-                out[i] = 0.0;
             }
+            out[i] = if self.phase < phase_inc { 1.0 } else { 0.0 };
         }
     }
 }
 
 //------------------------------------------------------------------------------
-
-
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -659,7 +654,6 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_sum_a() {
-
         let mut g = GenGraph::new(120.0, 8);
         register_many![g,
             "c1" => 3,
@@ -667,9 +661,9 @@ mod tests {
             "s1" => UGSum::new(2),
         ];
         connect_many![g,
-            "c1.out" -> "s1.in1",
-            "c2.out" -> "s1.in2",
-            ];
+        "c1.out" -> "s1.in1",
+        "c2.out" -> "s1.in2",
+        ];
         g.process();
         assert_eq!(
             g.get_output_named("s1.out"),
@@ -687,9 +681,9 @@ mod tests {
             "r1" => UGRound::new(1, ModeRound::Round),
         ];
         connect_many![g,
-            "c1.out" -> "osc1.freq",
-            "osc1.wave" -> "r1.in",
-            ];
+        "c1.out" -> "osc1.freq",
+        "osc1.wave" -> "r1.in",
+        ];
 
         g.process();
 
@@ -704,9 +698,9 @@ mod tests {
     fn test_white_a() {
         let mut g = GenGraph::new(8.0, 8);
         register_many![g,
-            "n1" => UGWhite::new(Some(42)),
-            "r1" => UGRound::new(2, ModeRound::Round),
-            ];
+        "n1" => UGWhite::new(Some(42)),
+        "r1" => UGRound::new(2, ModeRound::Round),
+        ];
         g.connect("n1.out", "r1.in");
         g.process();
 
@@ -790,7 +784,6 @@ step ←= 1.000
         );
 
         plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
-
     }
 
     //--------------------------------------------------------------------------
@@ -802,12 +795,12 @@ step ←= 1.000
             "clock1" => UGClock::new(),
         ];
         connect_many![g,
-            "c1.out" -> "clock1.freq",
-            ];
+        "c1.out" -> "clock1.freq",
+        ];
         g.process();
         assert_eq!(
             g.get_output_named("clock1.out"),
-            vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]
+            vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]
         );
     }
 
@@ -820,14 +813,13 @@ step ←= 1.000
             "clock1" => UGClock::new(),
         ];
         connect_many![g,
-            "c1.out" -> "x.in",
-            "x.out" -> "clock1.freq",
-            ];
+        "c1.out" -> "x.in",
+        "x.out" -> "clock1.freq",
+        ];
         g.process();
         assert_eq!(
             g.get_output_named("clock1.out"),
-            vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+            vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
         );
     }
-
 }

@@ -3,7 +3,8 @@ mod ugen_core;
 mod util;
 
 pub use ugen_core::{
-    ModeRound, UGAsHz, UGConst, UGRound, UGSine, UGSum, UGWhite, UGen, UnitRate,
+    ModeRound, ModeSelect, UGAsHz, UGClock, UGConst, UGRound, UGSelect, UGSine, UGSum,
+    UGWhite, UGen, UnitRate,
 };
 
 pub use util::Sample;
