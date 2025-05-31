@@ -52,7 +52,7 @@ fn test2() {
     graph.add_node("osc", Box::new(UGSine::new()));
 
     graph.connect("note.out", "conv.in");
-    graph.connect("conv.hz", "osc.freq");
+    graph.connect("conv.out", "osc.freq");
 
     for _ in 0..10 {
         graph.process();

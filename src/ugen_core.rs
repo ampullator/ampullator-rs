@@ -120,7 +120,7 @@ impl UGen for UGAsHz {
     }
 
     fn output_names(&self) -> &[&'static str] {
-        &["hz"]
+        &["out"]
     }
 
     fn process(
@@ -583,6 +583,25 @@ impl UGClock {
 }
 
 impl UGen for UGClock {
+    fn type_name(&self) -> &'static str {
+        "UGClock"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["freq"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        if input_name == "freq" {
+            Some(1.0)
+        } else {
+            None
+        }
+    }
     fn process(
         &mut self,
         inputs: &[&[Sample]],
@@ -606,27 +625,10 @@ impl UGen for UGClock {
             }
         }
     }
-
-    fn type_name(&self) -> &'static str {
-        "UGClock"
-    }
-
-    fn input_names(&self) -> &[&'static str] {
-        &["freq"]
-    }
-
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
-    }
-
-    fn default_input(&self, input_name: &str) -> Option<Sample> {
-        if input_name == "freq" {
-            Some(1.0)
-        } else {
-            None
-        }
-    }
 }
+
+//------------------------------------------------------------------------------
+
 
 
 //------------------------------------------------------------------------------
@@ -806,6 +808,25 @@ step ←= 1.000
         assert_eq!(
             g.get_output_named("clock1.out"),
             vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]
+        );
+    }
+
+    #[test]
+    fn test_clock_b() {
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "c1" => 4.0, // half the sampling rate
+            "x" => UGAsHz::new(UnitRate::Samples),
+            "clock1" => UGClock::new(),
+        ];
+        connect_many![g,
+            "c1.out" -> "x.in",
+            "x.out" -> "clock1.freq",
+            ];
+        g.process();
+        assert_eq!(
+            g.get_output_named("clock1.out"),
+            vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
         );
     }
 
