@@ -954,6 +954,9 @@ step ←= 1.000
             "env_st" => UGSampleTarget::new(),
             "r" => UGRound::new(4, ModeRound::Round),
         ];
+
+        // TODO: need to be able to convert dur_select values at different representations to samples, UGAsSamples(Seconds, Minutes)
+
         connect_many![g,
             "c1.out" -> "x.in",
             "x.out" -> "clock.freq",
