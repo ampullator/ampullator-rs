@@ -822,4 +822,23 @@ step ←= 1.000
             vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
         );
     }
+
+    #[test]
+    fn test_clock_c() {
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "c1" => 3.0, // half the sampling rate
+            "x" => UGAsHz::new(UnitRate::Samples),
+            "clock1" => UGClock::new(),
+        ];
+        connect_many![g,
+        "c1.out" -> "x.in",
+        "x.out" -> "clock1.freq",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_named("clock1.out"),
+            vec![1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]
+        );
+    }
 }
