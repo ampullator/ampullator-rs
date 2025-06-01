@@ -4,6 +4,8 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::str::FromStr;
 
 use crate::util::Sample;
+use crate::util::UnitRate;
+use crate::util::unitrate_to_hz;
 
 //------------------------------------------------------------------------------
 // Alt names: UnitGen
@@ -71,30 +73,6 @@ impl UGen for UGConst {
 }
 
 //------------------------------------------------------------------------------
-
-#[derive(Clone, Copy, Debug)]
-pub enum UnitRate {
-    Hz,
-    Seconds,
-    Samples,
-    Midi,
-    Bpm,
-}
-
-impl FromStr for UnitRate {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "hz" => Ok(UnitRate::Hz),
-            "sec" | "seconds" => Ok(UnitRate::Seconds),
-            "samples" | "spc" => Ok(UnitRate::Samples),
-            "midi" => Ok(UnitRate::Midi),
-            "bpm" => Ok(UnitRate::Bpm),
-            _ => Err(format!("Unknown frequency unit: {}", s)),
-        }
-    }
-}
 
 pub struct UGAsHz {
     mode: UnitRate,
@@ -572,19 +550,19 @@ impl UGen for UGSelect {
     }
 }
 //------------------------------------------------------------------------------
-pub struct UGClock {
+pub struct UGTrigger {
     phase: f32,
 }
 
-impl UGClock {
+impl UGTrigger {
     pub fn new() -> Self {
         Self { phase: 0.0 }
     }
 }
 
-impl UGen for UGClock {
+impl UGen for UGTrigger {
     fn type_name(&self) -> &'static str {
-        "UGClock"
+        "UGTrigger"
     }
     fn input_names(&self) -> &[&'static str] {
         &["freq"]
@@ -615,6 +593,76 @@ impl UGen for UGClock {
             let hz = rate[i].max(0.0); // clamp negative rates to 0
             let phase_inc = hz / sample_rate;
 
+            self.phase += phase_inc;
+            if self.phase >= 1.0 {
+                self.phase = 0.0;
+            }
+            out[i] = if self.phase < phase_inc { 1.0 } else { 0.0 };
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+pub struct UGClock {
+    value: Sample,
+    mode: UnitRate,
+    phase: Sample,
+}
+
+impl UGClock {
+    pub fn new(value: Sample, mode: UnitRate) -> Self {
+        Self {
+            value,
+            mode,
+            phase: 0.0,
+        }
+    }
+}
+
+impl UGen for UGClock {
+    fn type_name(&self) -> &'static str {
+        "UGClock"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["on"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn default_input(&self, name: &str) -> Option<Sample> {
+        match name {
+            "on" => Some(1.0),
+            _ => None,
+        }
+    }
+
+    fn describe_config(&self) -> Option<String> {
+        Some(format!("value = {}, mode = {:?}", self.value, self.mode))
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]], // optional on/off input
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let enabled = inputs.get(0).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+        let hz = unitrate_to_hz(self.value, self.mode, sample_rate);
+
+        out[0] = 1.0;
+
+        for i in 1..out.len() {
+            let on = enabled.get(i).copied().unwrap_or(1.0) > 0.5;
+            if !on {
+                out[i] = 0.0;
+                continue;
+            }
+            let phase_inc = hz / sample_rate;
             self.phase += phase_inc;
             if self.phase >= 1.0 {
                 self.phase = 0.0;
@@ -885,7 +933,7 @@ step ←= 1.000
         let mut g = GenGraph::new(8.0, 8);
         register_many![g,
             "c1" => 4.0, // half the sampling rate
-            "clock1" => UGClock::new(),
+            "clock1" => UGTrigger::new(),
         ];
         connect_many![g,
         "c1.out" -> "clock1.freq",
@@ -903,7 +951,7 @@ step ←= 1.000
         register_many![g,
             "c1" => 4.0, // half the sampling rate
             "x" => UGAsHz::new(UnitRate::Samples),
-            "clock1" => UGClock::new(),
+            "clock1" => UGTrigger::new(),
         ];
         connect_many![g,
         "c1.out" -> "x.in",
@@ -922,7 +970,7 @@ step ←= 1.000
         register_many![g,
             "c1" => 3.0, // half the sampling rate
             "x" => UGAsHz::new(UnitRate::Samples),
-            "clock1" => UGClock::new(),
+            "clock1" => UGTrigger::new(),
         ];
         connect_many![g,
         "c1.out" -> "x.in",
@@ -942,7 +990,7 @@ step ←= 1.000
         register_many![g,
             "c1" => 6.0, // samples
             "x" => UGAsHz::new(UnitRate::Samples),
-            "clock" => UGClock::new(),
+            "clock" => UGTrigger::new(),
             "level_select" => UGSelect::new(
                 vec![1.0, 0.5, 0.2, 0.8],
                 ModeSelect::Cycle,
@@ -958,15 +1006,15 @@ step ←= 1.000
         // TODO: need to be able to convert dur_select values at different representations to samples, UGAsSamples(Seconds, Minutes)
 
         connect_many![g,
-            "c1.out" -> "x.in",
-            "x.out" -> "clock.freq",
-            "clock.out" -> "level_select.trigger",
-            "clock.out" -> "dur_select.trigger",
-            "clock.out" -> "env_st.trigger",
-            "level_select.out" -> "env_st.level",
-            "dur_select.out" -> "env_st.duration",
-            "env_st.out" -> "r.in",
-            ];
+        "c1.out" -> "x.in",
+        "x.out" -> "clock.freq",
+        "clock.out" -> "level_select.trigger",
+        "clock.out" -> "dur_select.trigger",
+        "clock.out" -> "env_st.trigger",
+        "level_select.out" -> "env_st.level",
+        "dur_select.out" -> "env_st.duration",
+        "env_st.out" -> "r.in",
+        ];
 
         g.process();
         plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
