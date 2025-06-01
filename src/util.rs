@@ -34,7 +34,7 @@ impl FromStr for UnitRate {
     }
 }
 
-pub(crate) fn unitrate_to_hz(
+pub(crate) fn unit_rate_to_hz(
     value: Sample,
     mode: UnitRate,
     sample_rate: Sample,

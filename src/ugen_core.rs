@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::util::Sample;
 use crate::util::UnitRate;
-use crate::util::unitrate_to_hz;
+use crate::util::unit_rate_to_hz;
 
 //------------------------------------------------------------------------------
 // Alt names: UnitGen
@@ -110,28 +110,9 @@ impl UGen for UGAsHz {
     ) {
         let input = inputs.get(0).copied().unwrap_or(&[]);
         let out = &mut outputs[0];
-
         for i in 0..out.len() {
             let x = input.get(i).copied().unwrap_or(0.0);
-            out[i] = match self.mode {
-                UnitRate::Hz => x,
-                UnitRate::Seconds => {
-                    if x != 0.0 {
-                        1.0 / x
-                    } else {
-                        0.0
-                    }
-                }
-                UnitRate::Samples => {
-                    if x != 0.0 {
-                        sample_rate / x
-                    } else {
-                        0.0
-                    }
-                }
-                UnitRate::Midi => 440.0 * 2f32.powf((x - 69.0) / 12.0),
-                UnitRate::Bpm => x / 60.0,
-            };
+            out[i] = unit_rate_to_hz(x, self.mode, sample_rate)
         }
     }
 }
@@ -652,7 +633,7 @@ impl UGen for UGClock {
     ) {
         let enabled = inputs.get(0).copied().unwrap_or(&[]);
         let out = &mut outputs[0];
-        let hz = unitrate_to_hz(self.value, self.mode, sample_rate);
+        let hz = unit_rate_to_hz(self.value, self.mode, sample_rate);
 
         out[0] = 1.0;
 
