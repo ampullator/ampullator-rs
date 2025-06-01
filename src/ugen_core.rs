@@ -669,31 +669,19 @@ impl UGen for UGClock {
 //------------------------------------------------------------------------------
 // UGEnvBreakPoint
 
-
 #[derive(Clone)]
-pub struct UGSampleTarget {
+pub struct UGEnvBreakPoint {
     current: Sample,
-    target: Sample,
-    curve: Sample,
+    pulse_counter: usize,
+    required_pulses: usize,
 
     duration_select: UGSelect,
     level_select: UGSelect,
 
-    required_pulses: usize,
-    pulse_counter: usize,
-
-    measuring: bool,
-    waiting_for_ramp: bool,
-
-    sample_counter: usize,
-    ramp_sample_count: usize,
-    ramp_total_samples: usize,
-
-    is_ramping: bool,
     triggered_last: bool,
 }
 
-impl UGSampleTarget {
+impl UGEnvBreakPoint {
     pub fn new(
         duration_values: Vec<Sample>,
         duration_mode: ModeSelect,
@@ -703,35 +691,22 @@ impl UGSampleTarget {
     ) -> Self {
         Self {
             current: 0.0,
-            target: 0.0,
-            curve: 1.0,
-
+            pulse_counter: 0,
+            required_pulses: 1,
             duration_select: UGSelect::new(duration_values, duration_mode, seed),
             level_select: UGSelect::new(level_values, level_mode, seed),
-
-            required_pulses: 1,
-            pulse_counter: 0,
-
-            measuring: false,
-            waiting_for_ramp: false,
-
-            sample_counter: 0,
-            ramp_sample_count: 0,
-            ramp_total_samples: 1,
-
-            is_ramping: false,
             triggered_last: false,
         }
     }
 }
 
-impl UGen for UGSampleTarget {
+impl UGen for UGEnvBreakPoint {
     fn type_name(&self) -> &'static str {
-        "UGSampleTarget"
+        "UGEnvBreakPoint"
     }
 
     fn input_names(&self) -> &[&'static str] {
-        &["clock", "curve"]
+        &["clock", "step"]
     }
 
     fn output_names(&self) -> &[&'static str] {
@@ -741,11 +716,14 @@ impl UGen for UGSampleTarget {
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         match input_name {
             "clock" => Some(0.0),
-            "curve" => Some(1.0),
+            "step" => Some(1.0),
             _ => None,
         }
     }
 
+    fn describe_config(&self) -> Option<String> {
+        Some("stepped".into())
+    }
 
     fn process(
         &mut self,
@@ -755,7 +733,7 @@ impl UGen for UGSampleTarget {
         time_sample: usize,
     ) {
         let clock = inputs.get(0).copied().unwrap_or(&[]);
-        let curve = inputs.get(1).copied().unwrap_or(&[]);
+        let step = inputs.get(1).copied().unwrap_or(&[]);
         let out = &mut outputs[0];
 
         for i in 0..out.len() {
@@ -764,54 +742,22 @@ impl UGen for UGSampleTarget {
             self.triggered_last = clock_now;
 
             if triggered_now {
-                if self.waiting_for_ramp {
-                    // Now we start the ramp using the previously measured duration
-                    self.ramp_total_samples = self.sample_counter.max(1);
-                    self.ramp_sample_count = 0;
-                    self.is_ramping = true;
-                    self.waiting_for_ramp = false;
-                    self.sample_counter = 0;
-                } else {
-                    self.pulse_counter += 1;
-                    if self.pulse_counter >= self.required_pulses {
-                        self.pulse_counter = 0;
+                let step_size = step.get(i).copied().unwrap_or(1.0).max(1.0).round();
 
-                        // Select new ramp target and begin measuring sample time
-                        self.required_pulses = self
-                            .duration_select
-                            .select_next(1.0, sample_rate, time_sample)
-                            .max(1.0)
-                            .round() as usize;
+                self.pulse_counter += 1;
 
-                        self.target = self
-                            .level_select
-                            .select_next(1.0, sample_rate, time_sample);
-                        self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
+                if self.pulse_counter >= self.required_pulses {
+                    self.pulse_counter = 0;
 
-                        self.waiting_for_ramp = true;
-                        self.sample_counter = 0;
-                    }
-                }
-            }
+                    self.required_pulses = self
+                        .duration_select
+                        .select_next(step_size, sample_rate, time_sample)
+                        .max(1.0)
+                        .round() as usize;
 
-            if self.waiting_for_ramp {
-                self.sample_counter += 1;
-            }
-
-            if self.is_ramping {
-                let progress = (self.ramp_sample_count as f32 / self.ramp_total_samples as f32).min(1.0);
-                let shape = if (self.curve - 1.0).abs() < 1e-6 {
-                    progress
-                } else {
-                    1.0 - (-self.curve * progress).exp()
-                };
-
-                self.current += (self.target - self.current) * shape;
-                self.ramp_sample_count += 1;
-
-                if progress >= 1.0 {
-                    self.current = self.target;
-                    self.is_ramping = false;
+                    self.current = self
+                        .level_select
+                        .select_next(step_size, sample_rate, time_sample);
                 }
             }
 
@@ -1047,7 +993,7 @@ step ←= 1.000
         let mut g = GenGraph::new(8.0, 40);
         register_many![g,
             "clock" => UGClock::new(2.0, UnitRate::Samples),
-            "env_st" => UGSampleTarget::new(
+            "env_st" => UGEnvBreakPoint::new(
                 vec![2.0, 4.0, 3.0, 2.0], ModeSelect::Cycle,
                 vec![1.0, 0.2, 0.8, 0.5], ModeSelect::Cycle,
                 Some(42),
@@ -1065,11 +1011,7 @@ step ←= 1.000
 
         assert_eq!(
             g.get_output_named("r.out"),
-            vec![
-                0.0, 0.3333, 0.7778, 1.0, 1.0, 1.0, 1.0, 0.9375, 0.8281, 0.7051, 0.6025,
-                0.5385, 0.5385, 0.482, 0.388, 0.294, 0.2313, 0.2052, 0.2052, 0.5026, 0.8,
-                0.8, 0.8, 0.8, 0.8, 0.8667, 0.9556, 1.0, 1.0, 1.0
-            ]
+            vec![1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
         );
     }
 }
