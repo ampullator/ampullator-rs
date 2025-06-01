@@ -426,6 +426,7 @@ pub enum ModeSelect {
     Walk,
 }
 
+#[derive(Clone)]
 pub struct UGSelect {
     values: Vec<Sample>,
     mode: ModeSelect,
@@ -449,6 +450,18 @@ impl UGSelect {
             rng,
         }
     }
+
+    pub fn select_next(&mut self, step: Sample, sample_rate: f32, time_sample: usize) -> Sample {
+        let trigger = [1.0];
+        let step = [step];
+        let mut out = [0.0];
+        let inputs = [&trigger[..], &step[..]];
+        let mut outputs = [&mut out[..]];
+
+        self.process(&inputs, &mut outputs, sample_rate, time_sample);
+        out[0]
+    }
+
 }
 
 impl UGen for UGSelect {
@@ -606,7 +619,7 @@ impl UGen for UGClock {
     }
 
     fn input_names(&self) -> &[&'static str] {
-        &["on"]
+        &["in"]
     }
 
     fn output_names(&self) -> &[&'static str] {
@@ -615,7 +628,7 @@ impl UGen for UGClock {
 
     fn default_input(&self, name: &str) -> Option<Sample> {
         match name {
-            "on" => Some(1.0),
+            "in" => Some(1.0),
             _ => None,
         }
     }
@@ -635,7 +648,7 @@ impl UGen for UGClock {
         let out = &mut outputs[0];
         let hz = unit_rate_to_hz(self.value, self.mode, sample_rate);
 
-        out[0] = 1.0;
+        out[0] = if enabled.get(0).copied().unwrap_or(1.0) > 0.5 {1.0} else {0.0};
 
         for i in 1..out.len() {
             let on = enabled.get(i).copied().unwrap_or(1.0) > 0.5;
@@ -654,6 +667,7 @@ impl UGen for UGClock {
 }
 
 //------------------------------------------------------------------------------
+
 #[derive(Clone)]
 pub struct UGSampleTarget {
     current: Sample,
@@ -663,18 +677,28 @@ pub struct UGSampleTarget {
     curve: Sample,
     is_active: bool,
     triggered_last: bool,
+    dur_select: UGSelect,
+    lvl_select: UGSelect,
 }
 
 impl UGSampleTarget {
-    pub fn new() -> Self {
+    pub fn new(
+        duration_values: Vec<Sample>,
+        duration_mode: ModeSelect,
+        level_values: Vec<Sample>,
+        level_mode: ModeSelect,
+        seed: Option<u64>,
+    ) -> Self {
         Self {
             current: 0.0,
             target: 0.0,
             remaining_samples: 0,
             duration: 0,
-            curve: 5.0, // Default curve steepness
+            curve: 5.0,
             is_active: false,
             triggered_last: false,
+            dur_select: UGSelect::new(duration_values, duration_mode, seed),
+            lvl_select: UGSelect::new(level_values, level_mode, seed),
         }
     }
 }
@@ -685,7 +709,7 @@ impl UGen for UGSampleTarget {
     }
 
     fn input_names(&self) -> &[&'static str] {
-        &["trigger", "level", "duration", "curve"]
+        &["clock", "curve"]
     }
 
     fn output_names(&self) -> &[&'static str] {
@@ -694,8 +718,7 @@ impl UGen for UGSampleTarget {
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         match input_name {
-            "trigger" => Some(0.0),
-            "duration" => Some(1.0),
+            "clock" => Some(0.0),
             "curve" => Some(1.0),
             _ => None,
         }
@@ -703,40 +726,38 @@ impl UGen for UGSampleTarget {
 
     fn process(
         &mut self,
-        inputs: &[&[Sample]], // [0]: trigger, [1]: level, [2]: duration, [3]: curve
+        inputs: &[&[Sample]], // [0]: clock, [1]: curve
         outputs: &mut [&mut [Sample]],
-        _sample_rate: f32,
-        _time_sample: usize,
+        sample_rate: f32,
+        time_sample: usize,
     ) {
-        let trigger = inputs[0];
-        let level = inputs[1];
-        let duration = inputs[2];
-        let curve = inputs.get(3).copied().unwrap_or(&[]);
+        let clock = inputs.get(0).copied().unwrap_or(&[]);
+        let curve = inputs.get(1).copied().unwrap_or(&[]);
         let out = &mut outputs[0];
 
         for i in 0..out.len() {
-            let trigger_now = trigger[i] > 0.5 && !self.triggered_last;
-            self.triggered_last = trigger[i] > 0.5;
+            let triggered_now = clock.get(i).copied().unwrap_or(0.0) > 0.5 && !self.triggered_last;
+            self.triggered_last = clock.get(i).copied().unwrap_or(0.0) > 0.5;
 
-            if trigger_now {
-                self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
-                self.target = level[i];
-                self.duration = duration[i].max(1.0).round() as usize;
+            if triggered_now {
+                // using a fixed step size here; this could be provided by a signal
+                let dur_val = self.dur_select.select_next(1.0, sample_rate, time_sample);
+                self.duration = dur_val.max(1.0).round() as usize;
                 self.remaining_samples = self.duration;
-                // self.curve = curve[i].max(0.001); // Prevent divide-by-zero or log(0)
+
+                self.target = self.lvl_select.select_next(1.0, sample_rate, time_sample);
+                self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
                 self.is_active = true;
             }
 
             if self.remaining_samples > 0 {
-                let progress =
-                    1.0 - (self.remaining_samples as f32 / self.duration as f32);
+                let progress = 1.0 - (self.remaining_samples as f32 / self.duration as f32);
                 let shape = if (self.curve - 1.0).abs() < 1e-6 {
                     progress
                 } else {
                     1.0 - (-self.curve * progress).exp()
                 };
-                // let shape = 1.0 - (-self.curve * progress).exp();
-                self.current = self.current + (self.target - self.current) * shape;
+                self.current += (self.target - self.current) * shape;
                 self.remaining_samples -= 1;
             } else if self.is_active {
                 self.current = self.target;
@@ -747,6 +768,106 @@ impl UGen for UGSampleTarget {
         }
     }
 }
+
+
+
+// #[derive(Clone)]
+// pub struct UGSampleTarget {
+//     current: Sample,
+//     target: Sample,
+//     remaining_samples: usize,
+//     duration: usize,
+//     curve: Sample,
+//     is_active: bool,
+//     triggered_last: bool,
+// }
+
+// impl UGSampleTarget {
+//     pub fn new() -> Self {
+//         Self {
+//             current: 0.0,
+//             target: 0.0,
+//             remaining_samples: 0,
+//             duration: 0,
+//             curve: 5.0, // Default curve steepness
+//             is_active: false,
+//             triggered_last: false,
+//         }
+//     }
+// }
+
+// impl UGen for UGSampleTarget {
+//     fn type_name(&self) -> &'static str {
+//         "UGSampleTarget"
+//     }
+
+//     fn input_names(&self) -> &[&'static str] {
+//         &["trigger", "level", "duration", "curve"]
+//     }
+
+//     fn output_names(&self) -> &[&'static str] {
+//         &["out"]
+//     }
+
+//     fn default_input(&self, input_name: &str) -> Option<Sample> {
+//         match input_name {
+//             "trigger" => Some(0.0),
+//             "duration" => Some(1.0),
+//             "curve" => Some(1.0),
+//             _ => None,
+//         }
+//     }
+
+//     fn process(
+//         &mut self,
+//         inputs: &[&[Sample]], // [0]: trigger, [1]: level, [2]: duration, [3]: curve
+//         outputs: &mut [&mut [Sample]],
+//         _sample_rate: f32,
+//         _time_sample: usize,
+//     ) {
+//         let trigger = inputs[0];
+//         let level = inputs[1];
+//         let duration = inputs[2];
+//         let curve = inputs.get(3).copied().unwrap_or(&[]);
+//         let out = &mut outputs[0];
+
+//         for i in 0..out.len() {
+//             let trigger_now = trigger[i] > 0.5 && !self.triggered_last;
+//             self.triggered_last = trigger[i] > 0.5;
+
+//             if trigger_now {
+//                 self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
+//                 self.target = level[i];
+//                 self.duration = duration[i].max(1.0).round() as usize;
+//                 self.remaining_samples = self.duration;
+//                 // self.curve = curve[i].max(0.001); // Prevent divide-by-zero or log(0)
+//                 self.is_active = true;
+//             }
+
+//             if self.remaining_samples > 0 {
+//                 let progress =
+//                     1.0 - (self.remaining_samples as f32 / self.duration as f32);
+//                 let shape = if (self.curve - 1.0).abs() < 1e-6 {
+//                     progress
+//                 } else {
+//                     1.0 - (-self.curve * progress).exp()
+//                 };
+//                 // let shape = 1.0 - (-self.curve * progress).exp();
+//                 self.current = self.current + (self.target - self.current) * shape;
+//                 self.remaining_samples -= 1;
+//             } else if self.is_active {
+//                 self.current = self.target;
+//                 self.is_active = false;
+//             }
+
+//             out[i] = self.current;
+//         }
+//     }
+// }
+//------------------------------------------------------------------------------
+
+
+
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -969,31 +1090,19 @@ step ←= 1.000
     fn test_sample_target_a() {
         let mut g = GenGraph::new(8.0, 30);
         register_many![g,
-            "c1" => 6.0, // samples
-            "x" => UGAsHz::new(UnitRate::Samples),
-            "clock" => UGTrigger::new(),
-            "level_select" => UGSelect::new(
-                vec![1.0, 0.5, 0.2, 0.8],
-                ModeSelect::Cycle,
-                Some(42)),
-            "dur_select" => UGSelect::new(
-                vec![3.0, 8.0, 6.0, 2.0],
-                ModeSelect::Cycle,
-                Some(42)),
-            "env_st" => UGSampleTarget::new(),
+            // "c1" => 6.0, // samples
+            // "x" => UGAsHz::new(UnitRate::Samples),
+            "clock" => UGClock::new(6.0, UnitRate::Samples),
+            "env_st" => UGSampleTarget::new(
+                vec![3.0, 8.0, 6.0, 2.0], ModeSelect::Cycle,
+                vec![1.0, 0.5, 0.2, 0.8], ModeSelect::Cycle,
+                Some(42),
+            ),
             "r" => UGRound::new(4, ModeRound::Round),
         ];
 
-        // TODO: need to be able to convert dur_select values at different representations to samples, UGAsSamples(Seconds, Minutes)
-
         connect_many![g,
-        "c1.out" -> "x.in",
-        "x.out" -> "clock.freq",
-        "clock.out" -> "level_select.trigger",
-        "clock.out" -> "dur_select.trigger",
-        "clock.out" -> "env_st.trigger",
-        "level_select.out" -> "env_st.level",
-        "dur_select.out" -> "env_st.duration",
+        "clock.out" -> "env_st.clock",
         "env_st.out" -> "r.in",
         ];
 
