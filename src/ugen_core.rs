@@ -667,18 +667,30 @@ impl UGen for UGClock {
 }
 
 //------------------------------------------------------------------------------
+// UGEnvBreakPoint
+
 
 #[derive(Clone)]
 pub struct UGSampleTarget {
     current: Sample,
     target: Sample,
-    remaining_samples: usize,
-    duration: usize,
     curve: Sample,
-    is_active: bool,
+
+    duration_select: UGSelect,
+    level_select: UGSelect,
+
+    required_pulses: usize,
+    pulse_counter: usize,
+
+    measuring: bool,
+    waiting_for_ramp: bool,
+
+    sample_counter: usize,
+    ramp_sample_count: usize,
+    ramp_total_samples: usize,
+
+    is_ramping: bool,
     triggered_last: bool,
-    dur_select: UGSelect,
-    lvl_select: UGSelect,
 }
 
 impl UGSampleTarget {
@@ -692,13 +704,23 @@ impl UGSampleTarget {
         Self {
             current: 0.0,
             target: 0.0,
-            remaining_samples: 0,
-            duration: 0,
-            curve: 5.0,
-            is_active: false,
+            curve: 1.0,
+
+            duration_select: UGSelect::new(duration_values, duration_mode, seed),
+            level_select: UGSelect::new(level_values, level_mode, seed),
+
+            required_pulses: 1,
+            pulse_counter: 0,
+
+            measuring: false,
+            waiting_for_ramp: false,
+
+            sample_counter: 0,
+            ramp_sample_count: 0,
+            ramp_total_samples: 1,
+
+            is_ramping: false,
             triggered_last: false,
-            dur_select: UGSelect::new(duration_values, duration_mode, seed),
-            lvl_select: UGSelect::new(level_values, level_mode, seed),
         }
     }
 }
@@ -724,9 +746,10 @@ impl UGen for UGSampleTarget {
         }
     }
 
+
     fn process(
         &mut self,
-        inputs: &[&[Sample]], // [0]: clock, [1]: curve
+        inputs: &[&[Sample]],
         outputs: &mut [&mut [Sample]],
         sample_rate: f32,
         time_sample: usize,
@@ -736,32 +759,60 @@ impl UGen for UGSampleTarget {
         let out = &mut outputs[0];
 
         for i in 0..out.len() {
-            let triggered_now = clock.get(i).copied().unwrap_or(0.0) > 0.5 && !self.triggered_last;
-            self.triggered_last = clock.get(i).copied().unwrap_or(0.0) > 0.5;
+            let clock_now = clock.get(i).copied().unwrap_or(0.0) > 0.5;
+            let triggered_now = clock_now && !self.triggered_last;
+            self.triggered_last = clock_now;
 
             if triggered_now {
-                // using a fixed step size here; this could be provided by a signal
-                let dur_val = self.dur_select.select_next(1.0, sample_rate, time_sample);
-                self.duration = dur_val.max(1.0).round() as usize;
-                self.remaining_samples = self.duration;
+                if self.waiting_for_ramp {
+                    // Now we start the ramp using the previously measured duration
+                    self.ramp_total_samples = self.sample_counter.max(1);
+                    self.ramp_sample_count = 0;
+                    self.is_ramping = true;
+                    self.waiting_for_ramp = false;
+                    self.sample_counter = 0;
+                } else {
+                    self.pulse_counter += 1;
+                    if self.pulse_counter >= self.required_pulses {
+                        self.pulse_counter = 0;
 
-                self.target = self.lvl_select.select_next(1.0, sample_rate, time_sample);
-                self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
-                self.is_active = true;
+                        // Select new ramp target and begin measuring sample time
+                        self.required_pulses = self
+                            .duration_select
+                            .select_next(1.0, sample_rate, time_sample)
+                            .max(1.0)
+                            .round() as usize;
+
+                        self.target = self
+                            .level_select
+                            .select_next(1.0, sample_rate, time_sample);
+                        self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
+
+                        self.waiting_for_ramp = true;
+                        self.sample_counter = 0;
+                    }
+                }
             }
 
-            if self.remaining_samples > 0 {
-                let progress = 1.0 - (self.remaining_samples as f32 / self.duration as f32);
+            if self.waiting_for_ramp {
+                self.sample_counter += 1;
+            }
+
+            if self.is_ramping {
+                let progress = (self.ramp_sample_count as f32 / self.ramp_total_samples as f32).min(1.0);
                 let shape = if (self.curve - 1.0).abs() < 1e-6 {
                     progress
                 } else {
                     1.0 - (-self.curve * progress).exp()
                 };
+
                 self.current += (self.target - self.current) * shape;
-                self.remaining_samples -= 1;
-            } else if self.is_active {
-                self.current = self.target;
-                self.is_active = false;
+                self.ramp_sample_count += 1;
+
+                if progress >= 1.0 {
+                    self.current = self.target;
+                    self.is_ramping = false;
+                }
             }
 
             out[i] = self.current;
@@ -770,101 +821,6 @@ impl UGen for UGSampleTarget {
 }
 
 
-
-// #[derive(Clone)]
-// pub struct UGSampleTarget {
-//     current: Sample,
-//     target: Sample,
-//     remaining_samples: usize,
-//     duration: usize,
-//     curve: Sample,
-//     is_active: bool,
-//     triggered_last: bool,
-// }
-
-// impl UGSampleTarget {
-//     pub fn new() -> Self {
-//         Self {
-//             current: 0.0,
-//             target: 0.0,
-//             remaining_samples: 0,
-//             duration: 0,
-//             curve: 5.0, // Default curve steepness
-//             is_active: false,
-//             triggered_last: false,
-//         }
-//     }
-// }
-
-// impl UGen for UGSampleTarget {
-//     fn type_name(&self) -> &'static str {
-//         "UGSampleTarget"
-//     }
-
-//     fn input_names(&self) -> &[&'static str] {
-//         &["trigger", "level", "duration", "curve"]
-//     }
-
-//     fn output_names(&self) -> &[&'static str] {
-//         &["out"]
-//     }
-
-//     fn default_input(&self, input_name: &str) -> Option<Sample> {
-//         match input_name {
-//             "trigger" => Some(0.0),
-//             "duration" => Some(1.0),
-//             "curve" => Some(1.0),
-//             _ => None,
-//         }
-//     }
-
-//     fn process(
-//         &mut self,
-//         inputs: &[&[Sample]], // [0]: trigger, [1]: level, [2]: duration, [3]: curve
-//         outputs: &mut [&mut [Sample]],
-//         _sample_rate: f32,
-//         _time_sample: usize,
-//     ) {
-//         let trigger = inputs[0];
-//         let level = inputs[1];
-//         let duration = inputs[2];
-//         let curve = inputs.get(3).copied().unwrap_or(&[]);
-//         let out = &mut outputs[0];
-
-//         for i in 0..out.len() {
-//             let trigger_now = trigger[i] > 0.5 && !self.triggered_last;
-//             self.triggered_last = trigger[i] > 0.5;
-
-//             if trigger_now {
-//                 self.curve = curve.get(i).copied().unwrap_or(1.0).max(0.001);
-//                 self.target = level[i];
-//                 self.duration = duration[i].max(1.0).round() as usize;
-//                 self.remaining_samples = self.duration;
-//                 // self.curve = curve[i].max(0.001); // Prevent divide-by-zero or log(0)
-//                 self.is_active = true;
-//             }
-
-//             if self.remaining_samples > 0 {
-//                 let progress =
-//                     1.0 - (self.remaining_samples as f32 / self.duration as f32);
-//                 let shape = if (self.curve - 1.0).abs() < 1e-6 {
-//                     progress
-//                 } else {
-//                     1.0 - (-self.curve * progress).exp()
-//                 };
-//                 // let shape = 1.0 - (-self.curve * progress).exp();
-//                 self.current = self.current + (self.target - self.current) * shape;
-//                 self.remaining_samples -= 1;
-//             } else if self.is_active {
-//                 self.current = self.target;
-//                 self.is_active = false;
-//             }
-
-//             out[i] = self.current;
-//         }
-//     }
-// }
-//------------------------------------------------------------------------------
 
 
 
@@ -1088,14 +1044,12 @@ step ←= 1.000
     //--------------------------------------------------------------------------
     #[test]
     fn test_sample_target_a() {
-        let mut g = GenGraph::new(8.0, 30);
+        let mut g = GenGraph::new(8.0, 40);
         register_many![g,
-            // "c1" => 6.0, // samples
-            // "x" => UGAsHz::new(UnitRate::Samples),
-            "clock" => UGClock::new(6.0, UnitRate::Samples),
+            "clock" => UGClock::new(2.0, UnitRate::Samples),
             "env_st" => UGSampleTarget::new(
-                vec![3.0, 8.0, 6.0, 2.0], ModeSelect::Cycle,
-                vec![1.0, 0.5, 0.2, 0.8], ModeSelect::Cycle,
+                vec![2.0, 4.0, 3.0, 2.0], ModeSelect::Cycle,
+                vec![1.0, 0.2, 0.8, 0.5], ModeSelect::Cycle,
                 Some(42),
             ),
             "r" => UGRound::new(4, ModeRound::Round),
