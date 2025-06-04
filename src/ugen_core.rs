@@ -451,7 +451,12 @@ impl UGSelect {
         }
     }
 
-    pub fn select_next(&mut self, step: Sample, sample_rate: f32, time_sample: usize) -> Sample {
+    pub fn select_next(
+        &mut self,
+        step: Sample,
+        sample_rate: f32,
+        time_sample: usize,
+    ) -> Sample {
         let trigger = [1.0];
         let step = [step];
         let mut out = [0.0];
@@ -461,7 +466,6 @@ impl UGSelect {
         self.process(&inputs, &mut outputs, sample_rate, time_sample);
         out[0]
     }
-
 }
 
 impl UGen for UGSelect {
@@ -648,7 +652,11 @@ impl UGen for UGClock {
         let out = &mut outputs[0];
         let hz = unit_rate_to_hz(self.value, self.mode, sample_rate);
 
-        out[0] = if enabled.get(0).copied().unwrap_or(1.0) > 0.5 {1.0} else {0.0};
+        out[0] = if enabled.get(0).copied().unwrap_or(1.0) > 0.5 {
+            1.0
+        } else {
+            0.0
+        };
 
         for i in 1..out.len() {
             let on = enabled.get(i).copied().unwrap_or(1.0) > 0.5;
@@ -755,9 +763,11 @@ impl UGen for UGEnvBreakPoint {
                         .max(1.0)
                         .round() as usize;
 
-                    self.current = self
-                        .level_select
-                        .select_next(step_size, sample_rate, time_sample);
+                    self.current = self.level_select.select_next(
+                        step_size,
+                        sample_rate,
+                        time_sample,
+                    );
                 }
             }
 
@@ -774,7 +784,6 @@ enum EnvPhase {
     Attack,
     Release,
 }
-
 
 #[derive(Clone)]
 pub struct UGEnvAR {
@@ -804,10 +813,18 @@ impl UGEnvAR {
 }
 
 impl UGen for UGEnvAR {
-    fn type_name(&self) -> &'static str { "UGEnvAR" }
+    fn type_name(&self) -> &'static str {
+        "UGEnvAR"
+    }
 
     fn input_names(&self) -> &[&'static str] {
-        &["trigger", "attack_dur", "release_dur", "attack_curve", "release_curve"]
+        &[
+            "trigger",
+            "attack_dur",
+            "release_dur",
+            "attack_curve",
+            "release_curve",
+        ]
     }
 
     fn output_names(&self) -> &[&'static str] {
@@ -846,7 +863,8 @@ impl UGen for UGEnvAR {
                 self.phase = EnvPhase::Attack;
                 self.start = self.current;
                 self.target = 1.0;
-                self.total_samples = att_dur.get(i).copied().unwrap_or(1.0).max(1.0).round() as usize;
+                self.total_samples =
+                    att_dur.get(i).copied().unwrap_or(1.0).max(1.0).round() as usize;
                 self.remaining_samples = self.total_samples;
                 self.curve = att_curve.get(i).copied().unwrap_or(1.0).max(0.001);
             }
@@ -854,7 +872,8 @@ impl UGen for UGEnvAR {
             if self.remaining_samples > 0 {
                 // ⬅ use remaining_samples - 1 to make progress hit 1.0 earlier
                 let progress = if self.remaining_samples > 1 {
-                    1.0 - ((self.remaining_samples - 1) as f32 / self.total_samples as f32)
+                    1.0 - ((self.remaining_samples - 1) as f32
+                        / self.total_samples as f32)
                 } else {
                     1.0
                 };
@@ -874,9 +893,12 @@ impl UGen for UGEnvAR {
                             self.phase = EnvPhase::Release;
                             self.start = self.current;
                             self.target = 0.0;
-                            self.total_samples = rel_dur.get(i).copied().unwrap_or(1.0).max(1.0).round() as usize;
+                            self.total_samples =
+                                rel_dur.get(i).copied().unwrap_or(1.0).max(1.0).round()
+                                    as usize;
                             self.remaining_samples = self.total_samples;
-                            self.curve = rel_curve.get(i).copied().unwrap_or(1.0).max(0.001);
+                            self.curve =
+                                rel_curve.get(i).copied().unwrap_or(1.0).max(0.001);
                         }
                         EnvPhase::Release => {
                             self.phase = EnvPhase::Idle;
@@ -891,8 +913,6 @@ impl UGen for UGEnvAR {
         }
     }
 }
-
-
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -1133,7 +1153,11 @@ step ←= 1.000
 
         assert_eq!(
             g.get_output_named("r.out"),
-            vec![1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
+            vec![
+                1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8,
+                0.8, 0.8, 0.8, 0.8, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2,
+                0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8
+            ]
         );
     }
 
@@ -1157,11 +1181,15 @@ step ←= 1.000
         ];
 
         g.process();
-        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
 
         assert_eq!(
             g.get_output_named("round.out"),
-            vec! [0.25, 0.5, 0.75, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            vec![
+                0.25, 0.5, 0.75, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0, 0.875,
+                0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0
+            ]
         );
     }
 }
