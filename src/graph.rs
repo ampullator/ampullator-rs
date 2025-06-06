@@ -194,6 +194,21 @@ impl GenGraph {
         &node.outputs[index]
     }
 
+    pub fn get_outputs(&self) -> HashMap<String, &Vec<Sample>> {
+        let mut result = HashMap::new();
+
+        for (name, &node_id) in &self.node_names {
+            let node = &self.nodes[node_id.0];
+            let output_names = node.node.output_names();
+
+            for (i, output_name) in output_names.iter().enumerate() {
+                let label = format!("{}.{}", name, output_name);
+                result.insert(label, &node.outputs[i]);
+            }
+        }
+        result
+    }
+
     //--------------------------------------------------------------------------
     pub fn describe_json(&self) -> Value {
         let mut result = Vec::new();
@@ -481,7 +496,7 @@ pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{UGAsHz, UGConst, UGSine, UnitRate};
+    use crate::{UGAsHz, UGConst, UGRound, UGSine, ModeRound, UnitRate, UGLowPass, UGClock};
 
     #[test]
     fn test_gen_graph_describe_json_a() {
@@ -497,6 +512,26 @@ mod tests {
         assert_eq!(
             graph.describe_json().to_string(),
             r#"[{"config":"value = 69.000","id":0,"inputs":[],"name":"note","outputs":[{"name":"out","value":0.0}],"type":"UGConst"},{"config":"mode = midi","id":1,"inputs":[{"connected_to":{"node":"note","output":"out"},"name":"in"}],"name":"conv","outputs":[{"name":"out","value":0.0}],"type":"UGAsHz"},{"config":null,"id":2,"inputs":[{"connected_to":{"node":"conv","output":"out"},"name":"freq"},{"default":0.0,"name":"phase"},{"default":-1.0,"name":"min"},{"default":1.0,"name":"max"}],"name":"osc","outputs":[{"name":"wave","value":0.0},{"name":"trigger","value":0.0}],"type":"UGSine"}]"#
+        );
+    }
+
+    #[test]
+    fn test_get_outputs_a() {
+        let mut g = GenGraph::new(2000.0, 20);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "lpf" => UGLowPass::new(12.0),
+            "fq" => 60,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+
+        let outputs = g.get_outputs();
+        let mut post: Vec<&String> = outputs.keys().collect();
+        post.sort();
+
+        assert_eq!(
+            post,
+            vec!["clock.out", "fq.out", "lpf.out", "r.out"]
         );
     }
 }
