@@ -142,6 +142,7 @@ set multiplot
 
         // TODO: need to store and use execution order
         for (i, (label, values)) in self.recorded.iter().enumerate() {
+            println!("{:?}, {:?}", i, label);
             let panel = i + 1;
             let block_label = label.replace(['.', '-', ' '], "_");
 
@@ -235,6 +236,7 @@ mod tests {
 
         let r1 = Recorder::from_samples(g, None, 120);
         assert_eq!(r1.get_shape(), (5, 120));
+        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
 
     }
 
