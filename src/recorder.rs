@@ -234,8 +234,8 @@ mod tests {
         ];
 
 
-        let r1 = Recorder::from_samples(g, None, 120);
-        assert_eq!(r1.get_shape(), (5, 120));
+        let r1 = Recorder::from_samples(g, None, 40);
+        assert_eq!(r1.get_shape(), (5, 40));
         r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
 
     }
