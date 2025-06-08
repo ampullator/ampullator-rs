@@ -142,7 +142,7 @@ mod tests {
     use crate::connect_many;
     use crate::register_many;
     use crate::UnitRate;
-    use crate::plot_graph_to_image;
+    // use crate::plot_graph_to_image;
 
 
     //--------------------------------------------------------------------------
@@ -162,7 +162,7 @@ mod tests {
         ];
         g.process();
 
-        plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
+        // plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
 
         assert_eq!(
             g.get_output_named("r.out"),

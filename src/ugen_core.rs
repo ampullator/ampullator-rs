@@ -922,7 +922,7 @@ mod tests {
     use crate::connect_many;
     use crate::register_many;
 
-    use crate::plot_graph_to_image;
+    // use crate::plot_graph_to_image;
 
     //--------------------------------------------------------------------------
     #[test]

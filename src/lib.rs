@@ -17,4 +17,4 @@ pub use util::{Sample, UnitRate};
 
 pub use graph::GenGraph;
 
-pub use graph::plot_graph_to_image;
+// pub use graph::plot_graph_to_image;

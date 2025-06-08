@@ -1,10 +1,6 @@
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::io::Write;
-use std::path::Path;
-use std::process::Command;
-use tempfile::NamedTempFile;
 
 use crate::ugen_core::UGen;
 use crate::util::Sample;
@@ -341,107 +337,107 @@ impl GenGraph {
     }
 
     //--------------------------------------------------------------------------
-    pub fn to_gnuplot(&self, output: &Path) -> String {
-        let outputs = self
-            .build_execution_order()
-            .into_iter()
-            .flat_map(|nid| {
-                let node = &self.nodes[nid.0];
-                let name = self
-                    .node_names
-                    .iter()
-                    .find(|&(_, &id)| id == nid)
-                    .map(|(n, _)| n.clone())
-                    .unwrap_or_else(|| format!("node_{}", nid.0));
-                node.node.output_names().iter().enumerate().map(
-                    move |(i, output_name)| {
-                        let values = &node.outputs[i];
-                        (format!("{}.{}", name, output_name), values)
-                    },
-                )
-            })
-            .collect::<Vec<_>>();
+//     pub fn to_gnuplot(&self, output: &Path) -> String {
+//         let outputs = self
+//             .build_execution_order()
+//             .into_iter()
+//             .flat_map(|nid| {
+//                 let node = &self.nodes[nid.0];
+//                 let name = self
+//                     .node_names
+//                     .iter()
+//                     .find(|&(_, &id)| id == nid)
+//                     .map(|(n, _)| n.clone())
+//                     .unwrap_or_else(|| format!("node_{}", nid.0));
+//                 node.node.output_names().iter().enumerate().map(
+//                     move |(i, output_name)| {
+//                         let values = &node.outputs[i];
+//                         (format!("{}.{}", name, output_name), values)
+//                     },
+//                 )
+//             })
+//             .collect::<Vec<_>>();
 
-        let d = outputs.len();
-        let mut script = String::new();
+//         let d = outputs.len();
+//         let mut script = String::new();
 
-        script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
-        // script.push_str("set terminal pdfcairo size 8in,6in\n");
-        script.push_str(&format!("set output '{}'\n\n", output.display()));
-        script.push_str(
-            r#"# General appearance
-set style line 11 lc rgb '#ffffff' lt 1
-set tics out nomirror scale 0,0.001
-set format y "%g"
-unset key
-set grid
-set lmargin screen 0.15
-set rmargin screen 0.98
-set ytics font ",8"
-unset xtics
+//         script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
+//         // script.push_str("set terminal pdfcairo size 8in,6in\n");
+//         script.push_str(&format!("set output '{}'\n\n", output.display()));
+//         script.push_str(
+//             r#"# General appearance
+// set style line 11 lc rgb '#ffffff' lt 1
+// set tics out nomirror scale 0,0.001
+// set format y "%g"
+// unset key
+// set grid
+// set lmargin screen 0.15
+// set rmargin screen 0.98
+// set ytics font ",8"
+// unset xtics
 
-# Color and style setup
-do for [i=1:3] {
-    set style line i lt 1 lw 1 pt 3 lc rgb '#5599ff'
-}
+// # Color and style setup
+// do for [i=1:3] {
+//     set style line i lt 1 lw 1 pt 3 lc rgb '#5599ff'
+// }
 
-# Multiplot setup
-set multiplot
-"#,
-        );
+// # Multiplot setup
+// set multiplot
+// "#,
+//         );
 
-        script.push_str(&format!("d = {}\n", d));
-        script.push_str("margin = 0.04\n");
-        script.push_str("height = 1.0 / d\n");
-        script.push_str("pos = 1.0\n\n");
+//         script.push_str(&format!("d = {}\n", d));
+//         script.push_str("margin = 0.04\n");
+//         script.push_str("height = 1.0 / d\n");
+//         script.push_str("pos = 1.0\n\n");
 
-        script.push_str("label_x = 0.06\n");
-        script.push_str("label_font = \",9\"\n\n");
+//         script.push_str("label_x = 0.06\n");
+//         script.push_str("label_font = \",9\"\n\n");
 
-        for (i, (label, values)) in outputs.iter().enumerate() {
-            let panel = i + 1;
-            let block_label = label.replace(['.', '-', ' '], "_");
+//         for (i, (label, values)) in outputs.iter().enumerate() {
+//             let panel = i + 1;
+//             let block_label = label.replace(['.', '-', ' '], "_");
 
-            // Data block
-            script.push_str(&format!("${} << EOD\n", block_label));
-            for v in *values {
-                script.push_str(&format!("{}\n", v));
-            }
-            script.push_str("EOD\n");
+//             // Data block
+//             script.push_str(&format!("${} << EOD\n", block_label));
+//             for v in *values {
+//                 script.push_str(&format!("{}\n", v));
+//             }
+//             script.push_str("EOD\n");
 
-            // Plot setup
-            script.push_str(&format!(
-                r#"
-        # Panel {}
-        top = pos - margin * {}
-        bottom = pos - height + margin * 0.5
-        pos = pos - height
-        set tmargin screen top
-        set bmargin screen bottom
-        set label textcolor rgb '#c4c5bf'
-        set border lc rgb '#c4c5bf'
-        set grid lc rgb '#cccccc'
+//             // Plot setup
+//             script.push_str(&format!(
+//                 r#"
+//         # Panel {}
+//         top = pos - margin * {}
+//         bottom = pos - height + margin * 0.5
+//         pos = pos - height
+//         set tmargin screen top
+//         set bmargin screen bottom
+//         set label textcolor rgb '#c4c5bf'
+//         set border lc rgb '#c4c5bf'
+//         set grid lc rgb '#cccccc'
 
 
-        set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
-        plot ${} using 1 with linespoints linestyle {}
-        "#,
-                panel,
-                if i == 0 { 1.0 } else { 0.5 },
-                panel,
-                label,
-                block_label,
-                (i % 3) + 1,
-            ));
-        }
+//         set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
+//         plot ${} using 1 with linespoints linestyle {}
+//         "#,
+//                 panel,
+//                 if i == 0 { 1.0 } else { 0.5 },
+//                 panel,
+//                 label,
+//                 block_label,
+//                 (i % 3) + 1,
+//             ));
+//         }
 
-        script.push_str("unset multiplot\n");
-        for i in 1..=d {
-            script.push_str(&format!("unset label {}\n", i));
-        }
+//         script.push_str("unset multiplot\n");
+//         for i in 1..=d {
+//             script.push_str(&format!("unset label {}\n", i));
+//         }
 
-        script
-    }
+//         script
+//     }
 }
 
 //------------------------------------------------------------------------------
@@ -478,19 +474,19 @@ macro_rules! connect_many {
 
 //------------------------------------------------------------------------------
 
-pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()> {
-    let script = graph.to_gnuplot(output.as_ref());
-    let mut file = NamedTempFile::new()?;
-    write!(file, "{script}")?;
-    let script_path = file.path();
-    let status = Command::new("gnuplot").arg(script_path).status()?;
+// pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()> {
+//     let script = graph.to_gnuplot(output.as_ref());
+//     let mut file = NamedTempFile::new()?;
+//     write!(file, "{script}")?;
+//     let script_path = file.path();
+//     let status = Command::new("gnuplot").arg(script_path).status()?;
 
-    if !status.success() {
-        eprintln!("gnuplot failed with exit code: {:?}", status.code());
-    }
+//     if !status.success() {
+//         eprintln!("gnuplot failed with exit code: {:?}", status.code());
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
