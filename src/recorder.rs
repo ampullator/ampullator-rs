@@ -12,7 +12,7 @@ use tempfile::NamedTempFile;
 pub struct Recorder {
     sample_rate: f32,
     recorded: HashMap<String, Vec<Sample>>,
-    // execution_order: Vec<String>,
+    output_names: Vec<String>,
 }
 
 impl Recorder {
@@ -61,6 +61,7 @@ impl Recorder {
         Self {
             sample_rate,
             recorded,
+            output_names: graph.get_output_names(),
         }
     }
 
@@ -133,8 +134,10 @@ set multiplot
         script.push_str("label_font = \",9\"\n\n");
 
         // TODO: need to store and use execution order
-        for (i, (label, values)) in self.recorded.iter().enumerate() {
+        for (i, label) in self.output_names.iter().enumerate() {
+            // for (i, (label, values)) in self.recorded.iter().enumerate() {
             // println!("{:?}, {:?}", i, label);
+            let values = self.recorded.get(label).expect("expected label not found");
             let panel = i + 1;
             let block_label = label.replace(['.', '-', ' '], "_");
 

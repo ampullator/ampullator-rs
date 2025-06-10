@@ -229,6 +229,22 @@ impl GenGraph {
         result
     }
 
+    // Return all node.output labels
+    pub fn get_output_names(&self) -> Vec<String> {
+        let mut result = Vec::new();
+
+        for &node_id in &self.get_execution_node_ids() {
+            let node = &self.nodes[node_id.0];
+            let name = &node.name;
+            let output_names = node.node.output_names();
+            for output_name in output_names.iter() {
+                let label = format!("{}.{}", name, output_name);
+                result.push(label);
+            }
+        }
+        result
+    }
+
     //--------------------------------------------------------------------------
     pub fn describe_json(&self) -> Value {
         let mut result = Vec::new();
