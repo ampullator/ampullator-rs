@@ -1,14 +1,13 @@
-use std::collections::HashMap;
 use crate::Sample;
+use std::collections::HashMap;
 // use crate::UGen;
-use std::collections::HashSet;
 use crate::GenGraph;
+use std::collections::HashSet;
 use std::path::Path;
 
 use std::io::Write;
 use std::process::Command;
 use tempfile::NamedTempFile;
-
 
 pub struct Recorder {
     sample_rate: f32,
@@ -17,7 +16,6 @@ pub struct Recorder {
 }
 
 impl Recorder {
-
     pub fn from_samples(
         mut graph: GenGraph,
         output_labels: Option<Vec<String>>,
@@ -45,16 +43,12 @@ impl Recorder {
 
         let iterations = (total_samples + buffer_size - 1) / buffer_size;
 
-        // let execution_order = graph.build_execution_order();
-
+        // TODO: using get_ouputs on each execution is heavy: refactor!
         for _ in 0..iterations {
             graph.process();
             for (label, buffer) in graph.get_outputs() {
                 if collected_labels.contains(&label) {
-                    recorded
-                        .get_mut(&label)
-                        .unwrap()
-                        .extend_from_slice(buffer);
+                    recorded.get_mut(&label).unwrap().extend_from_slice(buffer);
                 }
             }
         }
@@ -64,19 +58,17 @@ impl Recorder {
             samples.truncate(total_samples);
         }
 
-        Self { sample_rate, recorded }
+        Self {
+            sample_rate,
+            recorded,
+        }
     }
 
     //--------------------------------------------------------------------------
     pub fn get_shape(&self) -> (usize, usize) {
         let channels = self.recorded.len();
 
-        let length = self
-            .recorded
-            .values()
-            .map(|v| v.len())
-            .max()
-            .unwrap_or(0);
+        let length = self.recorded.values().map(|v| v.len()).max().unwrap_or(0);
 
         (channels, length)
     }
@@ -84,7 +76,7 @@ impl Recorder {
     //--------------------------------------------------------------------------
     pub fn to_gnuplot(&self, fp: &Path) -> String {
         // let outputs = self
-        //     .build_execution_order()
+        //     .get_execution_node_ids()
         //     .into_iter()
         //     .flat_map(|nid| {
         //         let node = &self.nodes[nid.0];
@@ -142,7 +134,7 @@ set multiplot
 
         // TODO: need to store and use execution order
         for (i, (label, values)) in self.recorded.iter().enumerate() {
-            println!("{:?}, {:?}", i, label);
+            // println!("{:?}, {:?}", i, label);
             let panel = i + 1;
             let block_label = label.replace(['.', '-', ' '], "_");
 
@@ -199,24 +191,19 @@ set multiplot
 
         Ok(())
     }
-
 }
-
-
-
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{plot_graph_to_image, ModeRound, UGClock, UGEnvAR, UGRound, UnitRate};
     use crate::GenGraph;
     use crate::connect_many;
     use crate::register_many;
+    use crate::{ModeRound, UGClock, UGEnvAR, UGRound, UnitRate};
 
     #[test]
     fn test_recorder_a() {
-
         let mut g = GenGraph::new(8.0, 10);
         register_many![g,
             "clock" => UGClock::new(16.0, UnitRate::Samples),
@@ -233,19 +220,15 @@ mod tests {
         "env.out" -> "round.in"
         ];
 
-
         g.process();
-        plot_graph_to_image(&g, "/tmp/ampullator-old.png");
+        // plot_graph_to_image(&g, "/tmp/ampullator-old.png");
         let r1 = Recorder::from_samples(g, None, 10);
         assert_eq!(r1.get_shape(), (5, 10));
         r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
-
     }
-
 
     #[test]
     fn test_recorder_b() {
-
         let mut g = GenGraph::new(8.0, 20);
         register_many![g,
             "clock" => UGClock::new(16.0, UnitRate::Samples),
@@ -262,10 +245,8 @@ mod tests {
         "env.out" -> "round.in"
         ];
 
-
         let output_labels = Some(vec!["round.out".to_string()]);
         let r1 = Recorder::from_samples(g, output_labels, 120);
         assert_eq!(r1.get_shape(), (1, 120));
-
     }
 }

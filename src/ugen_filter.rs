@@ -1,7 +1,6 @@
 use crate::Sample;
 use crate::UGen;
 
-
 fn db_per_octave_to_poles(db: f32) -> usize {
     ((db / 6.0).round()).clamp(1.0, 12.0) as usize
 }
@@ -136,14 +135,13 @@ impl UGen for UGLowPassQ {
 mod tests {
     use super::*;
     use crate::GenGraph;
+    use crate::ModeRound;
     use crate::UGClock;
     use crate::UGRound;
-    use crate::ModeRound;
+    use crate::UnitRate;
     use crate::connect_many;
     use crate::register_many;
-    use crate::UnitRate;
     // use crate::plot_graph_to_image;
-
 
     //--------------------------------------------------------------------------
     #[test]
@@ -166,7 +164,10 @@ mod tests {
 
         assert_eq!(
             g.get_output_named("r.out"),
-            vec![0.036, 0.058, 0.07, 0.076, 0.077, 0.075, 0.071, 0.066, 0.06, 0.054, 0.048, 0.043, 0.038, 0.033, 0.029, 0.025, 0.021, 0.018, 0.016, 0.013]
+            vec![
+                0.036, 0.058, 0.07, 0.076, 0.077, 0.075, 0.071, 0.066, 0.06, 0.054,
+                0.048, 0.043, 0.038, 0.033, 0.029, 0.025, 0.021, 0.018, 0.016, 0.013
+            ]
         );
     }
 }

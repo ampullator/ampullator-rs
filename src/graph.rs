@@ -26,13 +26,16 @@ pub struct NodeEdge {
 // `outputs` are sorted in fixed output positions.
 pub struct GraphNode {
     pub id: NodeId,
+    pub name: String,
     pub node: Box<dyn UGen>,
     pub inputs: Vec<NodeEdge>,
     pub outputs: Vec<Vec<Sample>>,
 }
 //------------------------------------------------------------------------------
 pub struct GenGraph {
+    // Store nodes as assigned, were pos is NodId
     pub nodes: Vec<GraphNode>,
+    // Reverse mapping from node name to NodeId
     pub node_names: HashMap<String, NodeId>,
     pub sample_rate: f32,
     pub buffer_size: usize,
@@ -49,12 +52,18 @@ impl GenGraph {
             time_sample: 0,
         }
     }
-    pub fn add_node<N: Into<String>>(&mut self, name: N, node: Box<dyn UGen>) -> NodeId {
+    pub fn add_node<N: Into<String>>(
+        &mut self,
+        name_raw: N,
+        node: Box<dyn UGen>,
+    ) -> NodeId {
         let id = NodeId(self.nodes.len());
         let output_count = node.output_names().len();
-        self.node_names.insert(name.into(), id);
+        let name: String = name_raw.into();
+        self.node_names.insert(name.clone(), id);
         self.nodes.push(GraphNode {
             id,
+            name,
             node,
             inputs: Vec::new(),
             outputs: vec![vec![0.0; self.buffer_size]; output_count],
@@ -115,7 +124,8 @@ impl GenGraph {
     }
 
     // dependency-respecting order (DAG topological sort):
-    pub fn build_execution_order(&self) -> Vec<NodeId> {
+    // TODO: this needs to be cached!
+    pub fn get_execution_node_ids(&self) -> Vec<NodeId> {
         let mut indegree = vec![0; self.nodes.len()];
         for node in &self.nodes {
             indegree[node.id.0] = node.inputs.len();
@@ -143,13 +153,19 @@ impl GenGraph {
                 }
             }
         }
-
         order
     }
 
+    pub fn get_execution_names(&self) -> Vec<String> {
+        let mut post = Vec::new();
+        for &node_id in &self.get_execution_node_ids() {
+            post.push(self.nodes[node_id.0].name.clone());
+        }
+        post
+    }
+
     pub fn process(&mut self) {
-        let execution_order = self.build_execution_order();
-        for &nid in &execution_order {
+        for &nid in &self.get_execution_node_ids() {
             let node_index = nid.0;
             let (left, right) = self.nodes.split_at_mut(node_index);
             let (node, rest) = right.split_first_mut().expect("valid index");
@@ -181,29 +197,33 @@ impl GenGraph {
         self.time_sample += self.buffer_size;
     }
 
+    // Given a two-part name node.output, return a slice of the samples for that node and output,
     pub fn get_output_named(&self, name: &str) -> &[Sample] {
         let (node_name, output_name) = split_name(name);
         let node_id = self.node_names[node_name];
         let node = &self.nodes[node_id.0];
+        // TODO: this linear search for outputs should be improved
         let index = node
             .node
             .output_names()
-            .iter()
+            .iter() // iter over all outputs for this node and find target match
             .position(|&name| name == output_name)
             .expect("Invalid output name");
         &node.outputs[index]
     }
 
-    pub fn get_outputs(&self) -> HashMap<String, &Vec<Sample>> {
-        let mut result = HashMap::new();
+    // NOTE: this is a bit heavy as we create a Vec for each call
+    pub fn get_outputs(&self) -> Vec<(String, &Vec<Sample>)> {
+        let mut result = Vec::new();
 
-        for (name, &node_id) in &self.node_names {
+        for &node_id in &self.get_execution_node_ids() {
             let node = &self.nodes[node_id.0];
+            let name = &node.name;
             let output_names = node.node.output_names();
 
             for (i, output_name) in output_names.iter().enumerate() {
                 let label = format!("{}.{}", name, output_name);
-                result.insert(label, &node.outputs[i]);
+                result.push((label, &node.outputs[i]));
             }
         }
         result
@@ -213,7 +233,7 @@ impl GenGraph {
     pub fn describe_json(&self) -> Value {
         let mut result = Vec::new();
 
-        for &node_id in &self.build_execution_order() {
+        for &node_id in &self.get_execution_node_ids() {
             let node = &self.nodes[node_id.0];
 
             let name = self
@@ -341,107 +361,106 @@ impl GenGraph {
     }
 
     //--------------------------------------------------------------------------
-//     pub fn to_gnuplot(&self, output: &Path) -> String {
-//         let outputs = self
-//             .build_execution_order()
-//             .into_iter()
-//             .flat_map(|nid| {
-//                 let node = &self.nodes[nid.0];
-//                 let name = self
-//                     .node_names
-//                     .iter()
-//                     .find(|&(_, &id)| id == nid)
-//                     .map(|(n, _)| n.clone())
-//                     .unwrap_or_else(|| format!("node_{}", nid.0));
-//                 node.node.output_names().iter().enumerate().map(
-//                     move |(i, output_name)| {
-//                         let values = &node.outputs[i];
-//                         (format!("{}.{}", name, output_name), values)
-//                     },
-//                 )
-//             })
-//             .collect::<Vec<_>>();
+    //     pub fn to_gnuplot(&self, output: &Path) -> String {
+    //         let outputs = self
+    //             .get_execution_node_ids()
+    //             .into_iter()
+    //             .flat_map(|nid| {
+    //                 let node = &self.nodes[nid.0];
+    //                 let name = self
+    //                     .node_names
+    //                     .iter()
+    //                     .find(|&(_, &id)| id == nid)
+    //                     .map(|(n, _)| n.clone())
+    //                     .unwrap_or_else(|| format!("node_{}", nid.0));
+    //                 node.node.output_names().iter().enumerate().map(
+    //                     move |(i, output_name)| {
+    //                         let values = &node.outputs[i];
+    //                         (format!("{}.{}", name, output_name), values)
+    //                     },
+    //                 )
+    //             })
+    //             .collect::<Vec<_>>();
 
-//         let d = outputs.len();
-//         let mut script = String::new();
+    //         let d = outputs.len();
+    //         let mut script = String::new();
 
-//         script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
-//         // script.push_str("set terminal pdfcairo size 8in,6in\n");
-//         script.push_str(&format!("set output '{}'\n\n", output.display()));
-//         script.push_str(
-//             r#"# General appearance
-// set style line 11 lc rgb '#ffffff' lt 1
-// set tics out nomirror scale 0,0.001
-// set format y "%g"
-// unset key
-// set grid
-// set lmargin screen 0.15
-// set rmargin screen 0.98
-// set ytics font ",8"
-// unset xtics
+    //         script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
+    //         // script.push_str("set terminal pdfcairo size 8in,6in\n");
+    //         script.push_str(&format!("set output '{}'\n\n", output.display()));
+    //         script.push_str(
+    //             r#"# General appearance
+    // set style line 11 lc rgb '#ffffff' lt 1
+    // set tics out nomirror scale 0,0.001
+    // set format y "%g"
+    // unset key
+    // set grid
+    // set lmargin screen 0.15
+    // set rmargin screen 0.98
+    // set ytics font ",8"
+    // unset xtics
 
-// # Color and style setup
-// do for [i=1:3] {
-//     set style line i lt 1 lw 1 pt 3 lc rgb '#5599ff'
-// }
+    // # Color and style setup
+    // do for [i=1:3] {
+    //     set style line i lt 1 lw 1 pt 3 lc rgb '#5599ff'
+    // }
 
-// # Multiplot setup
-// set multiplot
-// "#,
-//         );
+    // # Multiplot setup
+    // set multiplot
+    // "#,
+    //         );
 
-//         script.push_str(&format!("d = {}\n", d));
-//         script.push_str("margin = 0.04\n");
-//         script.push_str("height = 1.0 / d\n");
-//         script.push_str("pos = 1.0\n\n");
+    //         script.push_str(&format!("d = {}\n", d));
+    //         script.push_str("margin = 0.04\n");
+    //         script.push_str("height = 1.0 / d\n");
+    //         script.push_str("pos = 1.0\n\n");
 
-//         script.push_str("label_x = 0.06\n");
-//         script.push_str("label_font = \",9\"\n\n");
+    //         script.push_str("label_x = 0.06\n");
+    //         script.push_str("label_font = \",9\"\n\n");
 
-//         for (i, (label, values)) in outputs.iter().enumerate() {
-//             let panel = i + 1;
-//             let block_label = label.replace(['.', '-', ' '], "_");
+    //         for (i, (label, values)) in outputs.iter().enumerate() {
+    //             let panel = i + 1;
+    //             let block_label = label.replace(['.', '-', ' '], "_");
 
-//             // Data block
-//             script.push_str(&format!("${} << EOD\n", block_label));
-//             for v in *values {
-//                 script.push_str(&format!("{}\n", v));
-//             }
-//             script.push_str("EOD\n");
+    //             // Data block
+    //             script.push_str(&format!("${} << EOD\n", block_label));
+    //             for v in *values {
+    //                 script.push_str(&format!("{}\n", v));
+    //             }
+    //             script.push_str("EOD\n");
 
-//             // Plot setup
-//             script.push_str(&format!(
-//                 r#"
-//         # Panel {}
-//         top = pos - margin * {}
-//         bottom = pos - height + margin * 0.5
-//         pos = pos - height
-//         set tmargin screen top
-//         set bmargin screen bottom
-//         set label textcolor rgb '#c4c5bf'
-//         set border lc rgb '#c4c5bf'
-//         set grid lc rgb '#cccccc'
+    //             // Plot setup
+    //             script.push_str(&format!(
+    //                 r#"
+    //         # Panel {}
+    //         top = pos - margin * {}
+    //         bottom = pos - height + margin * 0.5
+    //         pos = pos - height
+    //         set tmargin screen top
+    //         set bmargin screen bottom
+    //         set label textcolor rgb '#c4c5bf'
+    //         set border lc rgb '#c4c5bf'
+    //         set grid lc rgb '#cccccc'
 
+    //         set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
+    //         plot ${} using 1 with linespoints linestyle {}
+    //         "#,
+    //                 panel,
+    //                 if i == 0 { 1.0 } else { 0.5 },
+    //                 panel,
+    //                 label,
+    //                 block_label,
+    //                 (i % 3) + 1,
+    //             ));
+    //         }
 
-//         set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
-//         plot ${} using 1 with linespoints linestyle {}
-//         "#,
-//                 panel,
-//                 if i == 0 { 1.0 } else { 0.5 },
-//                 panel,
-//                 label,
-//                 block_label,
-//                 (i % 3) + 1,
-//             ));
-//         }
+    //         script.push_str("unset multiplot\n");
+    //         for i in 1..=d {
+    //             script.push_str(&format!("unset label {}\n", i));
+    //         }
 
-//         script.push_str("unset multiplot\n");
-//         for i in 1..=d {
-//             script.push_str(&format!("unset label {}\n", i));
-//         }
-
-//         script
-//     }
+    //         script
+    //     }
 }
 
 //------------------------------------------------------------------------------
@@ -498,7 +517,9 @@ macro_rules! connect_many {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{UGAsHz, UGConst, UGRound, UGSine, ModeRound, UnitRate, UGLowPass, UGClock};
+    use crate::{
+        ModeRound, UGAsHz, UGClock, UGConst, UGLowPass, UGRound, UGSine, UnitRate,
+    };
 
     #[test]
     fn test_gen_graph_describe_json_a() {
@@ -528,12 +549,9 @@ mod tests {
         ];
 
         let outputs = g.get_outputs();
-        let mut post: Vec<&String> = outputs.keys().collect();
+        let mut post: Vec<&String> = outputs.iter().map(|(k, _)| k).collect();
         post.sort();
 
-        assert_eq!(
-            post,
-            vec!["clock.out", "fq.out", "lpf.out", "r.out"]
-        );
+        assert_eq!(post, vec!["clock.out", "fq.out", "lpf.out", "r.out"]);
     }
 }
