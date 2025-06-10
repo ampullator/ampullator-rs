@@ -1,6 +1,10 @@
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::io::Write;
+use std::path::Path;
+use std::process::Command;
+use tempfile::NamedTempFile;
 
 use crate::ugen_core::UGen;
 use crate::util::Sample;
@@ -476,6 +480,8 @@ macro_rules! connect_many {
 
 // pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()> {
 //     let script = graph.to_gnuplot(output.as_ref());
+//     println!("OLD====================================");
+//     println!("{}", &script);
 //     let mut file = NamedTempFile::new()?;
 //     write!(file, "{script}")?;
 //     let script_path = file.path();

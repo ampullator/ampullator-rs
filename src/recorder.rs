@@ -103,7 +103,7 @@ impl Recorder {
         //     })
         //     .collect::<Vec<_>>();
 
-        let (_channels, d) = self.get_shape();
+        let (d, _samples) = self.get_shape();
         // let d = outputs.len();
         let mut script = String::new();
 
@@ -209,7 +209,7 @@ set multiplot
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{UGRound, ModeRound, UnitRate, UGClock, UGEnvAR};
+    use crate::{plot_graph_to_image, ModeRound, UGClock, UGEnvAR, UGRound, UnitRate};
     use crate::GenGraph;
     use crate::connect_many;
     use crate::register_many;
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn test_recorder_a() {
 
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 10);
         register_many![g,
             "clock" => UGClock::new(16.0, UnitRate::Samples),
             "env" => UGEnvAR::new(),
@@ -234,8 +234,10 @@ mod tests {
         ];
 
 
-        let r1 = Recorder::from_samples(g, None, 40);
-        assert_eq!(r1.get_shape(), (5, 40));
+        g.process();
+        plot_graph_to_image(&g, "/tmp/ampullator-old.png");
+        let r1 = Recorder::from_samples(g, None, 10);
+        assert_eq!(r1.get_shape(), (5, 10));
         r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
 
     }
