@@ -61,7 +61,7 @@ impl Recorder {
         Self {
             sample_rate,
             recorded,
-            output_names: graph.get_output_names(),
+            output_names: graph.get_node_output_names(),
         }
     }
 

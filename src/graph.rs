@@ -68,9 +68,7 @@ impl GenGraph {
         }
 
         if self.name_to_node_id.contains_key(&name) {
-            panic!(
-                "Node name {} already exists.", name
-            );
+            panic!("Node name {} already exists.", name);
         }
         self.name_to_node_id.insert(name.clone(), id);
         self.nodes.push(GraphNode {
@@ -125,16 +123,11 @@ impl GenGraph {
             .position(|&name| name == input_name)
             .expect(format!("For {dst_name}, invalid input name: {input_name}").as_str());
 
-        let output_index = src_node
-            .node
-            .output_names()
-            .iter()
-            .position(|&name| name == output_name)
-            .expect(
-                format!("For {src_name}, invalid output name: {output_name}").as_str(),
-            );
+        let output_index = src_node.name_to_output_index.get(output_name).expect(
+            format!("For {src_name}, invalid output name: {output_name}").as_str(),
+        );
 
-        self.connect_ids(src_id, output_index, dst_id, input_index);
+        self.connect_ids(src_id, *output_index, dst_id, input_index);
     }
 
     // dependency-respecting order (DAG topological sort):
@@ -186,6 +179,8 @@ impl GenGraph {
 
             let mut input_slices: Vec<&[Sample]> =
                 vec![&[]; node.node.input_names().len()];
+
+            // for each input edge, as the the appropriate output
             for edge in &node.inputs {
                 input_slices[edge.input_index] = if edge.src.0 < node_index {
                     &left[edge.src.0].outputs[edge.output_index]
@@ -216,14 +211,13 @@ impl GenGraph {
         let (node_name, output_name) = split_name(name);
         let node_id = self.name_to_node_id[node_name];
         let node = &self.nodes[node_id.0];
-        // TODO: this linear search for outputs should be improved
+
         let index = node
-            .node
-            .output_names()
-            .iter() // iter over all outputs for this node and find target match
-            .position(|&name| name == output_name)
-            .expect("Invalid output name");
-        &node.outputs[index]
+            .name_to_output_index
+            .get(output_name)
+            .expect(format!("Invalid output name: {}", output_name).as_str());
+
+        &node.outputs[*index]
     }
 
     // NOTE: this is a bit heavy as we create a Vec for each call
@@ -244,7 +238,7 @@ impl GenGraph {
     }
 
     // Return all node.output labels
-    pub fn get_output_names(&self) -> Vec<String> {
+    pub fn get_node_output_names(&self) -> Vec<String> {
         let mut result = Vec::new();
 
         for &node_id in &self.get_execution_node_ids() {
@@ -389,108 +383,6 @@ impl GenGraph {
 
         lines.join("\n")
     }
-
-    //--------------------------------------------------------------------------
-    //     pub fn to_gnuplot(&self, output: &Path) -> String {
-    //         let outputs = self
-    //             .get_execution_node_ids()
-    //             .into_iter()
-    //             .flat_map(|nid| {
-    //                 let node = &self.nodes[nid.0];
-    //                 let name = self
-    //                     .name_to_node_id
-    //                     .iter()
-    //                     .find(|&(_, &id)| id == nid)
-    //                     .map(|(n, _)| n.clone())
-    //                     .unwrap_or_else(|| format!("node_{}", nid.0));
-    //                 node.node.output_names().iter().enumerate().map(
-    //                     move |(i, output_name)| {
-    //                         let values = &node.outputs[i];
-    //                         (format!("{}.{}", name, output_name), values)
-    //                     },
-    //                 )
-    //             })
-    //             .collect::<Vec<_>>();
-
-    //         let d = outputs.len();
-    //         let mut script = String::new();
-
-    //         script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
-    //         // script.push_str("set terminal pdfcairo size 8in,6in\n");
-    //         script.push_str(&format!("set output '{}'\n\n", output.display()));
-    //         script.push_str(
-    //             r#"# General appearance
-    // set style line 11 lc rgb '#ffffff' lt 1
-    // set tics out nomirror scale 0,0.001
-    // set format y "%g"
-    // unset key
-    // set grid
-    // set lmargin screen 0.15
-    // set rmargin screen 0.98
-    // set ytics font ",8"
-    // unset xtics
-
-    // # Color and style setup
-    // do for [i=1:3] {
-    //     set style line i lt 1 lw 1 pt 3 lc rgb '#5599ff'
-    // }
-
-    // # Multiplot setup
-    // set multiplot
-    // "#,
-    //         );
-
-    //         script.push_str(&format!("d = {}\n", d));
-    //         script.push_str("margin = 0.04\n");
-    //         script.push_str("height = 1.0 / d\n");
-    //         script.push_str("pos = 1.0\n\n");
-
-    //         script.push_str("label_x = 0.06\n");
-    //         script.push_str("label_font = \",9\"\n\n");
-
-    //         for (i, (label, values)) in outputs.iter().enumerate() {
-    //             let panel = i + 1;
-    //             let block_label = label.replace(['.', '-', ' '], "_");
-
-    //             // Data block
-    //             script.push_str(&format!("${} << EOD\n", block_label));
-    //             for v in *values {
-    //                 script.push_str(&format!("{}\n", v));
-    //             }
-    //             script.push_str("EOD\n");
-
-    //             // Plot setup
-    //             script.push_str(&format!(
-    //                 r#"
-    //         # Panel {}
-    //         top = pos - margin * {}
-    //         bottom = pos - height + margin * 0.5
-    //         pos = pos - height
-    //         set tmargin screen top
-    //         set bmargin screen bottom
-    //         set label textcolor rgb '#c4c5bf'
-    //         set border lc rgb '#c4c5bf'
-    //         set grid lc rgb '#cccccc'
-
-    //         set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
-    //         plot ${} using 1 with linespoints linestyle {}
-    //         "#,
-    //                 panel,
-    //                 if i == 0 { 1.0 } else { 0.5 },
-    //                 panel,
-    //                 label,
-    //                 block_label,
-    //                 (i % 3) + 1,
-    //             ));
-    //         }
-
-    //         script.push_str("unset multiplot\n");
-    //         for i in 1..=d {
-    //             script.push_str(&format!("unset label {}\n", i));
-    //         }
-
-    //         script
-    //     }
 }
 
 //------------------------------------------------------------------------------
@@ -525,23 +417,6 @@ macro_rules! connect_many {
     };
 }
 
-//------------------------------------------------------------------------------
-
-// pub fn plot_graph_to_image(graph: &GenGraph, output: &str) -> std::io::Result<()> {
-//     let script = graph.to_gnuplot(output.as_ref());
-//     println!("OLD====================================");
-//     println!("{}", &script);
-//     let mut file = NamedTempFile::new()?;
-//     write!(file, "{script}")?;
-//     let script_path = file.path();
-//     let status = Command::new("gnuplot").arg(script_path).status()?;
-
-//     if !status.success() {
-//         eprintln!("gnuplot failed with exit code: {:?}", status.code());
-//     }
-
-//     Ok(())
-// }
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
