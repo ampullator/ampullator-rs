@@ -82,7 +82,7 @@ impl Recorder {
         //     .flat_map(|nid| {
         //         let node = &self.nodes[nid.0];
         //         let name = self
-        //             .node_names
+        //             .name_to_node_id
         //             .iter()
         //             .find(|&(_, &id)| id == nid)
         //             .map(|(n, _)| n.clone())

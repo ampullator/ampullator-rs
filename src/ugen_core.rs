@@ -1,14 +1,11 @@
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
-use std::str::FromStr;
-
 use crate::util::Sample;
 use crate::util::UnitRate;
 use crate::util::unit_rate_to_hz;
 
 //------------------------------------------------------------------------------
-// Alt names: UnitGen
 
 pub trait UGen {
     fn process(

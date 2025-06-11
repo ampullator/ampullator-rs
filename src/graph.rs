@@ -1,10 +1,6 @@
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use std::io::Write;
-use std::path::Path;
-use std::process::Command;
-use tempfile::NamedTempFile;
 
 use crate::ugen_core::UGen;
 use crate::util::Sample;
@@ -17,57 +13,75 @@ use crate::util::split_name;
 pub struct NodeId(pub usize);
 
 pub struct NodeEdge {
-    pub src: NodeId,
-    pub output_index: usize, // output in src
-    pub input_index: usize,  // index in the Node's inputs
+    pub(crate) src: NodeId,
+    pub(crate) output_index: usize, // output in src
+    pub(crate) input_index: usize,  // index in the Node's inputs
 }
 
-// `inputs` are not sorted; each NodeEdge defines src and an output of that src to be delivered to this nodes's input.
-// `outputs` are sorted in fixed output positions.
 pub struct GraphNode {
-    pub id: NodeId,
-    pub name: String,
-    pub node: Box<dyn UGen>,
-    pub inputs: Vec<NodeEdge>,
-    pub outputs: Vec<Vec<Sample>>,
+    pub(crate) id: NodeId,
+    pub(crate) name: String,
+    pub(crate) node: Box<dyn UGen>,
+    // `inputs` are unsorted `NodeEdge``, defining a node, an output of that node to read from, the input to apply to this node.
+    pub(crate) inputs: Vec<NodeEdge>,
+    // Output samples from `process()` are stored in the `GraphNode`
+    pub(crate) outputs: Vec<Vec<Sample>>,
+    pub(crate) name_to_output_index: HashMap<String, usize>,
 }
 //------------------------------------------------------------------------------
 pub struct GenGraph {
     // Store nodes as assigned, were pos is NodId
     pub nodes: Vec<GraphNode>,
     // Reverse mapping from node name to NodeId
-    pub node_names: HashMap<String, NodeId>,
+    pub name_to_node_id: HashMap<String, NodeId>,
     pub sample_rate: f32,
     pub buffer_size: usize,
     pub time_sample: usize,
 }
 
 impl GenGraph {
+    /// Create a new graph. Creates an empty Vec and HashMap for storing `nodes`` and `name_to_node_id``.
     pub fn new(sample_rate: f32, buffer_size: usize) -> Self {
         Self {
             nodes: Vec::new(),
-            node_names: HashMap::new(),
+            name_to_node_id: HashMap::new(),
             sample_rate,
             buffer_size,
             time_sample: 0,
         }
     }
+
+    /// Add a node given a string-convertible name and a `Box` `Ugen`.
     pub fn add_node<N: Into<String>>(
         &mut self,
         name_raw: N,
         node: Box<dyn UGen>,
     ) -> NodeId {
+        // `id` is always the position in the `nodes` `Vec`
         let id = NodeId(self.nodes.len());
         let output_count = node.output_names().len();
         let name: String = name_raw.into();
-        self.node_names.insert(name.clone(), id);
+
+        let mut name_to_output_index = HashMap::new();
+        for (i, out_name) in node.output_names().iter().enumerate() {
+            name_to_output_index.insert(out_name.to_string(), i);
+        }
+
+        if self.name_to_node_id.contains_key(&name) {
+            panic!(
+                "Node name {} already exists.", name
+            );
+        }
+        self.name_to_node_id.insert(name.clone(), id);
         self.nodes.push(GraphNode {
             id,
             name,
             node,
             inputs: Vec::new(),
             outputs: vec![vec![0.0; self.buffer_size]; output_count],
+            name_to_output_index,
         });
+
         id
     }
 
@@ -99,8 +113,8 @@ impl GenGraph {
         let (src_name, output_name) = split_name(src);
         let (dst_name, input_name) = split_name(dst);
 
-        let dst_id = self.node_names[dst_name];
-        let src_id = self.node_names[src_name];
+        let dst_id = self.name_to_node_id[dst_name];
+        let src_id = self.name_to_node_id[src_name];
         let dst_node = &self.nodes[dst_id.0];
         let src_node = &self.nodes[src_id.0];
 
@@ -200,7 +214,7 @@ impl GenGraph {
     // Given a two-part name node.output, return a slice of the samples for that node and output,
     pub fn get_output_named(&self, name: &str) -> &[Sample] {
         let (node_name, output_name) = split_name(name);
-        let node_id = self.node_names[node_name];
+        let node_id = self.name_to_node_id[node_name];
         let node = &self.nodes[node_id.0];
         // TODO: this linear search for outputs should be improved
         let index = node
@@ -253,7 +267,7 @@ impl GenGraph {
             let node = &self.nodes[node_id.0];
 
             let name = self
-                .node_names
+                .name_to_node_id
                 .iter()
                 .find(|&(_, &id)| id == node_id)
                 .map(|(n, _)| n.clone())
@@ -272,7 +286,7 @@ impl GenGraph {
                     match src {
                         Some(edge) => {
                             let src_name = self
-                                .node_names
+                                .name_to_node_id
                                 .iter()
                                 .find(|&(_, id)| *id == edge.src)
                                 .map(|(n, _)| n.clone())
@@ -384,7 +398,7 @@ impl GenGraph {
     //             .flat_map(|nid| {
     //                 let node = &self.nodes[nid.0];
     //                 let name = self
-    //                     .node_names
+    //                     .name_to_node_id
     //                     .iter()
     //                     .find(|&(_, &id)| id == nid)
     //                     .map(|(n, _)| n.clone())
