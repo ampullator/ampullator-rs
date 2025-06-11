@@ -163,7 +163,7 @@ mod tests {
         // plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
 
         assert_eq!(
-            g.get_output_named("r.out"),
+            g.get_output_by_label("r.out"),
             vec![
                 0.036, 0.058, 0.07, 0.076, 0.077, 0.075, 0.071, 0.066, 0.06, 0.054,
                 0.048, 0.043, 0.038, 0.033, 0.029, 0.025, 0.021, 0.018, 0.016, 0.013

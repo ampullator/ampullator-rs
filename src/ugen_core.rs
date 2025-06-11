@@ -931,7 +931,7 @@ mod tests {
         g.add_node("c1", Box::new(c1));
         g.process();
         assert_eq!(
-            g.get_output_named("c1.out"),
+            g.get_output_by_label("c1.out"),
             vec![3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
         )
     }
@@ -951,7 +951,7 @@ mod tests {
         ];
         g.process();
         assert_eq!(
-            g.get_output_named("s1.out"),
+            g.get_output_by_label("s1.out"),
             vec![5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
         )
     }
@@ -973,7 +973,7 @@ mod tests {
         g.process();
 
         assert_eq!(
-            g.get_output_named("r1.out"),
+            g.get_output_by_label("r1.out"),
             vec![0.7, 1.0, 0.7, -0.0, -0.7, -1.0, -0.7, 0.0]
         );
     }
@@ -990,7 +990,7 @@ mod tests {
         g.process();
 
         assert_eq!(
-            g.get_output_named("r1.out"),
+            g.get_output_by_label("r1.out"),
             vec![-0.73, 0.05, -0.5, 0.09, 0.74, 0.27, 0.98, -0.19]
         )
     }
@@ -1010,7 +1010,7 @@ mod tests {
         g.process();
 
         assert_eq!(
-            g.get_output_named("s1.out"),
+            g.get_output_by_label("s1.out"),
             vec![3.0, 10.0, 20.0, 50.0, 999.0, 3.0, 10.0, 20.0]
         )
     }
@@ -1026,7 +1026,7 @@ mod tests {
         g.process();
 
         assert_eq!(
-            g.get_output_named("s1.out"),
+            g.get_output_by_label("s1.out"),
             vec![
                 20.0, 10.0, 3.0, 10.0, 20.0, 50.0, 20.0, 10.0, 20.0, 50.0, 20.0, 10.0,
                 20.0, 50.0, 20.0, 50.0
@@ -1049,7 +1049,7 @@ mod tests {
         g.process();
 
         assert_eq!(
-            g.get_output_named("s1.out"),
+            g.get_output_by_label("s1.out"),
             vec![
                 10.0, 20.0, 50.0, 3.0, 99.0, 20.0, 99.0, 10.0, 50.0, 3.0, 50.0, 20.0,
                 10.0, 3.0, 99.0, 10.0, 50.0, 3.0, 99.0, 20.0
@@ -1084,7 +1084,7 @@ step ←= 1.000
         ];
         g.process();
         assert_eq!(
-            g.get_output_named("clock1.out"),
+            g.get_output_by_label("clock1.out"),
             vec![1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]
         );
     }
@@ -1103,7 +1103,7 @@ step ←= 1.000
         ];
         g.process();
         assert_eq!(
-            g.get_output_named("clock1.out"),
+            g.get_output_by_label("clock1.out"),
             vec![1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
         );
     }
@@ -1122,7 +1122,7 @@ step ←= 1.000
         ];
         g.process();
         assert_eq!(
-            g.get_output_named("clock1.out"),
+            g.get_output_by_label("clock1.out"),
             vec![1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0]
         );
     }
@@ -1149,7 +1149,7 @@ step ←= 1.000
         g.process();
 
         assert_eq!(
-            g.get_output_named("r.out"),
+            g.get_output_by_label("r.out"),
             vec![
                 1.0, 1.0, 1.0, 1.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8,
                 0.8, 0.8, 0.8, 0.8, 0.5, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2,
@@ -1180,7 +1180,7 @@ step ←= 1.000
         g.process();
 
         assert_eq!(
-            g.get_output_named("round.out"),
+            g.get_output_by_label("round.out"),
             vec![
                 0.25, 0.5, 0.75, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0,
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0, 0.875,

@@ -207,14 +207,14 @@ impl GenGraph {
     }
 
     // Given a two-part name node.output, return a slice of the samples for that node and output,
-    pub fn get_output_named(&self, name: &str) -> &[Sample] {
-        let (node_name, output_name) = split_name(name);
+    pub fn get_output_by_label(&self, label: &str) -> &[Sample] {
+        let (node_name, output_name) = split_name(label);
         let node_id = self.name_to_node_id[node_name];
         let node = &self.nodes[node_id.0];
 
         let index = node
             .name_to_output_index
-            .get( )
+            .get(output_name)
             .expect(format!("Invalid output name: {}", output_name).as_str());
 
         &node.outputs[*index]

@@ -25,8 +25,8 @@ fn test1() {
 
     for _ in 0..frames {
         graph.process();
-        all_mix.extend_from_slice(graph.get_output_named("mix.sum"));
-        all_trigger.extend_from_slice(graph.get_output_named("osc.trigger"));
+        all_mix.extend_from_slice(graph.get_output_by_label("mix.sum"));
+        all_trigger.extend_from_slice(graph.get_output_by_label("osc.trigger"));
     }
 
     // Print results

@@ -43,14 +43,17 @@ impl Recorder {
 
         let iterations = (total_samples + buffer_size - 1) / buffer_size;
 
-        // TODO: using get_ouputs on each execution is heavy: refactor!
         for _ in 0..iterations {
             graph.process();
-            for (label, buffer) in graph.get_outputs() {
-                if collected_labels.contains(&label) {
-                    recorded.get_mut(&label).unwrap().extend_from_slice(buffer);
-                }
+            for label in &collected_labels {
+                let buffer = graph.get_output_by_label(&label);
+                recorded.get_mut(&*label).unwrap().extend_from_slice(buffer);
             }
+            // for (label, buffer) in graph.get_outputs() {
+            //     if collected_labels.contains(&label) {
+            //         recorded.get_mut(&label).unwrap().extend_from_slice(buffer);
+            //     }
+            // }
         }
 
         // this seems to trim down to the total size
@@ -70,6 +73,10 @@ impl Recorder {
         let channels = self.recorded.len();
         let length = self.recorded.values().map(|v| v.len()).max().unwrap_or(0);
         (channels, length)
+    }
+
+    pub fn get_output_by_label(&self, label: &str) -> &[Sample] {
+        self.recorded.get(label).expect(format!("No such label: {}", label).as_str())
     }
 
     //--------------------------------------------------------------------------
@@ -178,7 +185,7 @@ mod tests {
     use crate::GenGraph;
     use crate::connect_many;
     use crate::register_many;
-    use crate::{ModeRound, UGClock, UGEnvAR, UGRound, UnitRate};
+    use crate::{ModeRound, UGClock, UGEnvAR, UGRound, UnitRate, UGSine};
 
     #[test]
     fn test_recorder_a() {
@@ -202,7 +209,7 @@ mod tests {
         // plot_graph_to_image(&g, "/tmp/ampullator-old.png");
         let r1 = Recorder::from_samples(g, None, 10);
         assert_eq!(r1.get_shape(), (5, 10));
-        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+        // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
     }
 
     #[test]
@@ -226,5 +233,27 @@ mod tests {
         let output_labels = Some(vec!["round.out".to_string()]);
         let r1 = Recorder::from_samples(g, output_labels, 120);
         assert_eq!(r1.get_shape(), (1, 120));
+    }
+
+    #[test]
+    fn test_recorder_c() {
+        let mut g = GenGraph::new(10.0, 20);
+        register_many![g,
+            "fq" => 0.5,
+            "osc" => UGSine::new(),
+            "round" => UGRound::new(4, ModeRound::Round),
+        ];
+
+        connect_many![g,
+        "fq.out" -> "osc.freq",
+        "osc.wave" -> "round.in"
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 120);
+        assert_eq!(r1.get_shape(), (4, 120));
+        assert_eq!(r1.get_output_by_label("round.out"), vec![0.309, 0.5878, 0.809, 0.9511, 1.0, 0.9511, 0.809, 0.5878, 0.309, -0.0, -0.309, -0.5878, -0.809, -0.9511, -1.0, -0.9511, -0.809, -0.5878, -0.309, 0.0, 0.309, 0.5878, 0.809, 0.9511, 1.0, 0.9511, 0.809, 0.5878, 0.309, -0.0, -0.309, -0.5878, -0.809, -0.9511, -1.0, -0.9511, -0.809, -0.5878, -0.309, 0.0, 0.309, 0.5878, 0.809, 0.9511, 1.0, 0.9511, 0.809, 0.5878, 0.309, -0.0, -0.309, -0.5878, -0.809, -0.9511, -1.0, -0.9511, -0.809, -0.5878, -0.309, 0.0, 0.309, 0.5878, 0.809, 0.9511, 1.0, 0.9511, 0.809, 0.5878, 0.309, -0.0, -0.309, -0.5878, -0.809, -0.9511, -1.0, -0.9511, -0.809, -0.5878, -0.309, 0.0, 0.309, 0.5878, 0.809, 0.9511, 1.0, 0.9511, 0.809, 0.5878, 0.309, -0.0, -0.309, -0.5878, -0.809, -0.9511, -1.0, -0.9511, -0.809, -0.5878, -0.309, 0.0, 0.309, 0.5878, 0.809, 0.9511, 1.0, 0.9511, 0.809, 0.5878, 0.309, -0.0, -0.309, -0.5878, -0.809, -0.9511, -1.0, -0.9511, -0.809, -0.5878, -0.309, 0.0]);
+        // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+
+
     }
 }
