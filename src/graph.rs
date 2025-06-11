@@ -214,7 +214,7 @@ impl GenGraph {
 
         let index = node
             .name_to_output_index
-            .get(output_name)
+            .get( )
             .expect(format!("Invalid output name: {}", output_name).as_str());
 
         &node.outputs[*index]

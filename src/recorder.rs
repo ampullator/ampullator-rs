@@ -68,36 +68,13 @@ impl Recorder {
     //--------------------------------------------------------------------------
     pub fn get_shape(&self) -> (usize, usize) {
         let channels = self.recorded.len();
-
         let length = self.recorded.values().map(|v| v.len()).max().unwrap_or(0);
-
         (channels, length)
     }
 
     //--------------------------------------------------------------------------
     pub fn to_gnuplot(&self, fp: &Path) -> String {
-        // let outputs = self
-        //     .get_execution_node_ids()
-        //     .into_iter()
-        //     .flat_map(|nid| {
-        //         let node = &self.nodes[nid.0];
-        //         let name = self
-        //             .name_to_node_id
-        //             .iter()
-        //             .find(|&(_, &id)| id == nid)
-        //             .map(|(n, _)| n.clone())
-        //             .unwrap_or_else(|| format!("node_{}", nid.0));
-        //         node.node.output_names().iter().enumerate().map(
-        //             move |(i, output_name)| {
-        //                 let values = &node.outputs[i];
-        //                 (format!("{}.{}", name, output_name), values)
-        //             },
-        //         )
-        //     })
-        //     .collect::<Vec<_>>();
-
         let (d, _samples) = self.get_shape();
-        // let d = outputs.len();
         let mut script = String::new();
 
         script.push_str("set terminal pngcairo size 800,600 background rgb '#12131E'\n");
@@ -135,8 +112,6 @@ set multiplot
 
         // TODO: need to store and use execution order
         for (i, label) in self.output_names.iter().enumerate() {
-            // for (i, (label, values)) in self.recorded.iter().enumerate() {
-            // println!("{:?}, {:?}", i, label);
             let values = self.recorded.get(label).expect("expected label not found");
             let panel = i + 1;
             let block_label = label.replace(['.', '-', ' '], "_");
