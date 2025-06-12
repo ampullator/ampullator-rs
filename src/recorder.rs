@@ -75,6 +75,7 @@ impl Recorder {
         (channels, length)
     }
 
+    /// Given a fully-qualified label (node, output), return a `Sample` slice.
     pub fn get_output_by_label(&self, label: &str) -> &[Sample] {
         self.recorded
             .get(label)
