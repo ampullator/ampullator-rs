@@ -137,7 +137,6 @@ impl GenGraph {
     }
 
     // dependency-respecting order (DAG topological sort):
-    // TODO: this needs to be cached!
     pub fn update_execution_node_ids(&mut self) {
         // if not None, and reuse
         if self.execution_order.is_some() {
