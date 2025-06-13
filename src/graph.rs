@@ -31,12 +31,14 @@ pub struct GraphNode {
 //------------------------------------------------------------------------------
 pub struct GenGraph {
     // Store nodes as assigned, were pos is NodId
-    pub nodes: Vec<GraphNode>,
+    nodes: Vec<GraphNode>,
     // Reverse mapping from node name to NodeId
-    pub name_to_node_id: HashMap<String, NodeId>,
-    pub sample_rate: f32,
-    pub buffer_size: usize,
-    pub time_sample: usize,
+    name_to_node_id: HashMap<String, NodeId>,
+    // Cache execution order
+    execution_order: Option<Vec<NodeId>>,
+    pub(crate) sample_rate: f32,
+    pub(crate) buffer_size: usize,
+    time_sample: usize,
 }
 
 impl GenGraph {
@@ -45,6 +47,7 @@ impl GenGraph {
         Self {
             nodes: Vec::new(),
             name_to_node_id: HashMap::new(),
+            execution_order: None,
             sample_rate,
             buffer_size,
             time_sample: 0,
@@ -57,19 +60,21 @@ impl GenGraph {
         name_raw: N,
         node: Box<dyn UGen>,
     ) -> NodeId {
+        let name: String = name_raw.into();
+        if self.name_to_node_id.contains_key(&name) {
+            panic!("Node name {} already exists.", name);
+        }
+        self.execution_order = None; // clear cache
+
         // `id` is always the position in the `nodes` `Vec`
         let id = NodeId(self.nodes.len());
         let output_count = node.output_names().len();
-        let name: String = name_raw.into();
 
         let mut name_to_output_index = HashMap::new();
         for (i, out_name) in node.output_names().iter().enumerate() {
             name_to_output_index.insert(out_name.to_string(), i);
         }
 
-        if self.name_to_node_id.contains_key(&name) {
-            panic!("Node name {} already exists.", name);
-        }
         self.name_to_node_id.insert(name.clone(), id);
         self.nodes.push(GraphNode {
             id,
@@ -98,6 +103,7 @@ impl GenGraph {
                     input_index, dst
                 );
             }
+            self.execution_order = None; // clear cache
             // connect the src.out to dst.in
             dst_node.inputs.push(NodeEdge {
                 src,
@@ -132,7 +138,11 @@ impl GenGraph {
 
     // dependency-respecting order (DAG topological sort):
     // TODO: this needs to be cached!
-    pub fn get_execution_node_ids(&self) -> Vec<NodeId> {
+    pub fn update_execution_node_ids(&mut self) {
+        // if not None, and reuse
+        if self.execution_order.is_some() {
+            return ();
+        }
         let mut indegree = vec![0; self.nodes.len()];
         for node in &self.nodes {
             indegree[node.id.0] = node.inputs.len();
@@ -160,19 +170,23 @@ impl GenGraph {
                 }
             }
         }
-        order
+        self.execution_order = Some(order.clone());
     }
 
-    pub fn get_execution_names(&self) -> Vec<String> {
+    pub fn get_execution_names(&mut self) -> Vec<String> {
+        self.update_execution_node_ids();
+
         let mut post = Vec::new();
-        for &node_id in &self.get_execution_node_ids() {
+        for &node_id in self.execution_order.as_ref().unwrap() {
             post.push(self.nodes[node_id.0].name.clone());
         }
         post
     }
 
     pub fn process(&mut self) {
-        for &nid in &self.get_execution_node_ids() {
+        self.update_execution_node_ids();
+
+        for &nid in self.execution_order.as_ref().unwrap() {
             let node_index = nid.0;
             let (left, right) = self.nodes.split_at_mut(node_index);
             let (node, rest) = right.split_first_mut().expect("valid index");
@@ -221,10 +235,12 @@ impl GenGraph {
     }
 
     // NOTE: this is a bit heavy as we create a Vec for each call
-    pub fn get_outputs(&self) -> Vec<(String, &Vec<Sample>)> {
+    pub fn get_outputs(&mut self) -> Vec<(String, &Vec<Sample>)> {
+        self.update_execution_node_ids();
+
         let mut result = Vec::new();
 
-        for &node_id in &self.get_execution_node_ids() {
+        for &node_id in self.execution_order.as_ref().unwrap() {
             let node = &self.nodes[node_id.0];
             let name = &node.name;
             let output_names = node.node.output_names();
@@ -238,10 +254,11 @@ impl GenGraph {
     }
 
     // Return all node.output labels
-    pub fn get_node_output_names(&self) -> Vec<String> {
-        let mut result = Vec::new();
+    pub fn get_node_output_names(&mut self) -> Vec<String> {
+        self.update_execution_node_ids();
 
-        for &node_id in &self.get_execution_node_ids() {
+        let mut result = Vec::new();
+        for &node_id in self.execution_order.as_ref().unwrap() {
             let node = &self.nodes[node_id.0];
             let name = &node.name;
             let output_names = node.node.output_names();
@@ -254,10 +271,11 @@ impl GenGraph {
     }
 
     //--------------------------------------------------------------------------
-    pub fn describe_json(&self) -> Value {
-        let mut result = Vec::new();
+    pub fn describe_json(&mut self) -> Value {
+        self.update_execution_node_ids();
 
-        for &node_id in &self.get_execution_node_ids() {
+        let mut result = Vec::new();
+        for &node_id in self.execution_order.as_ref().unwrap() {
             let node = &self.nodes[node_id.0];
 
             let name = self
@@ -339,7 +357,7 @@ impl GenGraph {
         Value::Array(result)
     }
 
-    pub fn describe(&self) -> String {
+    pub fn describe(&mut self) -> String {
         let data = self.describe_json();
         let mut lines = Vec::new();
 
