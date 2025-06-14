@@ -120,9 +120,11 @@ set multiplot
         script.push_str("label_x = 0.06\n");
         script.push_str("label_font = \",9\"\n\n");
 
-        // TODO: need to store and use execution order
         for (i, label) in self.output_names.iter().enumerate() {
-            let values = self.recorded.get(label).expect("expected label not found");
+            let values = self
+                .recorded
+                .get(label)
+                .expect(format!("expected label {label} not found").as_str());
             let panel = i + 1;
             let block_label = label.replace(['.', '-', ' '], "_");
 
@@ -248,8 +250,8 @@ mod tests {
         ];
 
         connect_many![g,
-        "fq.out" -> "osc.freq",
-        "osc.wave" -> "round.in"
+            "fq.out" -> "osc.freq",
+            "osc.wave" -> "round.in"
         ];
 
         let r1 = Recorder::from_samples(g, None, 120);
