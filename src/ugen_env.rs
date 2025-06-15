@@ -121,10 +121,9 @@ pub struct UGEnvAR {
     phase: EnvPhase,
     start: Sample,
     target: Sample,
-    total_samples: usize,
-    remaining_samples: usize,
+    stage_total: i32,
+    stage_remain: i32,
     curve: Sample,
-    triggered_last: bool,
 }
 
 impl UGEnvAR {
@@ -134,10 +133,9 @@ impl UGEnvAR {
             phase: EnvPhase::Idle,
             start: 0.0,
             target: 1.0,
-            total_samples: 0,
-            remaining_samples: 0,
+            stage_total: 0,
+            stage_remain: 0,
             curve: 1.0,
-            triggered_last: false,
         }
     }
 }
@@ -185,28 +183,22 @@ impl UGen for UGEnvAR {
         let out = &mut outputs[0];
 
         for i in 0..out.len() {
-            let is_triggered = trigger.get(i).copied().unwrap_or(0.0) > 0.5;
-            let trigger_now = is_triggered && !self.triggered_last;
-            self.triggered_last = is_triggered;
+            let trigger_now = trigger.get(i).copied().unwrap_or(0.0) > 0.5;
 
             if trigger_now {
                 self.phase = EnvPhase::Attack;
                 self.start = self.current;
                 self.target = 1.0;
-                self.total_samples =
-                    att_dur.get(i).copied().unwrap_or(1.0).max(1.0).round() as usize;
-                self.remaining_samples = self.total_samples;
+                self.stage_total =
+                    att_dur.get(i).copied().unwrap_or(1.0).max(1.0).round() as i32;
+                self.stage_remain = self.stage_total;
                 self.curve = att_curve.get(i).copied().unwrap_or(1.0).max(0.001);
             }
 
-            if self.remaining_samples > 0 {
-                // ⬅ use remaining_samples - 1 to make progress hit 1.0 earlier
-                let progress = if self.remaining_samples > 1 {
-                    1.0 - ((self.remaining_samples - 1) as f32
-                        / self.total_samples as f32)
-                } else {
-                    1.0
-                };
+            if self.stage_remain >= 0 {
+                // get an f32 percent completion
+                let progress =
+                    1.0 - (self.stage_remain as f32 / self.stage_total as f32);
 
                 let shaped = if (self.curve - 1.0).abs() < 1e-6 {
                     progress
@@ -214,19 +206,21 @@ impl UGen for UGEnvAR {
                     1.0 - (-self.curve * progress).exp()
                 };
 
+                // scale availalbe range by shaped
                 self.current = self.start + (self.target - self.start) * shaped;
-                self.remaining_samples -= 1;
-                // immediately switch if we've just hit the final sample
-                if self.remaining_samples == 0 {
+                self.stage_remain -= 1;
+
+                if self.stage_remain < 0 {
+                    // given matched phase, determine next
                     match self.phase {
                         EnvPhase::Attack => {
                             self.phase = EnvPhase::Release;
                             self.start = self.current;
                             self.target = 0.0;
-                            self.total_samples =
+                            self.stage_total =
                                 rel_dur.get(i).copied().unwrap_or(1.0).max(1.0).round()
-                                    as usize;
-                            self.remaining_samples = self.total_samples;
+                                    as i32;
+                            self.stage_remain = self.stage_total;
                             self.curve =
                                 rel_curve.get(i).copied().unwrap_or(1.0).max(0.001);
                         }
@@ -238,7 +232,6 @@ impl UGen for UGEnvAR {
                     }
                 }
             }
-
             out[i] = self.current;
         }
     }
@@ -313,12 +306,7 @@ mod tests {
 
         assert_eq!(
             g.get_output_by_label("round.out"),
-            vec![
-                0.25, 0.5, 0.75, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0, 0.875,
-                0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0
-            ]
+            vec![0.0, 0.25, 0.5, 0.75, 1.0, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0, 1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
 
@@ -326,11 +314,11 @@ mod tests {
     fn test_env_ar_b() {
         let mut g = GenGraph::new(8.0, 20);
         register_many![g,
-            "clock" => UGClock::new(16.0, UnitRate::Samples),
+            "clock" => UGClock::new(30.0, UnitRate::Samples),
             "env" => UGEnvAR::new(),
-            "a" => 4,
-            "r" => 8,
-            "a-curve" => 0.5,
+            "a" => 8,
+            "r" => 17,
+            "a-curve" => 1,
             "round" => UGRound::new(4, ModeRound::Round),
         ];
 
@@ -342,8 +330,12 @@ mod tests {
             "env.out" -> "round.in"
         ];
 
-        // let output_labels = Some(vec!["round.out".to_string()]);
-        let r1 = Recorder::from_samples(g, None, 120);
-        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+        let r1 = Recorder::from_samples(g, None, 100);
+        // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+
+        assert_eq!(
+            r1.get_output_by_label("round.out"),
+            vec![0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0, 1.0, 0.9412, 0.8824, 0.8235, 0.7647, 0.7059, 0.6471, 0.5882, 0.5294, 0.4706, 0.4118, 0.3529, 0.2941, 0.2353, 0.1765, 0.1176, 0.0588, 0.0, 0.0, 0.0, 0.0, 0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0, 1.0, 0.9412, 0.8824, 0.8235, 0.7647, 0.7059, 0.6471, 0.5882, 0.5294, 0.4706, 0.4118, 0.3529, 0.2941, 0.2353, 0.1765, 0.1176, 0.0588, 0.0, 0.0, 0.0, 0.0, 0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0, 1.0, 0.9412, 0.8824, 0.8235, 0.7647, 0.7059, 0.6471, 0.5882, 0.5294, 0.4706, 0.4118, 0.3529, 0.2941, 0.2353, 0.1765, 0.1176, 0.0588, 0.0, 0.0, 0.0, 0.0, 0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0, 1.0]
+        );
     }
 }

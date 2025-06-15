@@ -642,38 +642,6 @@ impl UGen for UGClock {
         Some(format!("value = {}, mode = {:?}", self.value, self.mode))
     }
 
-    // fn process(
-    //     &mut self,
-    //     inputs: &[&[Sample]], // optional on/off input
-    //     outputs: &mut [&mut [Sample]],
-    //     sample_rate: f32,
-    //     _time_sample: usize,
-    // ) {
-    //     let enabled = inputs.get(0).copied().unwrap_or(&[]);
-    //     let out = &mut outputs[0];
-    //     let hz = unit_rate_to_hz(self.value, self.mode, sample_rate);
-
-    //     out[0] = if enabled.get(0).copied().unwrap_or(1.0) > 0.5 {
-    //         1.0
-    //     } else {
-    //         0.0
-    //     };
-
-    //     for i in 1..out.len() {
-    //         let on = enabled.get(i).copied().unwrap_or(1.0) > 0.5;
-    //         if !on {
-    //             out[i] = 0.0;
-    //             continue;
-    //         }
-    //         let phase_inc = hz / sample_rate;
-    //         self.phase += phase_inc;
-    //         if self.phase >= 1.0 {
-    //             self.phase = 0.0;
-    //         }
-    //         out[i] = if self.phase < phase_inc { 1.0 } else { 0.0 };
-    //     }
-    // }
-
     fn process(
         &mut self,
         inputs: &[&[Sample]],
@@ -702,8 +670,6 @@ impl UGen for UGClock {
             }
         }
     }
-
-
 }
 
 //------------------------------------------------------------------------------
