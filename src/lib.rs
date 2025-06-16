@@ -3,14 +3,17 @@ mod recorder;
 mod ugen_core;
 mod ugen_env;
 mod ugen_filter;
+mod ugen_select;
 mod util;
 
 pub use recorder::Recorder;
 
 pub use ugen_core::{
-    ModeRound, ModeSelect, UGAsHz, UGClock, UGConst, UGRound, UGSelect, UGSine, UGSum,
+    ModeRound, UGAsHz, UGClock, UGConst, UGRound, UGSine, UGSum,
     UGTrigger, UGWhite, UGen,
 };
+
+pub use ugen_select::{ModeSelect, UGSelect};
 
 pub use ugen_filter::{UGLowPass, UGLowPassQ};
 
