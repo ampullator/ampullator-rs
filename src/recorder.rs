@@ -49,11 +49,6 @@ impl Recorder {
                 let buffer = graph.get_output_by_label(&label);
                 recorded.get_mut(&*label).unwrap().extend_from_slice(buffer);
             }
-            // for (label, buffer) in graph.get_outputs() {
-            //     if collected_labels.contains(&label) {
-            //         recorded.get_mut(&label).unwrap().extend_from_slice(buffer);
-            //     }
-            // }
         }
 
         // this seems to trim down to the total size
@@ -100,11 +95,12 @@ set grid
 set lmargin screen 0.15
 set rmargin screen 0.98
 set ytics font ",8"
+set pointsize 0.5
 unset xtics
 
 # Color and style setup
 do for [i=1:3] {
-    set style line i lt 1 lw 1 pt 3 lc rgb '#5599ff'
+    set style line i lt 1 lw 1 pt 7 lc rgb '#5599ff'
 }
 
 # Multiplot setup
@@ -146,8 +142,6 @@ set multiplot
         set label textcolor rgb '#c4c5bf'
         set border lc rgb '#c4c5bf'
         set grid lc rgb '#cccccc'
-
-
         set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
         plot ${} using 1 with linespoints linestyle {}
         "#,

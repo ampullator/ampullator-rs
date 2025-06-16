@@ -250,6 +250,7 @@ mod tests {
     use crate::connect_many;
     use crate::register_many;
     use crate::util::UnitRate;
+    use crate::UGSum;
 
     //--------------------------------------------------------------------------
     #[test]
@@ -352,5 +353,35 @@ mod tests {
                 0.375, 0.5, 0.625, 0.75, 0.875, 1.0, 1.0
             ]
         );
+    }
+
+
+
+    #[test]
+    fn test_env_ar_c() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![g,
+            "clock1" => UGClock::new(30.0, UnitRate::Samples),
+            "clock2" => UGClock::new(47.0, UnitRate::Samples),
+            "sum" => UGSum::new(2),
+            "env" => UGEnvAR::new(),
+            "a" => 8,
+            "r" => 17,
+            "a-curve" => 1,
+            "round" => UGRound::new(4, ModeRound::Round),
+        ];
+
+        connect_many![g,
+            "clock1.out" -> "sum.in1",
+            "clock2.out" -> "sum.in2",
+            "sum.out" -> "env.trigger",
+            "a.out" -> "env.attack_dur",
+            "a-curve.out" -> "env.attack_curve",
+            "r.out" -> "env.release_dur",
+            "env.out" -> "round.in"
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 100);
+        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
     }
 }
