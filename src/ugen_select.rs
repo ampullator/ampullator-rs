@@ -40,6 +40,7 @@ impl UGSelect {
         }
     }
 
+    /// Alternate interface to select a single value.
     pub fn select_next(
         &mut self,
         step: Sample,
@@ -102,7 +103,7 @@ impl UGen for UGSelect {
         }
 
         for i in 0..out.len() {
-            if trigger.get(i).copied().unwrap_or(0.0) == 1.0 {
+            if trigger.get(i).copied().unwrap_or(0.0) > 0.5 {
                 let step_size =
                     step.get(i).copied().unwrap_or(1.0).round().max(1.0) as usize;
 
@@ -148,10 +149,11 @@ impl UGen for UGSelect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::GenGraph;
+    use crate::{GenGraph, UGClock, UGSum};
     use crate::connect_many;
     use crate::register_many;
-    // use crate::Recorder;
+    use crate::Recorder;
+    use crate::UnitRate;
 
     //--------------------------------------------------------------------------
     #[test]
@@ -226,6 +228,36 @@ step ←= 1.000
 "#
         );
 
-        // plot_graph_to_image(&g, "/tmp/ampullator.png").unwrap();
+    }
+
+
+    #[test]
+    fn test_select_d() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![g,
+            "clock1" => UGClock::new(5.0, UnitRate::Samples),
+            "clock2" => UGClock::new(13.0, UnitRate::Samples),
+            "sum" => UGSum::new(2),
+            "step" => 1,
+            "sel" => UGSelect::new(
+                vec![3.0, 6.0, 12.0, 24.0, 48.0],
+                ModeSelect::Cycle,
+                Some(42)),
+        ];
+
+        connect_many![g,
+            "clock1.out" -> "sum.in1",
+            "clock2.out" -> "sum.in2",
+            "sum.out" -> "sel.trigger",
+            "step.out" -> "sel.step",
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 100);
+        // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+
+        assert_eq!(
+            r1.get_output_by_label("sel.out"),
+            vec! [3.0, 3.0, 3.0, 3.0, 3.0, 6.0, 6.0, 6.0, 6.0, 6.0, 12.0, 12.0, 12.0, 24.0, 24.0, 48.0, 48.0, 48.0, 48.0, 48.0, 3.0, 3.0, 3.0, 3.0, 3.0, 6.0, 12.0, 12.0, 12.0, 12.0, 24.0, 24.0, 24.0, 24.0, 24.0, 48.0, 48.0, 48.0, 48.0, 3.0, 6.0, 6.0, 6.0, 6.0, 6.0, 12.0, 12.0, 12.0, 12.0, 12.0, 24.0, 24.0, 48.0, 48.0, 48.0, 3.0, 3.0, 3.0, 3.0, 3.0, 6.0, 6.0, 6.0, 6.0, 6.0, 12.0, 12.0, 12.0, 12.0, 12.0, 24.0, 24.0, 24.0, 24.0, 24.0, 48.0, 48.0, 48.0, 3.0, 3.0, 6.0, 6.0, 6.0, 6.0, 6.0, 12.0, 12.0, 12.0, 12.0, 12.0, 24.0, 48.0, 48.0, 48.0, 48.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+        );
     }
 }
