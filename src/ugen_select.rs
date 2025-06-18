@@ -149,7 +149,7 @@ mod tests {
 
     //--------------------------------------------------------------------------
     #[test]
-    fn test_select_a() {
+    fn test_select_cycle_a() {
         let mut g = GenGraph::new(8.0, 8);
         register_many![g,
             "s1" => UGSelect::new(
@@ -168,61 +168,7 @@ mod tests {
     }
 
     #[test]
-    fn test_select_b() {
-        let mut g = GenGraph::new(8.0, 16);
-        register_many![g,
-            "s1" => UGSelect::new(vec![3.0, 10.0, 20.0, 50.0], ModeSelect::Walk, Some(42)),
-            "c1" => 1.0,
-        ];
-        g.connect("c1.out", "s1.trigger");
-        g.process();
-
-        assert_eq!(
-            g.get_output_by_label("s1.out"),
-            vec![
-                20.0, 10.0, 3.0, 10.0, 20.0, 50.0, 20.0, 10.0, 20.0, 50.0, 20.0, 10.0,
-                20.0, 50.0, 20.0, 50.0
-            ]
-        )
-    }
-
-    #[test]
-    fn test_select_c() {
-        let mut g = GenGraph::new(8.0, 20);
-        register_many![
-            g,
-            "s1" => UGSelect::new(
-                vec![3.0, 10.0, 20.0, 50.0, 99.0],
-                ModeSelect::Shuffle,
-                Some(42)),
-            "c1" => 1,
-        ];
-        connect_many![g, "c1.out" -> "s1.trigger"];
-        g.process();
-
-        assert_eq!(
-            g.get_output_by_label("s1.out"),
-            vec![
-                10.0, 20.0, 50.0, 3.0, 99.0, 20.0, 99.0, 10.0, 50.0, 3.0, 50.0, 20.0,
-                10.0, 3.0, 99.0, 10.0, 50.0, 3.0, 99.0, 20.0
-            ]
-        );
-        assert_eq!(
-            format!("\n{}", g.describe()),
-            r#"
-c1 <UGConst {value = 1.000}>
-→ out ≊ 1.000
-
-s1 <UGSelect {values = [3.0, 10.0, 20.0, 50.0, 99.0], mode = shuffle}>
-trigger ← c1.out
-step ←= 1.000
-→ out ≊ 20.000
-"#
-        );
-    }
-
-    #[test]
-    fn test_select_d() {
+    fn test_select_cycle_b() {
         let mut g = GenGraph::new(8.0, 20);
         register_many![g,
             "clock1" => UGClock::new(5.0, UnitRate::Samples),
@@ -260,7 +206,7 @@ step ←= 1.000
     }
 
     #[test]
-    fn test_select_e() {
+    fn test_select_cycle_c() {
         let mut g = GenGraph::new(8.0, 20);
         register_many![g,
             "clock1" => UGClock::new(2.0, UnitRate::Samples),
@@ -300,6 +246,7 @@ step ←= 1.000
         );
     }
 
+    //--------------------------------------------------------------------------
     #[test]
     fn test_select_walk_a() {
         let mut g = GenGraph::new(8.0, 20);
@@ -334,7 +281,6 @@ step ←= 1.000
         );
     }
 
-
     #[test]
     fn test_select_walk_b() {
         let mut g = GenGraph::new(8.0, 20);
@@ -360,22 +306,109 @@ step ←= 1.000
         ];
 
         let r1 = Recorder::from_samples(g, None, 100);
-        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
 
         assert_eq!(
             r1.get_output_by_label("sel-value.out"),
             vec![
-                2.0, 2.0, 4.0, 4.0, 8.0, 8.0, 16.0, 16.0, 32.0, 32.0, 4.0, 4.0, 16.0,
-                16.0, 2.0, 2.0, 8.0, 8.0, 2.0, 2.0, 16.0, 16.0, 4.0, 4.0, 32.0, 32.0,
-                8.0, 8.0, 16.0, 16.0, 32.0, 32.0, 2.0, 2.0, 4.0, 4.0, 16.0, 16.0, 2.0,
-                2.0, 8.0, 8.0, 32.0, 32.0, 4.0, 4.0, 32.0, 32.0, 8.0, 8.0, 2.0, 2.0,
-                16.0, 16.0, 32.0, 32.0, 2.0, 2.0, 4.0, 4.0, 8.0, 8.0, 16.0, 16.0, 2.0,
-                2.0, 8.0, 8.0, 32.0, 32.0, 4.0, 4.0, 32.0, 32.0, 8.0, 8.0, 2.0, 2.0,
-                16.0, 16.0, 4.0, 4.0, 8.0, 8.0, 16.0, 16.0, 32.0, 32.0, 2.0, 2.0, 8.0,
-                8.0, 32.0, 32.0, 4.0, 4.0, 16.0, 16.0, 2.0, 2.0
+                7.0, 7.0, 5.0, 5.0, 3.0, 3.0, 5.0, 5.0, 7.0, 7.0, 9.0, 9.0, 7.0, 7.0,
+                6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 7.0, 7.0, 6.0, 6.0, 7.0, 7.0, 2.0, 2.0,
+                7.0, 7.0, 2.0, 2.0, 7.0, 7.0, 2.0, 2.0, 7.0, 7.0, 2.0, 2.0, 1.0, 1.0,
+                2.0, 2.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 2.0, 2.0, 4.0, 4.0,
+                6.0, 6.0, 4.0, 4.0, 6.0, 6.0, 4.0, 4.0, 2.0, 2.0, 7.0, 7.0, 2.0, 2.0,
+                7.0, 7.0, 2.0, 2.0, 7.0, 7.0, 2.0, 2.0, 4.0, 4.0, 2.0, 2.0, 0.0, 0.0,
+                2.0, 2.0, 4.0, 4.0, 6.0, 6.0, 8.0, 8.0, 9.0, 9.0, 8.0, 8.0, 7.0, 7.0,
+                6.0, 6.0
             ]
         );
     }
 
+    #[test]
+    fn test_select_walk_c() {
+        let mut g = GenGraph::new(8.0, 16);
+        register_many![g,
+            "s1" => UGSelect::new(vec![3.0, 10.0, 20.0, 50.0], ModeSelect::Walk, Some(42)),
+            "c1" => 1.0,
+        ];
+        g.connect("c1.out", "s1.trigger");
+        g.process();
 
+        assert_eq!(
+            g.get_output_by_label("s1.out"),
+            vec![
+                20.0, 10.0, 3.0, 10.0, 20.0, 50.0, 20.0, 10.0, 20.0, 50.0, 20.0, 10.0,
+                20.0, 50.0, 20.0, 50.0
+            ]
+        )
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_select_shuffle_a() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![
+            g,
+            "s1" => UGSelect::new(
+                vec![3.0, 10.0, 20.0, 50.0, 99.0],
+                ModeSelect::Shuffle,
+                Some(42)),
+            "c1" => 1,
+        ];
+        connect_many![g, "c1.out" -> "s1.trigger"];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("s1.out"),
+            vec![
+                10.0, 20.0, 50.0, 3.0, 99.0, 20.0, 99.0, 10.0, 50.0, 3.0, 50.0, 20.0,
+                10.0, 3.0, 99.0, 10.0, 50.0, 3.0, 99.0, 20.0
+            ]
+        );
+        assert_eq!(
+            format!("\n{}", g.describe()),
+            r#"
+c1 <UGConst {value = 1.000}>
+→ out ≊ 1.000
+
+s1 <UGSelect {values = [3.0, 10.0, 20.0, 50.0, 99.0], mode = shuffle}>
+trigger ← c1.out
+step ←= 1.000
+→ out ≊ 20.000
+"#
+        );
+    }
+
+    #[test]
+    fn test_select_shuffle_b() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![g,
+            "clock" => UGClock::new(2.0, UnitRate::Samples),
+            "step" => 1,
+            "sel" => UGSelect::new(
+                vec![0., 1., 2., 3., 4., 5., 6., 7., 8., 9.],
+                ModeSelect::Shuffle,
+                Some(42)),
+        ];
+
+        connect_many![g,
+            "clock.out" -> "sel.trigger",
+            "step.out" -> "sel.step",
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 100);
+        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+
+        assert_eq!(
+            r1.get_output_by_label("sel.out"),
+            vec![
+                0.0, 0.0, 4.0, 4.0, 7.0, 7.0, 9.0, 9.0, 5.0, 5.0, 1.0, 1.0, 2.0, 2.0,
+                3.0, 3.0, 6.0, 6.0, 8.0, 8.0, 0.0, 0.0, 6.0, 6.0, 2.0, 2.0, 5.0, 5.0,
+                9.0, 9.0, 7.0, 7.0, 4.0, 4.0, 1.0, 1.0, 3.0, 3.0, 8.0, 8.0, 2.0, 2.0,
+                9.0, 9.0, 6.0, 6.0, 4.0, 4.0, 3.0, 3.0, 5.0, 5.0, 8.0, 8.0, 1.0, 1.0,
+                0.0, 0.0, 7.0, 7.0, 1.0, 1.0, 3.0, 3.0, 6.0, 6.0, 9.0, 9.0, 4.0, 4.0,
+                7.0, 7.0, 8.0, 8.0, 0.0, 0.0, 5.0, 5.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0,
+                7.0, 7.0, 9.0, 9.0, 5.0, 5.0, 0.0, 0.0, 1.0, 1.0, 8.0, 8.0, 6.0, 6.0,
+                4.0, 4.0
+            ]
+        );
+    }
 }

@@ -1,4 +1,3 @@
-use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 
 use crate::util::Sample;
