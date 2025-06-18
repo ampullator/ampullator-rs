@@ -259,4 +259,37 @@ step ←= 1.000
             ]
         );
     }
+
+    #[test]
+    fn test_select_e() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![g,
+            "clock1" => UGClock::new(2.0, UnitRate::Samples),
+            "clock2" => UGClock::new(9.0, UnitRate::Samples),
+            "step" => 1,
+            "sel-step" => UGSelect::new(
+                vec![1., 2., 3.],
+                ModeSelect::Cycle,
+                Some(42)),
+            "sel-value" => UGSelect::new(
+                vec![2., 4., 8., 16., 32.],
+                ModeSelect::Cycle,
+                Some(42)),
+        ];
+
+        connect_many![g,
+            "clock1.out" -> "sel-value.trigger",
+            "clock2.out" -> "sel-step.trigger",
+            "step.out" -> "sel-step.step",
+            "sel-step.out" -> "sel-value.step",
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 100);
+        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+
+        assert_eq!(
+            r1.get_output_by_label("sel-value.out"),
+            vec![2.0, 2.0, 4.0, 4.0, 8.0, 8.0, 16.0, 16.0, 32.0, 32.0, 4.0, 4.0, 16.0, 16.0, 2.0, 2.0, 8.0, 8.0, 2.0, 2.0, 16.0, 16.0, 4.0, 4.0, 32.0, 32.0, 8.0, 8.0, 16.0, 16.0, 32.0, 32.0, 2.0, 2.0, 4.0, 4.0, 16.0, 16.0, 2.0, 2.0, 8.0, 8.0, 32.0, 32.0, 4.0, 4.0, 32.0, 32.0, 8.0, 8.0, 2.0, 2.0, 16.0, 16.0, 32.0, 32.0, 2.0, 2.0, 4.0, 4.0, 8.0, 8.0, 16.0, 16.0, 2.0, 2.0, 8.0, 8.0, 32.0, 32.0, 4.0, 4.0, 32.0, 32.0, 8.0, 8.0, 2.0, 2.0, 16.0, 16.0, 4.0, 4.0, 8.0, 8.0, 16.0, 16.0, 32.0, 32.0, 2.0, 2.0, 8.0, 8.0, 32.0, 32.0, 4.0, 4.0, 16.0, 16.0, 2.0, 2.0]
+        );
+    }
 }
