@@ -340,11 +340,11 @@ step ←= 1.000
         let mut g = GenGraph::new(8.0, 20);
         register_many![g,
             "clock1" => UGClock::new(2.0, UnitRate::Samples),
-            "clock2" => UGClock::new(9.0, UnitRate::Samples),
+            "clock2" => UGClock::new(12.0, UnitRate::Samples),
             "step" => 1,
             "sel-step" => UGSelect::new(
-                vec![1., 2., 3.],
-                ModeSelect::Cycle,
+                vec![1., 2., 5.],
+                ModeSelect::Walk,
                 Some(42)),
             "sel-value" => UGSelect::new(
                 vec![0., 1., 2., 3., 4., 5., 6., 7., 8., 9.],
