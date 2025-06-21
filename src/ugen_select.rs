@@ -430,7 +430,7 @@ step ←= 1.000
         ];
 
         let r1 = Recorder::from_samples(g, None, 100);
-        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+        // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
 
         assert_eq!(
             r1.get_output_by_label("sel.out"),

@@ -14,8 +14,7 @@ pub struct UGEnvBreakPoint {
 
     duration_select: UGSelect,
     level_select: UGSelect,
-
-    triggered_last: bool,
+    // triggered_last: bool,
 }
 
 impl UGEnvBreakPoint {
@@ -32,7 +31,7 @@ impl UGEnvBreakPoint {
             required_pulses: 1,
             duration_select: UGSelect::new(duration_values, duration_mode, seed),
             level_select: UGSelect::new(level_values, level_mode, seed),
-            triggered_last: false,
+            // triggered_last: false,
         }
     }
 }
@@ -74,9 +73,9 @@ impl UGen for UGEnvBreakPoint {
         let out = &mut outputs[0];
 
         for i in 0..out.len() {
-            let clock_now = clock.get(i).copied().unwrap_or(0.0) > 0.5;
-            let triggered_now = clock_now && !self.triggered_last;
-            self.triggered_last = clock_now;
+            let triggered_now = clock.get(i).copied().unwrap_or(0.0) > 0.5;
+            // let triggered_now = clock_now && !self.triggered_last;
+            // self.triggered_last = clock_now;
 
             if triggered_now {
                 let step_size = step.get(i).copied().unwrap_or(1.0).max(1.0).round();
@@ -237,8 +236,6 @@ impl UGen for UGEnvAR {
 }
 
 //------------------------------------------------------------------------------
-
-//------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,6 +279,65 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn test_env_break_point_b() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![g,
+            "clock" => UGClock::new(1.0, UnitRate::Samples),
+            "step" => 1,
+            "env" => UGEnvBreakPoint::new(
+                vec![2., 4., 3., 8.], // dur
+                ModeSelect::Cycle,
+                vec![1., 2., 3., 4., 5., 6., 7., 8.], // value
+                ModeSelect::Cycle,
+                Some(42),
+            ),
+        ];
+
+        connect_many![g,
+            "clock.out" -> "env.clock",
+            "step.out" -> "env.step",
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 100);
+
+        assert_eq!(
+            r1.get_output_by_label("env.out"),
+            vec![1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 6.0, 6.0, 6.0, 6.0, 7.0, 7.0, 7.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 6.0, 6.0, 6.0, 6.0, 7.0, 7.0, 7.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 1.0, 1.0, 2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 5.0, 5.0, 6.0, 6.0, 6.0, 6.0, 7.0, 7.0, 7.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0]
+        );
+    }
+
+
+    #[test]
+    fn test_env_break_point_c() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![g,
+            "clock" => UGClock::new(1.0, UnitRate::Samples),
+            "step" => 1,
+            "env" => UGEnvBreakPoint::new(
+                vec![2., 4., 8.], // dur
+                ModeSelect::Cycle,
+                vec![1., 2., 3., 4., 5., 6., 7., 8.], // value
+                ModeSelect::Walk,
+                Some(42),
+            ),
+        ];
+
+        connect_many![g,
+            "clock.out" -> "env.clock",
+            "step.out" -> "env.step",
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 100);
+        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+
+        assert_eq!(
+            r1.get_output_by_label("env.out"),
+            vec![7.0, 7.0, 6.0, 6.0, 6.0, 6.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 7.0, 7.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 7.0, 7.0, 6.0, 6.0, 6.0, 6.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 8.0, 8.0, 7.0, 7.0, 7.0, 7.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 8.0, 8.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 8.0, 8.0, 1.0, 1.0, 1.0, 1.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 8.0, 1.0, 1.0, 8.0, 8.0, 8.0, 8.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0, 8.0, 8.0]
+        );
+    }
+
 
     //--------------------------------------------------------------------------
     #[test]
