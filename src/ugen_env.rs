@@ -11,10 +11,8 @@ pub struct UGEnvBreakPoint {
     current: Sample,
     pulse_counter: usize,
     required_pulses: usize,
-
     duration_select: UGSelect,
     level_select: UGSelect,
-    // triggered_last: bool,
 }
 
 impl UGEnvBreakPoint {
@@ -31,7 +29,6 @@ impl UGEnvBreakPoint {
             required_pulses: 1,
             duration_select: UGSelect::new(duration_values, duration_mode, seed),
             level_select: UGSelect::new(level_values, level_mode, seed),
-            // triggered_last: false,
         }
     }
 }
@@ -73,11 +70,9 @@ impl UGen for UGEnvBreakPoint {
         let out = &mut outputs[0];
 
         for i in 0..out.len() {
-            let triggered_now = clock.get(i).copied().unwrap_or(0.0) > 0.5;
-            // let triggered_now = clock_now && !self.triggered_last;
-            // self.triggered_last = clock_now;
+            let triggered = clock.get(i).copied().unwrap_or(0.0) > 0.5;
 
-            if triggered_now {
+            if triggered {
                 let step_size = step.get(i).copied().unwrap_or(1.0).max(1.0).round();
 
                 self.pulse_counter += 1;
