@@ -333,7 +333,6 @@ mod tests {
         ];
 
         let r1 = Recorder::from_samples(g, None, 100);
-        r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
 
         assert_eq!(
             r1.get_output_by_label("env.out"),
