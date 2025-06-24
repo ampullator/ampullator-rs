@@ -6,6 +6,7 @@ mod ugen_filter;
 mod ugen_rhythm;
 mod ugen_select;
 mod util;
+mod graph_json;
 
 pub use recorder::Recorder;
 

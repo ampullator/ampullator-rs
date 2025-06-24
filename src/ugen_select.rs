@@ -3,10 +3,12 @@ use crate::util::Sample;
 
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use serde::{Serialize, Deserialize};
+
 
 //------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ModeSelect {
     Cycle,
     Random,

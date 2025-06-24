@@ -1,4 +1,6 @@
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::util::Sample;
 use crate::util::UnitRate;
@@ -114,7 +116,7 @@ impl UGen for UGAsHz {
 }
 
 //------------------------------------------------------------------------------
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ModeRound {
     Round,
     Floor,

@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use serde::{Serialize, Deserialize};
 
 //------------------------------------------------------------------------------
 pub type Sample = f32;
@@ -10,7 +11,7 @@ pub(crate) fn split_name(s: &str) -> (&str, &str) {
 
 //------------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum UnitRate {
     Hz,
     Seconds,
