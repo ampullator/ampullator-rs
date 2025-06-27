@@ -54,13 +54,6 @@ pub enum Facade {
     Full(UGFacade), // ["Clock", { ... }] or ["Round", { ... }]
 }
 
-// fn register_many(graph: &mut GenGraph, j: &str) {
-//     let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
-//     for (name, def) in defs {
-//         let ugen = def.to_ugen();
-//         graph.add_node(name, ugen);
-//     }
-// }
 
 pub fn register_many(graph: &mut GenGraph, j: &str) {
     let defs: HashMap<String, Facade> = serde_json::from_str(j).unwrap();
