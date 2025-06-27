@@ -1,5 +1,5 @@
 mod graph;
-mod graph_json;
+mod graph_facade;
 mod recorder;
 mod ugen_core;
 mod ugen_env;
