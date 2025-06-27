@@ -1,31 +1,29 @@
 use serde::Deserialize;
 
+use crate::GenGraph;
+use crate::ModeRound;
+use crate::ugen_core::UGen;
+use crate::ugen_core::{UGClock, UGConst, UGRound};
+use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
 use crate::util::UnitRate;
-use crate::ugen_core::UGen;
-use crate::ugen_select::{UGSelect, ModeSelect};
-use crate::ugen_core::{UGClock, UGRound, UGConst};
-use crate::ModeRound;
 use std::collections::HashMap;
-use crate::GenGraph;
-
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "0", content = "1")]
 pub enum UGFacade {
-    Const { value: Sample },
-
+    Const {
+        value: Sample,
+    },
     Clock {
         value: Sample,
         mode: UnitRate,
     },
-
     Select {
         values: Vec<f32>,
         mode: ModeSelect,
         seed: Option<u64>,
     },
-
     Round {
         places: i32,
         mode: ModeRound,
@@ -35,9 +33,7 @@ pub enum UGFacade {
 impl UGFacade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
-            UGFacade::Const { value } => {
-                Box::new(UGConst::new(*value))
-            }
+            UGFacade::Const { value } => Box::new(UGConst::new(*value)),
             UGFacade::Clock { value, mode } => {
                 Box::new(UGClock::new(*value, mode.clone()))
             }
@@ -51,7 +47,6 @@ impl UGFacade {
     }
 }
 
-
 fn register_many(graph: &mut GenGraph, j: &str) {
     let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
     for (name, def) in defs {
@@ -59,7 +54,6 @@ fn register_many(graph: &mut GenGraph, j: &str) {
         graph.add_node(name, ugen);
     }
 }
-
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -73,7 +67,6 @@ mod tests {
         let j = r#"
         {
           "clock": ["Clock", {"value": 2.0, "mode": "Samples" }]
-        }
         }"#;
 
         let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
@@ -94,7 +87,4 @@ mod tests {
         register_many(&mut g, json);
         assert_eq!(g.len(), 3);
     }
-
-
-
 }

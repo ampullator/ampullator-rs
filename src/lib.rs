@@ -1,4 +1,5 @@
 mod graph;
+mod graph_json;
 mod recorder;
 mod ugen_core;
 mod ugen_env;
@@ -6,7 +7,6 @@ mod ugen_filter;
 mod ugen_rhythm;
 mod ugen_select;
 mod util;
-mod graph_json;
 
 pub use recorder::Recorder;
 

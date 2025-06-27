@@ -3,8 +3,7 @@ use crate::util::Sample;
 
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use serde::{Serialize, Deserialize};
-
+use serde::{Deserialize, Serialize};
 
 //------------------------------------------------------------------------------
 
