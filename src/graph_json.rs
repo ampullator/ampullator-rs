@@ -6,12 +6,13 @@ use crate::ugen_core::UGen;
 use crate::ugen_select::{UGSelect, ModeSelect};
 use crate::ugen_core::{UGClock, UGRound, UGConst};
 use crate::ModeRound;
-
+use std::collections::HashMap;
+use crate::GenGraph;
 
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-pub enum UGDef {
+#[serde(tag = "type", content = "params")]
+pub enum UGFacade {
     Const(f32),
 
     Clock {
@@ -31,21 +32,77 @@ pub enum UGDef {
     },
 }
 
-impl UGDef {
+impl UGFacade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
-            UGDef::Const(value) => {
+            UGFacade::Const(value) => {
                 Box::new(UGConst::new(*value))
             }
-            UGDef::Clock { value, mode } => {
+            UGFacade::Clock { value, mode } => {
                 Box::new(UGClock::new(*value, mode.clone()))
             }
-            UGDef::Select { values, mode, seed } => {
+            UGFacade::Select { values, mode, seed } => {
                 Box::new(UGSelect::new(values.clone(), *mode, *seed))
             }
-            UGDef::Round { places, mode } => {
+            UGFacade::Round { places, mode } => {
                 Box::new(UGRound::new(*places, mode.clone()))
             }
         }
     }
+}
+
+
+fn register_many(graph: &mut GenGraph, j: &str) {
+    let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
+    for (name, def) in defs {
+        let ugen = def.to_ugen();
+        graph.add_node(name, ugen);
+    }
+}
+
+
+//------------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_ug_facade_a() {
+        let j = r#"
+        {
+          "clock": {
+            "type": "Clock",
+            "params": { "value": 2.0, "mode": "Samples" }
+          }
+        }"#;
+
+        let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
+        println!("here: {:?}", defs);
+    }
+
+    #[test]
+    fn test_ug_facade_b() {
+        let json = r#"
+        {
+            "c1": { "type": "Const", "params": 1.0 },
+            "clock": {
+                "type": "Clock",
+                "params": { "value": 2.0, "mode": "Samples" }
+            },
+            "rounder": {
+                "type": "Round",
+                "params": { "places": 2, "mode": "Round" }
+            }
+        }
+        "#;
+
+        let mut g = GenGraph::new(8.0, 8);
+        register_many(&mut g, json);
+        assert_eq!(g.len(), 3);
+    }
+
+
+
 }

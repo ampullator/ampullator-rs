@@ -182,6 +182,10 @@ impl GenGraph {
         post
     }
 
+    pub fn len(self) -> usize {
+        self.nodes.len()
+    }
+
     pub fn process(&mut self) {
         self.update_execution_node_ids();
 
