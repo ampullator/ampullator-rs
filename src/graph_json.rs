@@ -47,10 +47,28 @@ impl UGFacade {
     }
 }
 
-fn register_many(graph: &mut GenGraph, j: &str) {
-    let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum Facade {
+    Short(f32),     // concise numeric constant: "step": 1
+    Full(UGFacade), // ["Clock", { ... }] or ["Round", { ... }]
+}
+
+// fn register_many(graph: &mut GenGraph, j: &str) {
+//     let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
+//     for (name, def) in defs {
+//         let ugen = def.to_ugen();
+//         graph.add_node(name, ugen);
+//     }
+// }
+
+pub fn register_many(graph: &mut GenGraph, j: &str) {
+    let defs: HashMap<String, Facade> = serde_json::from_str(j).unwrap();
     for (name, def) in defs {
-        let ugen = def.to_ugen();
+        let ugen: Box<dyn UGen> = match def {
+            Facade::Short(f) => Box::new(UGConst::new(f)),
+            Facade::Full(facade) => facade.to_ugen(),
+        };
         graph.add_node(name, ugen);
     }
 }
@@ -78,6 +96,7 @@ mod tests {
         let json = r#"
         {
             "c1": ["Const", {"value": 1.0 }],
+            "c2": 4,
             "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
             "rounder": ["Round", { "places": 2, "mode": "Round" }]
         }
@@ -85,6 +104,6 @@ mod tests {
 
         let mut g = GenGraph::new(8.0, 8);
         register_many(&mut g, json);
-        assert_eq!(g.len(), 3);
+        assert_eq!(g.len(), 4);
     }
 }
