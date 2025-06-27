@@ -11,9 +11,9 @@ use crate::GenGraph;
 
 
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", content = "params")]
+#[serde(tag = "0", content = "1")]
 pub enum UGFacade {
-    Const(f32),
+    Const { value: Sample },
 
     Clock {
         value: Sample,
@@ -35,7 +35,7 @@ pub enum UGFacade {
 impl UGFacade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
-            UGFacade::Const(value) => {
+            UGFacade::Const(value: _) => {
                 Box::new(UGConst::new(*value))
             }
             UGFacade::Clock { value, mode } => {
@@ -72,9 +72,7 @@ mod tests {
     fn test_ug_facade_a() {
         let j = r#"
         {
-          "clock": {
-            "type": "Clock",
-            "params": { "value": 2.0, "mode": "Samples" }
+          "clock": ["Clock", { "value": 2.0, "mode": "Samples" }]
           }
         }"#;
 
@@ -86,15 +84,9 @@ mod tests {
     fn test_ug_facade_b() {
         let json = r#"
         {
-            "c1": { "type": "Const", "params": 1.0 },
-            "clock": {
-                "type": "Clock",
-                "params": { "value": 2.0, "mode": "Samples" }
-            },
-            "rounder": {
-                "type": "Round",
-                "params": { "places": 2, "mode": "Round" }
-            }
+            "c1": ["Const", {"value": 1.0 }],
+            "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
+            "rounder": ["Round", { "places": 2, "mode": "Round" }]
         }
         "#;
 
