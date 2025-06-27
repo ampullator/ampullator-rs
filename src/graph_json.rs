@@ -35,7 +35,7 @@ pub enum UGFacade {
 impl UGFacade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
-            UGFacade::Const(value: _) => {
+            UGFacade::Const { value } => {
                 Box::new(UGConst::new(*value))
             }
             UGFacade::Clock { value, mode } => {
@@ -72,8 +72,8 @@ mod tests {
     fn test_ug_facade_a() {
         let j = r#"
         {
-          "clock": ["Clock", { "value": 2.0, "mode": "Samples" }]
-          }
+          "clock": ["Clock", {"value": 2.0, "mode": "Samples" }]
+        }
         }"#;
 
         let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
