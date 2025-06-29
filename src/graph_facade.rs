@@ -47,7 +47,9 @@ impl UGFacade {
     }
 }
 
-#[derive(Deserialize)]
+//------------------------------------------------------------------------------
+
+#[derive(Deserialize, Debug)]
 #[serde(untagged)]
 #[allow(unused)]
 pub enum Facade {
@@ -64,6 +66,8 @@ impl Facade {
     }
 }
 
+//------------------------------------------------------------------------------
+
 pub fn register_many(graph: &mut GenGraph, j: &str) {
     let defs: HashMap<String, Facade> = serde_json::from_str(j).unwrap();
     for (name, def) in defs {
@@ -72,14 +76,6 @@ pub fn register_many(graph: &mut GenGraph, j: &str) {
 }
 
 /// Connects nodes in a GenGraph using a JSON string of `"src": "dst"` mappings.
-///
-/// Example JSON:
-/// ```json
-/// {
-///   "clock.out": "env.trigger",
-///   "step.out": "sel.step"
-/// }
-/// ```
 pub fn connect_many(graph: &mut GenGraph, j: &str) {
     let pairs: HashMap<String, String> =
         serde_json::from_str(j).expect("Failed to parse connection JSON");
@@ -87,6 +83,33 @@ pub fn connect_many(graph: &mut GenGraph, j: &str) {
         graph.connect(&src, &dst);
     }
 }
+
+//------------------------------------------------------------------------------
+
+#[derive(Deserialize, Debug)]
+struct GraphFacade {
+    register: HashMap<String, Facade>,
+    connect: HashMap<String, String>,
+}
+
+pub fn register_and_connect(graph: &mut GenGraph, json_str: &str) -> Result<(), String> {
+    let parsed: GraphFacade =
+        serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+
+    for (name, facade) in parsed.register {
+        println!("{:?}", name);
+        graph.add_node(name, facade.to_ugen());
+    }
+
+    for (src, dst) in parsed.connect {
+        graph.connect(&src, &dst);
+    }
+
+    Ok(())
+}
+
+
+
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -104,7 +127,7 @@ mod tests {
         }"#;
 
         let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
-        println!("here: {:?}", defs);
+        // println!("here: {:?}", defs);
     }
 
     #[test]
@@ -143,9 +166,7 @@ mod tests {
         }
         "#;
         connect_many(&mut g, jc);
-
         let r1 = Recorder::from_samples(g, None, 100);
-        // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
 
         assert_eq!(
             r1.get_output_by_label("sel.out"),
@@ -153,4 +174,37 @@ mod tests {
         );
 
     }
+
+    #[test]
+    fn test_ug_facade_d() {
+        let json = r#"
+        {
+            "register": {
+                "step": 1,
+                "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
+                "sel": ["Select", { "values": [10, 5, 15, 20], "mode": "Walk", "seed": 42 }]
+            },
+            "connect": {
+              "clock.out": "sel.trigger",
+              "step.out": "sel.step"
+            }
+        }
+        "#;
+
+        let mut g = GenGraph::new(8.0, 8);
+        let res = register_and_connect(&mut g, json);
+        assert!(res.is_ok(), "Failed to register/connect: {:?}", res);
+        // assert_eq!(g.len(), 3);
+
+        let r1 = Recorder::from_samples(g, None, 50);
+        // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
+
+        assert_eq!(
+            r1.get_output_by_label("sel.out"),
+            vec![15.0, 15.0, 5.0, 5.0, 10.0, 10.0, 5.0, 5.0, 15.0, 15.0, 20.0, 20.0, 15.0, 15.0, 5.0, 5.0, 15.0, 15.0, 20.0, 20.0, 15.0, 15.0, 5.0, 5.0, 15.0, 15.0, 20.0, 20.0, 15.0, 15.0, 20.0, 20.0, 10.0, 10.0, 20.0, 20.0, 10.0, 10.0, 20.0, 20.0, 15.0, 15.0, 20.0, 20.0, 15.0, 15.0, 20.0, 20.0, 10.0, 10.0]
+        );
+
+
+    }
+
 }
