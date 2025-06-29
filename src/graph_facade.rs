@@ -194,7 +194,6 @@ mod tests {
         let mut g = GenGraph::new(8.0, 8);
         let res = register_and_connect(&mut g, json);
         assert!(res.is_ok(), "Failed to register/connect: {:?}", res);
-        // assert_eq!(g.len(), 3);
 
         let r1 = Recorder::from_samples(g, None, 50);
         // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
