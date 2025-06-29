@@ -7,7 +7,9 @@ use crate::ugen_core::{UGClock, UGConst, UGRound};
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
 use crate::util::UnitRate;
+use crate::Recorder;
 use std::collections::HashMap;
+use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "0", content = "1")]
@@ -88,11 +90,12 @@ pub fn connect_many(graph: &mut GenGraph, j: &str) {
 
 #[derive(Deserialize, Debug)]
 struct GraphFacade {
+    name: Option<String>,
     register: HashMap<String, Facade>,
     connect: HashMap<String, String>,
 }
 
-pub fn register_and_connect(graph: &mut GenGraph, json_str: &str) -> Result<(), String> {
+fn register_and_connect(graph: &mut GenGraph, json_str: &str) -> Result<(), String> {
     let parsed: GraphFacade = serde_json::from_str(json_str)
         .map_err(|e| format!("Failed to parse JSON: {e}"))?;
 
@@ -100,10 +103,35 @@ pub fn register_and_connect(graph: &mut GenGraph, json_str: &str) -> Result<(), 
         println!("{:?}", name);
         graph.add_node(name, facade.to_ugen());
     }
-
     for (src, dst) in parsed.connect {
         graph.connect(&src, &dst);
     }
+    Ok(())
+}
+
+fn from_json_write_figures(
+    json_str: &str,
+    dir: &Path,
+    sample_rate: f32,
+    buffer_size: usize,
+    total_samples: usize,
+) -> Result<(), String> {
+    let parsed: GraphFacade =
+        serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+
+    let mut g = GenGraph::new(sample_rate, buffer_size);
+    for (name, facade) in parsed.register {
+        g.add_node(name, facade.to_ugen());
+    }
+    for (src, dst) in parsed.connect {
+        g.connect(&src, &dst);
+    }
+
+    let name = parsed.name.unwrap_or_else(|| "graph".to_string());
+    let out_path = dir.join(format!("{name}_time-domain.png"));
+
+    let r1 = Recorder::from_samples(g, None, total_samples);
+    r1.to_gnuplot_fp(out_path.to_str().unwrap()).unwrap();
 
     Ok(())
 }
@@ -124,7 +152,7 @@ mod tests {
         }"#;
 
         let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
-        // println!("here: {:?}", defs);
+        assert_eq!(defs.len(), 1);
     }
 
     #[test]
