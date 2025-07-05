@@ -95,29 +95,26 @@ struct GraphFacade {
     connect: HashMap<String, String>,
 }
 
-fn register_and_connect(graph: &mut GenGraph, json_str: &str) -> Result<(), String> {
-    let parsed: GraphFacade = serde_json::from_str(json_str)
-        .map_err(|e| format!("Failed to parse JSON: {e}"))?;
-
-    for (name, facade) in parsed.register {
+fn register_and_connect(graph: &mut GenGraph, parsed: &GraphFacade) -> Result<(), String> {
+    for (name, facade) in &parsed.register {
         println!("{:?}", name);
         graph.add_node(name, facade.to_ugen());
     }
-    for (src, dst) in parsed.connect {
+    for (src, dst) in &parsed.connect {
         graph.connect(&src, &dst);
     }
     Ok(())
 }
 
 fn from_json_write_figures(
-    json_str: &str,
+    parsed: &GraphFacade,
     dir: &Path,
     sample_rate: f32,
     buffer_size: usize,
     total_samples: usize,
 ) -> Result<(), String> {
-    let parsed: GraphFacade =
-        serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+    // let parsed: GraphFacade =
+    //     serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
     for (name, facade) in parsed.register {
@@ -135,6 +132,45 @@ fn from_json_write_figures(
 
     Ok(())
 }
+
+pub fn build_markdown_index(
+        input_dir: &Path,
+        output_dir: &Path,
+        sample_rate: f32,
+        buffer_size: usize,
+        total_samples: usize,
+    ) -> Result<(), String> {
+    let mut entries = Vec::new();
+
+    std::fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
+
+    for entry in std::fs::read_dir(input_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.extension().map_or(false, |ext| ext == "json") {
+            let json_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let parsed: GraphFacade = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+            let name = parsed.name.clone().unwrap_or_else(|| path.file_stem().unwrap().to_string_lossy().into());
+
+            let image_name = format!("{name}_time-domain.png");
+            let image_path = output_dir.join(&image_name);
+
+            from_json_write_figures(&parsed, &image_path, sample_rate, buffer_size, total_samples);
+
+            entries.push(format!(
+                "## {}\n```json\n{}\n```\n![{}]({})\n",
+                name,
+                json_str.trim(),
+                name,
+                image_name
+            ));
+        }
+    }
+
+    std::fs::write(output_dir.join("index.md"), entries.join("\n")).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -225,7 +261,10 @@ mod tests {
         "#;
 
         let mut g = GenGraph::new(8.0, 8);
-        let res = register_and_connect(&mut g, json);
+
+        let parsed: GraphFacade =
+        serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}")).unwrap();
+        let res = register_and_connect(&mut g, &parsed);
         assert!(res.is_ok(), "Failed to register/connect: {:?}", res);
 
         let r1 = Recorder::from_samples(g, None, 50);
