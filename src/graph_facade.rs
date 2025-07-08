@@ -90,6 +90,7 @@ pub fn connect_many(graph: &mut GenGraph, j: &str) {
 
 #[derive(Deserialize, Debug)]
 struct GraphFacade {
+    title: Option<String>,
     label: Option<String>,
     register: HashMap<String, Facade>,
     connect: HashMap<String, String>,
@@ -154,7 +155,8 @@ pub fn build_markdown_index(
         if path.extension().map_or(false, |ext| ext == "json") {
             let json_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
             let parsed: GraphFacade = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
-            let name = parsed.label.clone().unwrap_or_else(|| path.file_stem().unwrap().to_string_lossy().into());
+
+            let label = parsed.label.unwrap_or_default(), "label";
 
             let fp_name = from_json_write_figures(&parsed, &output_dir, sample_rate, buffer_size, total_samples)?;
 
@@ -162,7 +164,7 @@ pub fn build_markdown_index(
                 "## {}\n```json\n{}\n```\n![{}]({})\n",
                 name,
                 json_str.trim(),
-                name,
+                label,
                 fp_name,
             ));
         }
