@@ -90,7 +90,7 @@ pub fn connect_many(graph: &mut GenGraph, j: &str) {
 
 #[derive(Deserialize, Debug)]
 struct GraphFacade {
-    name: Option<String>,
+    label: Option<String>,
     register: HashMap<String, Facade>,
     connect: HashMap<String, String>,
 }
@@ -112,9 +112,9 @@ fn from_json_write_figures(
     sample_rate: f32,
     buffer_size: usize,
     total_samples: usize,
-) -> Result<(), String> {
-    // let parsed: GraphFacade =
-    //     serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
+) -> Result<String, String> {
+
+    println!("from_json_write_figures: dir: {:?}", dir);
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
     for (name, facade) in &parsed.register {
@@ -124,13 +124,17 @@ fn from_json_write_figures(
         g.connect(&src, &dst);
     }
 
-    let name = parsed.name.clone().unwrap_or_else(|| "graph".to_string());
-    let out_path = dir.join(format!("{name}_time-domain.png"));
+    let name = parsed.label.clone().unwrap_or_else(|| "graph".to_string());
+    let file_name = format!("{name}_time-domain.png");
+    let out_path = dir.join(&file_name);
+
+    println!("from_json_write_figures: {:?}", out_path);
 
     let r1 = Recorder::from_samples(g, None, total_samples);
+
     r1.to_gnuplot_fp(out_path.to_str().unwrap()).unwrap();
 
-    Ok(())
+    Ok(file_name)
 }
 
 pub fn build_markdown_index(
@@ -150,19 +154,16 @@ pub fn build_markdown_index(
         if path.extension().map_or(false, |ext| ext == "json") {
             let json_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
             let parsed: GraphFacade = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
-            let name = parsed.name.clone().unwrap_or_else(|| path.file_stem().unwrap().to_string_lossy().into());
+            let name = parsed.label.clone().unwrap_or_else(|| path.file_stem().unwrap().to_string_lossy().into());
 
-            let image_name = format!("{name}_time-domain.png");
-            let image_path = output_dir.join(&image_name);
-
-            from_json_write_figures(&parsed, &image_path, sample_rate, buffer_size, total_samples);
+            let fp_name = from_json_write_figures(&parsed, &output_dir, sample_rate, buffer_size, total_samples)?;
 
             entries.push(format!(
                 "## {}\n```json\n{}\n```\n![{}]({})\n",
                 name,
                 json_str.trim(),
                 name,
-                image_name
+                fp_name,
             ));
         }
     }

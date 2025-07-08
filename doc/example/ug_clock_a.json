@@ -1,5 +1,5 @@
 {
-    "name": "UGClock: Control",
+    "name": "clock-control",
     "register": {
         "control": ["Clock", { "value": 12.0, "mode": "Samples" }],
         "metro": ["Clock", { "value": 3.0, "mode": "Samples" }]
