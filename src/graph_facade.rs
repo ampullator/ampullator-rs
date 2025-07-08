@@ -117,14 +117,14 @@ fn from_json_write_figures(
     //     serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {e}"))?;
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
-    for (name, facade) in parsed.register {
+    for (name, facade) in &parsed.register {
         g.add_node(name, facade.to_ugen());
     }
-    for (src, dst) in parsed.connect {
+    for (src, dst) in &parsed.connect {
         g.connect(&src, &dst);
     }
 
-    let name = parsed.name.unwrap_or_else(|| "graph".to_string());
+    let name = parsed.name.clone().unwrap_or_else(|| "graph".to_string());
     let out_path = dir.join(format!("{name}_time-domain.png"));
 
     let r1 = Recorder::from_samples(g, None, total_samples);
@@ -279,5 +279,14 @@ mod tests {
                 20.0, 20.0, 15.0, 15.0, 20.0, 20.0, 15.0, 15.0, 20.0, 20.0, 10.0, 10.0
             ]
         );
+    }
+
+
+
+    #[test]
+    fn test_build_index_a() {
+        let fp_src = Path::new("doc/example");
+        let fp_dst = Path::new("doc/out");
+        let _ = build_markdown_index(&fp_src, &fp_dst, 100.0, 10, 100).unwrap();
     }
 }
