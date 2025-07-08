@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::GenGraph;
 use crate::ModeRound;
 use crate::ugen_core::UGen;
-use crate::ugen_core::{UGClock, UGConst, UGRound};
+use crate::ugen_core::{UGClock, UGSum, UGConst, UGRound};
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
 use crate::util::UnitRate;
@@ -30,6 +30,9 @@ pub enum UGFacade {
         places: i32,
         mode: ModeRound,
     },
+    Sum {
+        input_count: usize,
+    },
 }
 
 impl UGFacade {
@@ -44,7 +47,9 @@ impl UGFacade {
             }
             UGFacade::Round { places, mode } => {
                 Box::new(UGRound::new(*places, mode.clone()))
-            }
+            },
+            UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
+
         }
     }
 }
@@ -153,16 +158,20 @@ pub fn build_markdown_index(
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         if path.extension().map_or(false, |ext| ext == "json") {
+
+            println!("build_markdown_index: parsing: {:?}", path);
+
             let json_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
             let parsed: GraphFacade = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
 
-            let label = parsed.label.unwrap_or_default(), "label";
+            let title = parsed.title.clone().unwrap_or("title".to_string());
+            let label = parsed.label.clone().unwrap_or("label".to_string());
 
             let fp_name = from_json_write_figures(&parsed, &output_dir, sample_rate, buffer_size, total_samples)?;
 
             entries.push(format!(
                 "## {}\n```json\n{}\n```\n![{}]({})\n",
-                name,
+                title,
                 json_str.trim(),
                 label,
                 fp_name,
