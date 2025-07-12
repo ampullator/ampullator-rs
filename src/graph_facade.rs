@@ -150,7 +150,9 @@ pub fn build_markdown_index(
         buffer_size: usize,
         total_samples: usize,
     ) -> Result<(), String> {
+
     let mut entries = Vec::new();
+    entries.push("# Ampullator\n\n".to_string());
 
     std::fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
@@ -161,7 +163,7 @@ pub fn build_markdown_index(
 
             println!("build_markdown_index: parsing: {:?}", path);
 
-            let json_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+            let json_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?.trim().to_string();
             let parsed: GraphFacade = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
 
             let title = parsed.title.clone().unwrap_or("title".to_string());
@@ -170,11 +172,7 @@ pub fn build_markdown_index(
             let fp_name = from_json_write_figures(&parsed, &output_dir, sample_rate, buffer_size, total_samples)?;
 
             entries.push(format!(
-                "## {}\n```json\n{}\n```\n![{}]({})\n",
-                title,
-                json_str.trim(),
-                label,
-                fp_name,
+                "## {title}\n```json\n{json_str}\n```\n![{label}]({fp_name})\n",
             ));
         }
     }
