@@ -240,6 +240,7 @@ impl UGen for UGSum {
         let out = &mut outputs[0];
         let len = out.len();
 
+        // TODO: use SIMD
         match inputs.len() {
             2 => {
                 let a = inputs[0];

@@ -3,7 +3,7 @@ use serde::Deserialize;
 use crate::GenGraph;
 use crate::ModeRound;
 use crate::ugen_core::UGen;
-use crate::ugen_core::{UGClock, UGSum, UGConst, UGRound};
+use crate::ugen_core::{UGClock, UGSum, UGConst, UGRound, UGWhite};
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
 use crate::util::UnitRate;
@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "0", content = "1")]
+#[serde(deny_unknown_fields, tag = "0", content = "1")]
 pub enum UGFacade {
     Const {
         value: Sample,
@@ -33,6 +33,9 @@ pub enum UGFacade {
     Sum {
         input_count: usize,
     },
+    White {
+        seed: Option<u64>,
+    },
 }
 
 impl UGFacade {
@@ -49,6 +52,7 @@ impl UGFacade {
                 Box::new(UGRound::new(*places, mode.clone()))
             },
             UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
+            UGFacade::White { seed } => Box::new(UGWhite::new(*seed)),
 
         }
     }
