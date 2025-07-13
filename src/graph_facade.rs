@@ -38,6 +38,7 @@ pub enum UGFacade {
     },
 }
 
+#[allow(unused)]
 impl UGFacade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
@@ -78,6 +79,7 @@ impl Facade {
 }
 
 //------------------------------------------------------------------------------
+// NOTE: we do not need these with the methods below
 
 pub fn register_many(graph: &mut GenGraph, j: &str) {
     let defs: HashMap<String, Facade> = serde_json::from_str(j).unwrap();
@@ -107,10 +109,11 @@ struct GraphFacade {
 
 fn register_and_connect(graph: &mut GenGraph, parsed: &GraphFacade) -> Result<(), String> {
     for (name, facade) in &parsed.register {
-        println!("{:?}", name);
+        println!("register: {:?}", name);
         graph.add_node(name, facade.to_ugen());
     }
     for (src, dst) in &parsed.connect {
+        println!("connect: {:?} -> {:?}", src, dst);
         graph.connect(&src, &dst);
     }
     Ok(())
@@ -128,9 +131,11 @@ fn from_json_write_figures(
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
     for (name, facade) in &parsed.register {
+        println!("register: {:?}: {:?}", name, facade);
         g.add_node(name, facade.to_ugen());
     }
     for (src, dst) in &parsed.connect {
+        println!("connect: {:?} -> {:?}", src, dst);
         g.connect(&src, &dst);
     }
 

@@ -3,14 +3,11 @@
     "label": "ug_white-mask_select",
     "register": {
         "clock": ["Clock", { "value": 10.0, "mode": "Samples" }],
-        "sel-upper": ["Select", {"values": [10, 20, 50], "mode": "Cycle"}],
-        "sel-lower": ["Select", {"values": [5, -15, -20, 0], "mode": "Cycle"}],
-        "sig": ["White", { "seed": null }]
+        "sel-a": ["Select", {"values": [10, 20, 50], "mode": "Cycle"}],
+        "sel-b": ["Select", {"values": [-15, -20, 0], "mode": "Cycle"}]
     },
     "connect": {
-        "clock.out": "sel-upper.trigger",
-        "clock.out": "sel-lower.trigger"
+        "clock.out": "sel-a.trigger",
+        "clock.out": "sel-b.trigger"
     }
 }
-
-// TODO: need to connect min and max of white; however, single clock is not driving both select
