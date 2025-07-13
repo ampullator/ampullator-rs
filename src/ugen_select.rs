@@ -247,6 +247,42 @@ mod tests {
         );
     }
 
+
+
+    #[test]
+    fn test_select_cycle_d() {
+        let mut g = GenGraph::new(8.0, 20);
+        register_many![g,
+            "clock" => UGClock::new(2.0, UnitRate::Samples),
+            "sel_a" => UGSelect::new(
+                vec![3.0, 6.0],
+                ModeSelect::Cycle,
+                Some(42)),
+            "sel_b" => UGSelect::new(
+                vec![-2.0, -4.0],
+                ModeSelect::Cycle,
+                Some(42)),
+        ];
+
+        connect_many![g,
+            "clock.out" -> "sel_a.trigger",
+            "clock.out" -> "sel_b.trigger",
+        ];
+
+        let r1 = Recorder::from_samples(g, None, 20);
+
+        assert_eq!(
+            r1.get_output_by_label("sel_a.out"),
+            vec![3.0, 3.0, 6.0, 6.0, 3.0, 3.0, 6.0, 6.0, 3.0, 3.0, 6.0, 6.0, 3.0, 3.0, 6.0, 6.0, 3.0, 3.0, 6.0, 6.0]
+        );
+
+        assert_eq!(
+            r1.get_output_by_label("sel_b.out"),
+            vec![-2.0, -2.0, -4.0, -4.0, -2.0, -2.0, -4.0, -4.0, -2.0, -2.0, -4.0, -4.0, -2.0, -2.0, -4.0, -4.0, -2.0, -2.0, -4.0, -4.0]
+        );
+    }
+
+
     //--------------------------------------------------------------------------
     #[test]
     fn test_select_walk_a() {
