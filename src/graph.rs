@@ -5,7 +5,10 @@ use std::collections::VecDeque;
 use crate::ugen_core::UGen;
 use crate::util::Sample;
 use crate::util::split_name;
-
+use std::process::Command;
+use tempfile::NamedTempFile;
+use std::io::Write;
+use std::path::Path;
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -272,6 +275,86 @@ impl GenGraph {
         }
         result
     }
+    //--------------------------------------------------------------------------
+
+    pub fn to_dot(&mut self) -> String {
+        self.update_execution_node_ids();
+
+        let mut dot = String::new();
+        dot.push_str("digraph GenGraph {\n");
+        dot.push_str("  rankdir=TB;\n");
+        dot.push_str("  node [shape=record, fontname=\"Helvetica\"];\n");
+
+        // Define nodes with input and output labels
+        for &node_id in self.execution_order.as_ref().unwrap() {
+            let node = &self.nodes[node_id.0];
+
+            let inputs = node
+                .node
+                .input_names()
+                .iter()
+                .enumerate()
+                .map(|(i, name)| format!("<in{}> {}", i, name))
+                .collect::<Vec<_>>()
+                .join("|");
+
+            let outputs = node
+                .node
+                .output_names()
+                .iter()
+                .enumerate()
+                .map(|(i, name)| format!("<out{}> {}", i, name))
+                .collect::<Vec<_>>()
+                .join("|");
+
+            let label = format!("{{{{{inputs}}}|{}|{{{outputs}}}}}", node.name);
+
+            dot.push_str(&format!(
+                "  {} [label=\"{}\"];\n",
+                node.name.replace('-', "_"), // sanitize for dot
+                label
+            ));
+        }
+
+        // Define edges
+        for &node_id in self.execution_order.as_ref().unwrap() {
+            let node = &self.nodes[node_id.0];
+            for edge in &node.inputs {
+                let src_node = &self.nodes[edge.src.0];
+                dot.push_str(&format!(
+                    "  {}:out{} -> {}:in{};\n",
+                    src_node.name.replace('-', "_"),
+                    edge.output_index,
+                    node.name.replace('-', "_"),
+                    edge.input_index
+                ));
+            }
+        }
+
+        dot.push_str("}\n");
+        dot
+    }
+
+
+    pub fn to_dot_fp(&mut self, fp: &Path) -> std::io::Result<()> {
+        let dot_content = self.to_dot();
+        let mut temp_file = NamedTempFile::new()?;
+        write!(temp_file, "{}", dot_content)?;
+
+        let status = Command::new("dot")
+            .arg("-Tpng")                      // or "-Tsvg" or another format
+            .arg(temp_file.path())            // input .dot file
+            .arg("-o")
+            .arg(fp)                          // output file path provided as argument
+            .status()?;
+
+        if !status.success() {
+            eprintln!("dot failed with exit code: {:?}", status.code());
+        }
+
+        Ok(())
+    }
+
 
     //--------------------------------------------------------------------------
     pub fn describe_json(&mut self) -> Value {

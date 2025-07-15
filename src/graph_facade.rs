@@ -129,7 +129,7 @@ impl GraphFacade {
 }
 
 fn from_json_write_figures(
-    parsed: &GraphFacade,
+    gf: &GraphFacade,
     dir: &Path,
     sample_rate: f32,
     buffer_size: usize,
@@ -138,26 +138,29 @@ fn from_json_write_figures(
     println!("from_json_write_figures: dir: {:?}", dir);
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
-    for (name, facade) in &parsed.register {
-        println!("register: {:?}: {:?}", name, facade);
-        g.add_node(name, facade.to_ugen());
-    }
-    for (src, dst) in &parsed.connect {
-        println!("connect: {:?} -> {:?}", src, dst);
-        g.connect(&src, &dst);
-    }
+    let _ = gf.register_and_connect(&mut g);
 
-    let name = parsed.label.clone().unwrap_or_else(|| "graph".to_string());
-    let file_name = format!("{name}_time-domain.png");
-    let out_path = dir.join(&file_name);
+    // for (name, facade) in &parsed.register {
+    //     println!("register: {:?}: {:?}", name, facade);
+    //     g.add_node(name, facade.to_ugen());
+    // }
+    // for (src, dst) in &parsed.connect {
+    //     println!("connect: {:?} -> {:?}", src, dst);
+    //     g.connect(&src, &dst);
+    // }
+
+    let name = gf.label.clone().unwrap_or_else(|| "graph".to_string());
+    let fn_time_domain = format!("{name}_time-domain.png");
+    let fn_time_graph = format!("{name}_graph.png");
+
+    let out_path = dir.join(&fn_time_domain);
 
     println!("from_json_write_figures: {:?}", out_path);
 
     let r1 = Recorder::from_samples(g, None, total_samples);
-
     r1.to_gnuplot_fp(out_path.to_str().unwrap()).unwrap();
 
-    Ok(file_name)
+    Ok(fn_time_domain)
 }
 
 pub fn build_markdown_index(
