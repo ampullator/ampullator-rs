@@ -6,8 +6,8 @@
         "clock_b": ["Clock", { "value": 5.0, "mode": "Samples" }],
         "mix": ["Sum", { "input_count": 2 }]
     },
-    "connect": {
-      "clock_a.out": "mix.in1",
-      "clock_b.out": "mix.in2"
-    }
+    "connect": [
+      ["clock_a.out", "mix.in1"],
+      ["clock_b.out", "mix.in2"]
+    ]
 }

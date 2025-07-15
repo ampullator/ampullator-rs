@@ -2,12 +2,15 @@
     "title": "White Noise Masking",
     "label": "ug_white-mask_select",
     "register": {
-        "clock": ["Clock", { "value": 10.0, "mode": "Samples" }],
-        "sel-a": ["Select", {"values": [10, 20, 50], "mode": "Cycle"}],
-        "sel-b": ["Select", {"values": [-15, -20, 0], "mode": "Cycle"}]
+        "clock": ["Clock", { "value": 20.0, "mode": "Samples" }],
+        "sel-a": ["Select", {"values": [5, 50, 25], "mode": "Cycle"}],
+        "sel-b": ["Select", {"values": [-5, -50, -25], "mode": "Cycle"}],
+        "sig": ["White", {}]
     },
-    "connect": {
-        "clock.out": "sel-a.trigger",
-        "clock.out": "sel-b.trigger"
-    }
+    "connect": [
+        ["clock.out", "sel-a.trigger"],
+        ["clock.out", "sel-b.trigger"],
+        ["sel-a.out", "sig.max"],
+        ["sel-b.out", "sig.min"]
+    ]
 }

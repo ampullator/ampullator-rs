@@ -2,12 +2,12 @@ use serde::Deserialize;
 
 use crate::GenGraph;
 use crate::ModeRound;
+use crate::Recorder;
 use crate::ugen_core::UGen;
-use crate::ugen_core::{UGClock, UGSum, UGConst, UGRound, UGWhite};
+use crate::ugen_core::{UGClock, UGConst, UGRound, UGSum, UGWhite};
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
 use crate::util::UnitRate;
-use crate::Recorder;
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -51,10 +51,9 @@ impl UGFacade {
             }
             UGFacade::Round { places, mode } => {
                 Box::new(UGRound::new(*places, mode.clone()))
-            },
+            }
             UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
             UGFacade::White { seed } => Box::new(UGWhite::new(*seed)),
-
         }
     }
 }
@@ -81,21 +80,21 @@ impl Facade {
 //------------------------------------------------------------------------------
 // NOTE: we do not need these with the methods below
 
-pub fn register_many(graph: &mut GenGraph, j: &str) {
-    let defs: HashMap<String, Facade> = serde_json::from_str(j).unwrap();
-    for (name, def) in defs {
-        graph.add_node(name, def.to_ugen());
-    }
-}
+// pub fn register_many(graph: &mut GenGraph, j: &str) {
+//     let defs: HashMap<String, Facade> = serde_json::from_str(j).unwrap();
+//     for (name, def) in defs {
+//         graph.add_node(name, def.to_ugen());
+//     }
+// }
 
 /// Connects nodes in a GenGraph using a JSON string of `"src": "dst"` mappings.
-pub fn connect_many(graph: &mut GenGraph, j: &str) {
-    let pairs: HashMap<String, String> =
-        serde_json::from_str(j).expect("Failed to parse connection JSON");
-    for (src, dst) in pairs {
-        graph.connect(&src, &dst);
-    }
-}
+// pub fn connect_many(graph: &mut GenGraph, j: &str) {
+//     let pairs: HashMap<String, String> =
+//         serde_json::from_str(j).expect("Failed to parse connection JSON");
+//     for (src, dst) in pairs {
+//         graph.connect(&src, &dst);
+//     }
+// }
 
 //------------------------------------------------------------------------------
 
@@ -104,19 +103,29 @@ struct GraphFacade {
     title: Option<String>,
     label: Option<String>,
     register: HashMap<String, Facade>,
-    connect: HashMap<String, String>,
+    connect: Vec<(String, String)>,
 }
 
-fn register_and_connect(graph: &mut GenGraph, parsed: &GraphFacade) -> Result<(), String> {
-    for (name, facade) in &parsed.register {
-        println!("register: {:?}", name);
-        graph.add_node(name, facade.to_ugen());
+impl GraphFacade {
+    pub fn from_json(json: &str) -> Result<Self, String> {
+        serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))
     }
-    for (src, dst) in &parsed.connect {
-        println!("connect: {:?} -> {:?}", src, dst);
-        graph.connect(&src, &dst);
+
+    pub fn register_and_connect(&self, graph: &mut GenGraph) -> Result<(), String> {
+        // Register all nodes
+        for (name, facade) in &self.register {
+            println!("register: {:?}", name);
+            graph.add_node(name, facade.to_ugen());
+        }
+
+        // Connect nodes
+        for (src, dst) in &self.connect {
+            println!("connect: {:?} -> {:?}", src, dst);
+            graph.connect(src, dst);
+        }
+
+        Ok(())
     }
-    Ok(())
 }
 
 fn from_json_write_figures(
@@ -126,7 +135,6 @@ fn from_json_write_figures(
     buffer_size: usize,
     total_samples: usize,
 ) -> Result<String, String> {
-
     println!("from_json_write_figures: dir: {:?}", dir);
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
@@ -153,13 +161,12 @@ fn from_json_write_figures(
 }
 
 pub fn build_markdown_index(
-        input_dir: &Path,
-        output_dir: &Path,
-        sample_rate: f32,
-        buffer_size: usize,
-        total_samples: usize,
-    ) -> Result<(), String> {
-
+    input_dir: &Path,
+    output_dir: &Path,
+    sample_rate: f32,
+    buffer_size: usize,
+    total_samples: usize,
+) -> Result<(), String> {
     let mut entries = Vec::new();
     entries.push("# Ampullator\n\n".to_string());
 
@@ -169,16 +176,25 @@ pub fn build_markdown_index(
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         if path.extension().map_or(false, |ext| ext == "json") {
-
             println!("build_markdown_index: parsing: {:?}", path);
 
-            let json_str = std::fs::read_to_string(&path).map_err(|e| e.to_string())?.trim().to_string();
-            let parsed: GraphFacade = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+            let json_str = std::fs::read_to_string(&path)
+                .map_err(|e| e.to_string())?
+                .trim()
+                .to_string();
+            let parsed: GraphFacade =
+                serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
 
             let title = parsed.title.clone().unwrap_or("title".to_string());
             let label = parsed.label.clone().unwrap_or("label".to_string());
 
-            let fp_name = from_json_write_figures(&parsed, &output_dir, sample_rate, buffer_size, total_samples)?;
+            let fp_name = from_json_write_figures(
+                &parsed,
+                &output_dir,
+                sample_rate,
+                buffer_size,
+                total_samples,
+            )?;
 
             entries.push(format!(
                 "## {title}\n```json\n{json_str}\n```\n![{label}]({fp_name})\n",
@@ -186,10 +202,10 @@ pub fn build_markdown_index(
         }
     }
 
-    std::fs::write(output_dir.join("index.md"), entries.join("\n")).map_err(|e| e.to_string())?;
+    std::fs::write(output_dir.join("index.md"), entries.join("\n"))
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
-
 
 //------------------------------------------------------------------------------
 #[cfg(test)]
@@ -212,40 +228,40 @@ mod tests {
 
     #[test]
     fn test_ug_facade_b() {
-        let json = r#"
-        {
-            "c1": ["Const", {"value": 1.0 }],
-            "c2": 4,
-            "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
-            "rounder": ["Round", { "places": 2, "mode": "Round" }]
+        let json = r#"{
+            "register" : {
+                "c1": ["Const", {"value": 1.0 }],
+                "c2": 4,
+                "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
+                "rounder": ["Round", { "places": 2, "mode": "Round" }]
+            },
+            "connect": []
         }
         "#;
 
+        let gf = GraphFacade::from_json(json).unwrap();
         let mut g = GenGraph::new(8.0, 8);
-        register_many(&mut g, json);
+        let _ = gf.register_and_connect(&mut g);
         assert_eq!(g.len(), 4);
     }
 
     #[test]
     fn test_ug_facade_c() {
-        let jr = r#"
-        {
+        let json = r#"{
+        "register": {
             "step": 1,
             "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
             "sel": ["Select", { "values": [10, 5, 15, 20], "mode": "Shuffle", "seed": 42 }]
-        }
+        },
+        "connect": [
+          ["clock.out", "sel.trigger"],
+          ["step.out", "sel.step"]
+        ]
+    }
         "#;
-
+        let gf = GraphFacade::from_json(json).unwrap();
         let mut g = GenGraph::new(8.0, 8);
-        register_many(&mut g, jr);
-
-        let jc = r#"
-        {
-          "clock.out": "sel.trigger",
-          "step.out": "sel.step"
-        }
-        "#;
-        connect_many(&mut g, jc);
+        let _ = gf.register_and_connect(&mut g);
         let r1 = Recorder::from_samples(g, None, 100);
 
         assert_eq!(
@@ -272,18 +288,19 @@ mod tests {
                 "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
                 "sel": ["Select", { "values": [10, 5, 15, 20], "mode": "Walk", "seed": 42 }]
             },
-            "connect": {
-              "clock.out": "sel.trigger",
-              "step.out": "sel.step"
-            }
+            "connect": [
+              ["clock.out", "sel.trigger"],
+              ["step.out", "sel.step"]
+            ]
         }
         "#;
 
         let mut g = GenGraph::new(8.0, 8);
 
-        let parsed: GraphFacade =
-        serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}")).unwrap();
-        let res = register_and_connect(&mut g, &parsed);
+        let gf: GraphFacade = serde_json::from_str(json)
+            .map_err(|e| format!("Failed to parse JSON: {e}"))
+            .unwrap();
+        let res = gf.register_and_connect(&mut g);
         assert!(res.is_ok(), "Failed to register/connect: {:?}", res);
 
         let r1 = Recorder::from_samples(g, None, 50);
@@ -299,8 +316,6 @@ mod tests {
             ]
         );
     }
-
-
 
     #[test]
     fn test_build_index_a() {
