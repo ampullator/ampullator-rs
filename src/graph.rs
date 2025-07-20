@@ -562,4 +562,21 @@ mod tests {
 
         assert_eq!(post, vec!["clock.out", "fq.out", "lpf.out", "r.out"]);
     }
+
+    #[test]
+    fn test_gen_graph_to_dot_a() {
+        let mut graph = GenGraph::new(44100.0, 128);
+
+        graph.add_node("note", Box::new(UGConst::new(69.0))); // A4
+        graph.add_node("conv", Box::new(UGAsHz::new(UnitRate::Midi)));
+        graph.add_node("osc", Box::new(UGSine::new()));
+
+        graph.connect("note.out", "conv.in");
+        graph.connect("conv.out", "osc.freq");
+
+        assert_eq!(
+            graph.to_dot().to_string(),
+            "digraph GenGraph {\n  rankdir=TB;\n  node [shape=record, fontname=\"Helvetica\"];\n  note [label=\"{{}|note|{<out0> out}}\"];\n  conv [label=\"{{<in0> in}|conv|{<out0> out}}\"];\n  osc [label=\"{{<in0> freq|<in1> phase|<in2> min|<in3> max}|osc|{<out0> wave|<out1> trigger}}\"];\n  note:out0 -> conv:in0;\n  conv:out0 -> osc:in0;\n}\n"
+        );
+    }
 }
