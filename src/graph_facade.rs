@@ -139,26 +139,18 @@ fn from_json_write_figures(
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
     let _ = gf.register_and_connect(&mut g);
-
-    // for (name, facade) in &parsed.register {
-    //     println!("register: {:?}: {:?}", name, facade);
-    //     g.add_node(name, facade.to_ugen());
-    // }
-    // for (src, dst) in &parsed.connect {
-    //     println!("connect: {:?} -> {:?}", src, dst);
-    //     g.connect(&src, &dst);
-    // }
-
     let name = gf.label.clone().unwrap_or_else(|| "graph".to_string());
+    let fn_graph = format!("{name}_graph.png");
     let fn_time_domain = format!("{name}_time-domain.png");
-    let fn_time_graph = format!("{name}_graph.png");
 
-    let out_path = dir.join(&fn_time_domain);
+    let fp_graph = dir.join(&fn_graph);
+    println!("from_json_write_figures: {:?}", fp_graph);
+    let _= g.to_dot_fp(&fp_graph);
 
-    println!("from_json_write_figures: {:?}", out_path);
-
+    let fp_time_domain = dir.join(&fn_time_domain);
+    println!("from_json_write_figures: {:?}", fp_time_domain);
     let r1 = Recorder::from_samples(g, None, total_samples);
-    r1.to_gnuplot_fp(out_path.to_str().unwrap()).unwrap();
+    r1.to_gnuplot_fp(fp_time_domain.to_str().unwrap()).unwrap();
 
     Ok(fn_time_domain)
 }

@@ -336,6 +336,7 @@ impl GenGraph {
     }
 
 
+
     pub fn to_dot_fp(&mut self, fp: &Path) -> std::io::Result<()> {
         let dot_content = self.to_dot();
         let mut temp_file = NamedTempFile::new()?;
