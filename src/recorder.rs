@@ -115,7 +115,7 @@ set multiplot
 "#,
         );
 
-        script.push_str(&format!("d = {}\n", d));
+        script.push_str(&format!("d = {d}\n"));
         script.push_str("margin = 0.04\n");
         script.push_str("height = 1.0 / d\n");
         script.push_str("pos = 1.0\n\n");
@@ -131,9 +131,9 @@ set multiplot
             let block_label = label.replace(['.', '-', ' '], "_");
 
             // Data block
-            script.push_str(&format!("${} << EOD\n", block_label));
-            for v in &*values {
-                script.push_str(&format!("{}\n", v));
+            script.push_str(&format!("${block_label} << EOD\n"));
+            for v in values {
+                script.push_str(&format!("{v}\n"));
             }
             script.push_str("EOD\n");
 
@@ -162,7 +162,7 @@ plot ${} using 1 with linespoints linestyle {}
 
         script.push_str("unset multiplot\n");
         for i in 1..=d {
-            script.push_str(&format!("unset label {}\n", i));
+            script.push_str(&format!("unset label {i}\n"));
         }
 
         script

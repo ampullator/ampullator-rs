@@ -133,7 +133,6 @@ impl GraphFacade {
         buffer_size: usize,
         total_samples: usize,
     ) -> Result<(String, String), String> {
-
         let mut g = GenGraph::new(sample_rate, buffer_size);
         let _ = self.register_and_connect(&mut g);
 
@@ -144,7 +143,7 @@ impl GraphFacade {
         let fn_time_domain = format!("{name}_time-domain.png");
 
         let fp_graph = dir.join(&fn_graph);
-        let _= g.to_dot_fp(&fp_graph);
+        let _ = g.to_dot_fp(&fp_graph);
 
         let fp_time_domain = dir.join(&fn_time_domain);
         let r1 = Recorder::from_samples(g, None, total_samples);
@@ -153,8 +152,6 @@ impl GraphFacade {
         Ok((fn_graph, fn_time_domain))
     }
 }
-
-
 
 pub fn build_markdown_index(
     input_dir: &Path,
@@ -191,9 +188,13 @@ pub fn build_markdown_index(
                 total_samples,
             )?;
 
-            entries.push(format!(
-                "## {title}\n```json\n{json_str}\n```\n![{label}]({fn_graph})\n![{label}]({fn_time_domain})\n",
-            ));
+            entries.push(format!("## {title}"));
+            entries.push("```json".to_string());
+            entries.push(json_str.clone()); // clone because used in formatting
+            entries.push("```".to_string());
+            entries.push(format!("![{label}]({fn_graph})"));
+            entries.push(format!("![{label}]({fn_time_domain})"));
+            entries.push("".to_string()); // blank line for spacing
         }
     }
 

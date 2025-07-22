@@ -6,7 +6,7 @@ pub type Sample = f32;
 
 pub(crate) fn split_name(s: &str) -> (&str, &str) {
     s.rsplit_once('.')
-        .unwrap_or_else(|| panic!("Expected 'name.port', got: '{}'", s))
+        .unwrap_or_else(|| panic!("Expected 'name.port', got: '{s}'"))
 }
 
 //------------------------------------------------------------------------------
@@ -30,7 +30,7 @@ impl FromStr for UnitRate {
             "samples" | "spc" => Ok(UnitRate::Samples),
             "midi" => Ok(UnitRate::Midi),
             "bpm" => Ok(UnitRate::Bpm),
-            _ => Err(format!("Unknown frequency unit: {}", s)),
+            _ => Err(format!("Unknown frequency unit: {s}")),
         }
     }
 }

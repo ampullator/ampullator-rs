@@ -55,7 +55,7 @@ impl UGen for UGPulseSelect {
         sample_rate: f32,
         time_sample: usize,
     ) {
-        let clock = inputs.get(0).copied().unwrap_or(&[]);
+        let clock = inputs.first().copied().unwrap_or(&[]);
         let step = inputs.get(1).copied().unwrap_or(&[]);
         let out = &mut outputs[0];
 

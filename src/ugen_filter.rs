@@ -52,7 +52,7 @@ impl UGen for UGLowPass {
                 .unwrap_or(1000.0)
                 .clamp(1.0, sample_rate / 2.0);
             let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
-            println!("g: {:?}", g);
+            println!("g: {g:?}");
 
             let mut y = x;
             for p in 0..self.poles {

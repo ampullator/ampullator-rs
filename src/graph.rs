@@ -5,10 +5,10 @@ use std::collections::VecDeque;
 use crate::ugen_core::UGen;
 use crate::util::Sample;
 use crate::util::split_name;
-use std::process::Command;
-use tempfile::NamedTempFile;
 use std::io::Write;
 use std::path::Path;
+use std::process::Command;
+use tempfile::NamedTempFile;
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -284,7 +284,7 @@ impl GenGraph {
         dot.push_str("digraph GenGraph {\n");
         dot.push_str("  rankdir=TB;\n");
         dot.push_str("  bgcolor=\"#12131E\";\n");
-        dot.push_str("  node [shape=record, fontsize=8, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n");
+        dot.push_str("  node [shape=record, fontsize=9, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n");
         dot.push_str("  edge [color=\"#c4c5bf\"];\n");
 
         // Define nodes with input and output labels
@@ -341,18 +341,16 @@ impl GenGraph {
         dot
     }
 
-
-
     pub fn to_dot_fp(&mut self, fp: &Path) -> std::io::Result<()> {
         let dot_content = self.to_dot();
         let mut temp_file = NamedTempFile::new()?;
         write!(temp_file, "{}", dot_content)?;
 
         let status = Command::new("dot")
-            .arg("-Tpng")                      // or "-Tsvg" or another format
-            .arg(temp_file.path())            // input .dot file
+            .arg("-Tpng") // or "-Tsvg" or another format
+            .arg(temp_file.path()) // input .dot file
             .arg("-o")
-            .arg(fp)                          // output file path provided as argument
+            .arg(fp) // output file path provided as argument
             .status()?;
 
         if !status.success() {
@@ -361,7 +359,6 @@ impl GenGraph {
 
         Ok(())
     }
-
 
     //--------------------------------------------------------------------------
     pub fn describe_json(&mut self) -> Value {
@@ -583,7 +580,7 @@ mod tests {
 
         assert_eq!(
             graph.to_dot().to_string(),
-            "digraph GenGraph {\n  rankdir=TB;\n  bgcolor=\"#12131E\";\n  node [shape=record, fontsize=8, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n  edge [color=\"#c4c5bf\"];\n  note [label=\"{{}|UGConst: note|{<out0> out}}\"];\n  conv [label=\"{{<in0> in}|UGAsHz: conv|{<out0> out}}\"];\n  osc [label=\"{{<in0> freq|<in1> phase|<in2> min|<in3> max}|UGSine: osc|{<out0> wave|<out1> trigger}}\"];\n  note:out0:s -> conv:in0:n;\n  conv:out0:s -> osc:in0:n;\n}\n"
+            "digraph GenGraph {\n  rankdir=TB;\n  bgcolor=\"#12131E\";\n  node [shape=record, fontsize=9, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n  edge [color=\"#c4c5bf\"];\n  note [label=\"{{}|UGConst: note|{<out0> out}}\"];\n  conv [label=\"{{<in0> in}|UGAsHz: conv|{<out0> out}}\"];\n  osc [label=\"{{<in0> freq|<in1> phase|<in2> min|<in3> max}|UGSine: osc|{<out0> wave|<out1> trigger}}\"];\n  note:out0:s -> conv:in0:n;\n  conv:out0:s -> osc:in0:n;\n}\n"
         );
     }
 }

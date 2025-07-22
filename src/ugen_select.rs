@@ -90,7 +90,7 @@ impl UGen for UGSelect {
         _sample_rate: f32,
         _time_sample: usize,
     ) {
-        let trigger = inputs.get(0).copied().unwrap_or(&[]);
+        let trigger = inputs.first().copied().unwrap_or(&[]);
         let step = inputs.get(1).copied().unwrap_or(&[]);
         let out = &mut outputs[0];
 

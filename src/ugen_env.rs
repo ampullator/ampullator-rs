@@ -65,7 +65,7 @@ impl UGen for UGEnvBreakPoint {
         sample_rate: f32,
         time_sample: usize,
     ) {
-        let clock = inputs.get(0).copied().unwrap_or(&[]);
+        let clock = inputs.first().copied().unwrap_or(&[]);
         let step = inputs.get(1).copied().unwrap_or(&[]);
         let out = &mut outputs[0];
 
@@ -169,7 +169,7 @@ impl UGen for UGEnvAR {
         _sample_rate: f32,
         _time_sample: usize,
     ) {
-        let trigger = inputs.get(0).copied().unwrap_or(&[]);
+        let trigger = inputs.first().copied().unwrap_or(&[]);
         let att_dur = inputs.get(1).copied().unwrap_or(&[]);
         let rel_dur = inputs.get(2).copied().unwrap_or(&[]);
         let att_curve = inputs.get(3).copied().unwrap_or(&[]);

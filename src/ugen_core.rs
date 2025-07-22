@@ -106,7 +106,7 @@ impl UGen for UGAsHz {
         sample_rate: f32,
         _time_sample: usize,
     ) {
-        let input = inputs.get(0).copied().unwrap_or(&[]);
+        let input = inputs.first().copied().unwrap_or(&[]);
         let out = &mut outputs[0];
         for i in 0..out.len() {
             let x = input.get(i).copied().unwrap_or(0.0);
@@ -165,7 +165,7 @@ impl UGen for UGRound {
         _sample_rate: f32,
         _time_sample: usize,
     ) {
-        let input = inputs.get(0).copied().unwrap_or(&[]);
+        let input = inputs.first().copied().unwrap_or(&[]);
         let out = &mut outputs[0];
 
         let factor = self.factor;
@@ -205,7 +205,7 @@ impl UGSum {
         }
         // input labels wil start with in1, ..., inN
         let input_labels: Vec<String> =
-            (1..input_count + 1).map(|i| format!("in{}", i)).collect();
+            (1..input_count + 1).map(|i| format!("in{i}")).collect();
         // println!("{:?}", input_labels);
         // Promote to 'static using Box::leak safely
         let input_refs: Vec<&'static str> = input_labels
@@ -306,7 +306,7 @@ impl UGen for UGWhite {
     }
 
     fn describe_config(&self) -> Option<String> {
-        self.seed.map(|s| format!("seed = {}", s))
+        self.seed.map(|s| format!("seed = {s}"))
     }
 
     fn process(
@@ -316,7 +316,7 @@ impl UGen for UGWhite {
         _sample_rate: f32,
         _time_sample: usize,
     ) {
-        let min_in = inputs.get(0).copied().unwrap_or(&[]);
+        let min_in = inputs.first().copied().unwrap_or(&[]);
         let max_in = inputs.get(1).copied().unwrap_or(&[]);
 
         let out = &mut outputs[0];
@@ -380,7 +380,7 @@ impl UGen for UGSine {
         sample_rate: f32,
         _time_sample: usize,
     ) {
-        let freq_in = inputs.get(0).copied().unwrap_or(&[]);
+        let freq_in = inputs.first().copied().unwrap_or(&[]);
         let phase_in = inputs.get(1).copied().unwrap_or(&[]);
         let min_in = inputs.get(2).copied().unwrap_or(&[]);
         let max_in = inputs.get(3).copied().unwrap_or(&[]);
@@ -520,7 +520,7 @@ impl UGen for UGClock {
         sample_rate: f32,
         _time_sample: usize,
     ) {
-        let enabled = inputs.get(0).copied().unwrap_or(&[]);
+        let enabled = inputs.first().copied().unwrap_or(&[]);
         let out = &mut outputs[0];
         let hz = unit_rate_to_hz(self.value, self.mode, sample_rate);
         let phase_inc = hz / sample_rate;
