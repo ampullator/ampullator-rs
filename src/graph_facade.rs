@@ -134,7 +134,7 @@ fn from_json_write_figures(
     sample_rate: f32,
     buffer_size: usize,
     total_samples: usize,
-) -> Result<String, String> {
+) -> Result<(String, String), String> {
     println!("from_json_write_figures: dir: {:?}", dir);
 
     let mut g = GenGraph::new(sample_rate, buffer_size);
@@ -152,7 +152,7 @@ fn from_json_write_figures(
     let r1 = Recorder::from_samples(g, None, total_samples);
     r1.to_gnuplot_fp(fp_time_domain.to_str().unwrap()).unwrap();
 
-    Ok(fn_time_domain)
+    Ok((fn_graph, fn_time_domain))
 }
 
 pub fn build_markdown_index(
@@ -183,7 +183,7 @@ pub fn build_markdown_index(
             let title = parsed.title.clone().unwrap_or("title".to_string());
             let label = parsed.label.clone().unwrap_or("label".to_string());
 
-            let fp_name = from_json_write_figures(
+            let (fn_graph, fn_time_domain) = from_json_write_figures(
                 &parsed,
                 &output_dir,
                 sample_rate,
@@ -192,7 +192,7 @@ pub fn build_markdown_index(
             )?;
 
             entries.push(format!(
-                "## {title}\n```json\n{json_str}\n```\n![{label}]({fp_name})\n",
+                "## {title}\n```json\n{json_str}\n```\n![{label}]({fn_graph})\n![{label}]({fn_time_domain})\n",
             ));
         }
     }

@@ -119,7 +119,6 @@ set multiplot
         script.push_str("margin = 0.04\n");
         script.push_str("height = 1.0 / d\n");
         script.push_str("pos = 1.0\n\n");
-
         script.push_str("label_x = 0.06\n");
         script.push_str("label_font = \",9\"\n\n");
 

@@ -283,7 +283,9 @@ impl GenGraph {
         let mut dot = String::new();
         dot.push_str("digraph GenGraph {\n");
         dot.push_str("  rankdir=TB;\n");
-        dot.push_str("  node [shape=record, fontname=\"Helvetica\"];\n");
+        dot.push_str("  bgcolor=\"#12131E\";\n");
+        dot.push_str("  node [shape=record, fontsize=8, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n");
+        dot.push_str("  edge [color=\"#c4c5bf\"];\n");
 
         // Define nodes with input and output labels
         for &node_id in self.execution_order.as_ref().unwrap() {
@@ -307,7 +309,11 @@ impl GenGraph {
                 .collect::<Vec<_>>()
                 .join("|");
 
-            let label = format!("{{{{{inputs}}}|{}|{{{outputs}}}}}", node.name);
+            let label = format!(
+                "{{{{{inputs}}}|{}: {}|{{{outputs}}}}}",
+                node.node.type_name(),
+                node.name
+            );
 
             dot.push_str(&format!(
                 "  {} [label=\"{}\"];\n",
@@ -322,7 +328,7 @@ impl GenGraph {
             for edge in &node.inputs {
                 let src_node = &self.nodes[edge.src.0];
                 dot.push_str(&format!(
-                    "  {}:out{} -> {}:in{};\n",
+                    "  {}:out{}:s -> {}:in{}:n;\n",
                     src_node.name.replace('-', "_"),
                     edge.output_index,
                     node.name.replace('-', "_"),
