@@ -117,43 +117,44 @@ impl GraphFacade {
             println!("register: {:?}", name);
             graph.add_node(name, facade.to_ugen());
         }
-
         // Connect nodes
         for (src, dst) in &self.connect {
             println!("connect: {:?} -> {:?}", src, dst);
             graph.connect(src, dst);
         }
-
         Ok(())
+    }
+
+    /// Based on this GraphFacade, create a Graph and render both a graph figure and a time-domain plot figure.
+    fn to_rendered_figures(
+        &self,
+        dir: &Path,
+        sample_rate: f32,
+        buffer_size: usize,
+        total_samples: usize,
+    ) -> Result<(String, String), String> {
+
+        let mut g = GenGraph::new(sample_rate, buffer_size);
+        let _ = self.register_and_connect(&mut g);
+
+        let name = self.label.clone().unwrap_or_else(|| "graph".to_string());
+
+        // presently hard-coded to produce png; might produce svg
+        let fn_graph = format!("{name}_graph.png");
+        let fn_time_domain = format!("{name}_time-domain.png");
+
+        let fp_graph = dir.join(&fn_graph);
+        let _= g.to_dot_fp(&fp_graph);
+
+        let fp_time_domain = dir.join(&fn_time_domain);
+        let r1 = Recorder::from_samples(g, None, total_samples);
+        r1.to_gnuplot_fp(fp_time_domain.to_str().unwrap()).unwrap();
+
+        Ok((fn_graph, fn_time_domain))
     }
 }
 
-fn from_json_write_figures(
-    gf: &GraphFacade,
-    dir: &Path,
-    sample_rate: f32,
-    buffer_size: usize,
-    total_samples: usize,
-) -> Result<(String, String), String> {
-    println!("from_json_write_figures: dir: {:?}", dir);
 
-    let mut g = GenGraph::new(sample_rate, buffer_size);
-    let _ = gf.register_and_connect(&mut g);
-    let name = gf.label.clone().unwrap_or_else(|| "graph".to_string());
-    let fn_graph = format!("{name}_graph.png");
-    let fn_time_domain = format!("{name}_time-domain.png");
-
-    let fp_graph = dir.join(&fn_graph);
-    println!("from_json_write_figures: {:?}", fp_graph);
-    let _= g.to_dot_fp(&fp_graph);
-
-    let fp_time_domain = dir.join(&fn_time_domain);
-    println!("from_json_write_figures: {:?}", fp_time_domain);
-    let r1 = Recorder::from_samples(g, None, total_samples);
-    r1.to_gnuplot_fp(fp_time_domain.to_str().unwrap()).unwrap();
-
-    Ok((fn_graph, fn_time_domain))
-}
 
 pub fn build_markdown_index(
     input_dir: &Path,
@@ -183,8 +184,7 @@ pub fn build_markdown_index(
             let title = parsed.title.clone().unwrap_or("title".to_string());
             let label = parsed.label.clone().unwrap_or("label".to_string());
 
-            let (fn_graph, fn_time_domain) = from_json_write_figures(
-                &parsed,
+            let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(
                 &output_dir,
                 sample_rate,
                 buffer_size,
