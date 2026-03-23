@@ -9,6 +9,8 @@ use crate::util::unit_rate_to_hz;
 
 /// Load 8 contiguous f32 values starting at `offset` from `slice` into an `f32x8` SIMD lane.
 /// The caller must ensure `slice.len() >= offset + 8`.
+/// On processors without SIMD support, `wide::f32x8` automatically falls back to scalar
+/// operations, preserving correctness on all platforms.
 #[inline(always)]
 fn simd_load(slice: &[f32], offset: usize) -> f32x8 {
     f32x8::from(<[f32; 8]>::try_from(&slice[offset..offset + 8]).unwrap())
