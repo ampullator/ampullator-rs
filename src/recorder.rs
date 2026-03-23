@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_recorder_a() {
-        let mut g = GenGraph::new(8.0, 10);
+        let mut g = GenGraph::new(8.0, 8);
         register_many![g,
             "clock" => UGClock::new(16.0, UnitRate::Samples),
             "env" => UGEnvAR::new(),
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_recorder_b() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(16.0, UnitRate::Samples),
             "env" => UGEnvAR::new(),
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_recorder_c() {
-        let mut g = GenGraph::new(10.0, 20);
+        let mut g = GenGraph::new(10.0, 16);
         register_many![g,
             "fq" => 0.5,
             "osc" => UGSine::new(),

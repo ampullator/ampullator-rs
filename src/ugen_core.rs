@@ -1,10 +1,18 @@
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde::Serialize;
+use wide::f32x8;
 
 use crate::util::Sample;
 use crate::util::UnitRate;
 use crate::util::unit_rate_to_hz;
+
+/// Load 8 contiguous f32 values starting at `offset` from `slice` into an `f32x8` SIMD lane.
+/// The caller must ensure `slice.len() >= offset + 8`.
+#[inline(always)]
+fn simd_load(slice: &[f32], offset: usize) -> f32x8 {
+    f32x8::from(<[f32; 8]>::try_from(&slice[offset..offset + 8]).unwrap())
+}
 
 //------------------------------------------------------------------------------
 
@@ -239,23 +247,96 @@ impl UGen for UGSum {
     ) {
         let out = &mut outputs[0];
         let len = out.len();
+        let chunks = len / 8;
 
-        // TODO: use SIMD
         match inputs.len() {
             2 => {
                 let a = inputs[0];
                 let b = inputs[1];
-                for i in 0..len {
-                    out[i] = a[i] + b[i];
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let result = simd_load(a, i) + simd_load(b, i);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
                 }
             }
             _ => {
-                for i in 0..len {
-                    let mut acc = 0.0;
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let mut acc = f32x8::splat(0.0_f32);
                     for input in inputs {
-                        acc += input[i];
+                        acc += simd_load(input, i);
                     }
-                    out[i] = acc;
+                    out[i..i + 8].copy_from_slice(&acc.to_array());
+                }
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
+pub struct UGMult {
+    input_refs: Vec<&'static str>,
+}
+
+impl UGMult {
+    pub fn new(input_count: usize) -> Self {
+        if input_count <= 1 {
+            panic!("Input count should be greater than 1");
+        }
+        let input_labels: Vec<String> =
+            (1..input_count + 1).map(|i| format!("in{i}")).collect();
+        let input_refs: Vec<&'static str> = input_labels
+            .iter()
+            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
+            .collect();
+
+        Self { input_refs }
+    }
+}
+
+impl UGen for UGMult {
+    fn type_name(&self) -> &'static str {
+        "UGMult"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &self.input_refs
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let out = &mut outputs[0];
+        let len = out.len();
+        let chunks = len / 8;
+
+        match inputs.len() {
+            2 => {
+                let a = inputs[0];
+                let b = inputs[1];
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let result = simd_load(a, i) * simd_load(b, i);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
+                }
+            }
+            _ => {
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let mut acc = f32x8::splat(1.0_f32);
+                    for input in inputs {
+                        acc *= simd_load(input, i);
+                    }
+                    out[i..i + 8].copy_from_slice(&acc.to_array());
                 }
             }
         }
@@ -584,6 +665,48 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("s1.out"),
             vec![5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0, 5.0]
+        )
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mult_a() {
+        let mut g = GenGraph::new(120.0, 8);
+        register_many![g,
+            "c1" => 3,
+            "c2" => 2,
+            "m1" => UGMult::new(2),
+        ];
+        connect_many![g,
+        "c1.out" -> "m1.in1",
+        "c2.out" -> "m1.in2",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("m1.out"),
+            vec![6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0, 6.0]
+        )
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mult_b() {
+        let mut g = GenGraph::new(120.0, 8);
+        register_many![g,
+            "c1" => 3,
+            "c2" => 2,
+            "c3" => 4,
+            "m1" => UGMult::new(3),
+        ];
+        connect_many![g,
+        "c1.out" -> "m1.in1",
+        "c2.out" -> "m1.in2",
+        "c3.out" -> "m1.in3",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("m1.out"),
+            vec![24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0]
         )
     }
 

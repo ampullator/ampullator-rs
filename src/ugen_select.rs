@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_select_cycle_b() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock1" => UGClock::new(5.0, UnitRate::Samples),
             "clock2" => UGClock::new(13.0, UnitRate::Samples),
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_select_cycle_c() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock1" => UGClock::new(2.0, UnitRate::Samples),
             "clock2" => UGClock::new(9.0, UnitRate::Samples),
@@ -249,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_select_cycle_d() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(2.0, UnitRate::Samples),
             "sel_a" => UGSelect::new(
@@ -289,7 +289,7 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_select_walk_a() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(2.0, UnitRate::Samples),
             "step" => 1,
@@ -323,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_select_walk_b() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock1" => UGClock::new(2.0, UnitRate::Samples),
             "clock2" => UGClock::new(12.0, UnitRate::Samples),
@@ -384,7 +384,7 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_select_shuffle_a() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![
             g,
             "s1" => UGSelect::new(
@@ -400,7 +400,7 @@ mod tests {
             g.get_output_by_label("s1.out"),
             vec![
                 10.0, 20.0, 50.0, 3.0, 99.0, 20.0, 99.0, 10.0, 50.0, 3.0, 50.0, 20.0,
-                10.0, 3.0, 99.0, 10.0, 50.0, 3.0, 99.0, 20.0
+                10.0, 3.0, 99.0, 10.0
             ]
         );
         assert_eq!(
@@ -412,14 +412,14 @@ c1 <UGConst {value = 1.000}>
 s1 <UGSelect {values = [3.0, 10.0, 20.0, 50.0, 99.0], mode = shuffle}>
 trigger ← c1.out
 step ←= 1.000
-→ out ≊ 20.000
+→ out ≊ 10.000
 "#
         );
     }
 
     #[test]
     fn test_select_shuffle_b() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(2.0, UnitRate::Samples),
             "step" => 1,
@@ -454,7 +454,7 @@ step ←= 1.000
     //--------------------------------------------------------------------------
     #[test]
     fn test_select_random_a() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(2.0, UnitRate::Samples),
             "step" => 1,

@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_pulse_select_a() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(1.0, UnitRate::Samples),
             "step" => 1,
@@ -135,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_pulse_select_b() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(2.0, UnitRate::Samples),
             "step" => 1,
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_pulse_select_c() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(2.0, UnitRate::Samples),
             "step" => 1,

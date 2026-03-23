@@ -11,7 +11,8 @@ mod util;
 pub use recorder::Recorder;
 
 pub use ugen_core::{
-    ModeRound, UGAsHz, UGClock, UGConst, UGRound, UGSine, UGSum, UGTrigger, UGWhite, UGen,
+    ModeRound, UGAsHz, UGClock, UGConst, UGMult, UGRound, UGSine, UGSum, UGTrigger, UGWhite,
+    UGen,
 };
 
 pub use ugen_select::{ModeSelect, UGSelect};

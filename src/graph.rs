@@ -47,6 +47,10 @@ pub struct GenGraph {
 impl GenGraph {
     /// Create a new graph. Creates an empty Vec and HashMap for storing `nodes`` and `name_to_node_id``.
     pub fn new(sample_rate: f32, buffer_size: usize) -> Self {
+        assert!(
+            buffer_size % 8 == 0 && buffer_size > 0,
+            "buffer_size must be a non-zero multiple of 8 (SIMD lane width), got {buffer_size}"
+        );
         Self {
             nodes: Vec::new(),
             name_to_node_id: HashMap::new(),
@@ -552,7 +556,7 @@ mod tests {
 
     #[test]
     fn test_get_outputs_a() {
-        let mut g = GenGraph::new(2000.0, 20);
+        let mut g = GenGraph::new(2000.0, 16);
         register_many![g,
             "clock" => UGClock::new(20.0, UnitRate::Samples),
             "lpf" => UGLowPass::new(12.0),
