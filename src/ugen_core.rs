@@ -210,6 +210,88 @@ impl UGen for UGRound {
 
 //------------------------------------------------------------------------------
 
+pub struct UGFloor;
+
+impl UGFloor {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl UGen for UGFloor {
+    fn type_name(&self) -> &'static str {
+        "UGFloor"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["in"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs[0];
+        let out = &mut outputs[0];
+        let chunks = out.len() / 8;
+        for c in 0..chunks {
+            let i = c * 8;
+            let result = simd_load(input, i).floor();
+            out[i..i + 8].copy_from_slice(&result.to_array());
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
+pub struct UGCeil;
+
+impl UGCeil {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl UGen for UGCeil {
+    fn type_name(&self) -> &'static str {
+        "UGCeil"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["in"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs[0];
+        let out = &mut outputs[0];
+        let chunks = out.len() / 8;
+        for c in 0..chunks {
+            let i = c * 8;
+            let result = simd_load(input, i).ceil();
+            out[i..i + 8].copy_from_slice(&result.to_array());
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
 pub struct UGSum {
     input_refs: Vec<&'static str>,
 }
@@ -715,6 +797,49 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("m1.out"),
             vec![24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0, 24.0]
+        )
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_floor_a() {
+        let mut g = GenGraph::new(120.0, 8);
+        register_many![g,
+            "c1" => 2.7,
+            "f1" => UGFloor::new(),
+        ];
+        connect_many![g,
+        "c1.out" -> "f1.in",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("f1.out"),
+            vec![2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0]
+        )
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_ceil_a() {
+        let mut g = GenGraph::new(120.0, 8);
+        register_many![g,
+            "c1" => 2.3,
+            "c1_neg" => -0.7,
+            "cg1" => UGCeil::new(),
+            "cg2" => UGCeil::new(),
+        ];
+        connect_many![g,
+        "c1.out" -> "cg1.in",
+        "c1_neg.out" -> "cg2.in",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("cg1.out"),
+            vec![3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("cg2.out"),
+            vec![-0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0, -0.0]
         )
     }
 
