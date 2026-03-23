@@ -74,8 +74,11 @@ impl UGen for UGConst {
         _time_sample: usize,
     ) {
         let out = &mut outputs[0];
-        for v in out.iter_mut() {
-            *v = self.value;
+        let chunks = out.len() / 8;
+        let v = f32x8::splat(self.value);
+        for c in 0..chunks {
+            let i = c * 8;
+            out[i..i + 8].copy_from_slice(&v.to_array());
         }
     }
 }
@@ -175,27 +178,30 @@ impl UGen for UGRound {
         _sample_rate: f32,
         _time_sample: usize,
     ) {
-        let input = inputs.first().copied().unwrap_or(&[]);
+        let input = inputs[0];
         let out = &mut outputs[0];
-
-        let factor = self.factor;
+        let chunks = out.len() / 8;
+        let factor_v = f32x8::splat(self.factor);
         match self.mode {
             ModeRound::Round => {
-                for (i, v) in out.iter_mut().enumerate() {
-                    let x = input.get(i).copied().unwrap_or(0.0);
-                    *v = (x * factor).round() / factor;
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let result = (simd_load(input, i) * factor_v).round() / factor_v;
+                    out[i..i + 8].copy_from_slice(&result.to_array());
                 }
             }
             ModeRound::Floor => {
-                for (i, v) in out.iter_mut().enumerate() {
-                    let x = input.get(i).copied().unwrap_or(0.0);
-                    *v = (x * factor).floor() / factor;
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let result = (simd_load(input, i) * factor_v).floor() / factor_v;
+                    out[i..i + 8].copy_from_slice(&result.to_array());
                 }
             }
             ModeRound::Ceil => {
-                for (i, v) in out.iter_mut().enumerate() {
-                    let x = input.get(i).copied().unwrap_or(0.0);
-                    *v = (x * factor).ceil() / factor;
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let result = (simd_load(input, i) * factor_v).ceil() / factor_v;
+                    out[i..i + 8].copy_from_slice(&result.to_array());
                 }
             }
         }
