@@ -5,6 +5,7 @@ use crate::GenGraph;
 use std::collections::HashSet;
 use std::path::Path;
 
+use hound;
 use std::io::Write;
 use std::process::Command;
 use tempfile::NamedTempFile;
@@ -56,11 +57,25 @@ impl Recorder {
             samples.truncate(total_samples);
         }
 
+        let output_names = match output_labels {
+            Some(labels) => labels,
+            None => graph.get_node_output_names(),
+        };
+
         Self {
             sample_rate,
             recorded,
-            output_names: graph.get_node_output_names(),
+            output_names,
         }
+    }
+
+    pub fn from_duration(
+        graph: GenGraph,
+        output_labels: Option<Vec<String>>,
+        duration_seconds: f32,
+    ) -> Self {
+        let total_samples = (duration_seconds * graph.sample_rate).round() as usize;
+        Self::from_samples(graph, output_labels, total_samples)
     }
 
     //--------------------------------------------------------------------------
@@ -75,6 +90,33 @@ impl Recorder {
         self.recorded
             .get(label)
             .expect(format!("No such label: {}", label).as_str())
+    }
+
+    //--------------------------------------------------------------------------
+    /// Write all recorded outputs to a multi-channel WAV file at `fp`.
+    /// Each output in `output_names` becomes a distinct channel, in order.
+    /// Samples are written interleaved as 32-bit floats at the graph's sample rate.
+    /// All channels are the same length after recording; any channel shorter than
+    /// the maximum length is zero-padded for completeness.
+    pub fn to_wav(&self, fp: &Path) -> Result<(), hound::Error> {
+        let channels = self.output_names.len() as u16;
+        let spec = hound::WavSpec {
+            channels,
+            sample_rate: self.sample_rate as u32,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut writer = hound::WavWriter::create(fp, spec)?;
+        let (_, length) = self.get_shape();
+        for i in 0..length {
+            for name in &self.output_names {
+                let samples = &self.recorded[name];
+                let sample: f32 = if i < samples.len() { samples[i] } else { 0.0 };
+                writer.write_sample(sample)?;
+            }
+        }
+        writer.finalize()?;
+        Ok(())
     }
 
     //--------------------------------------------------------------------------
@@ -238,6 +280,145 @@ mod tests {
         let output_labels = Some(vec!["round.out".to_string()]);
         let r1 = Recorder::from_samples(g, output_labels, 120);
         assert_eq!(r1.get_shape(), (1, 120));
+    }
+
+    #[test]
+    fn test_recorder_from_duration() {
+        let mut g = GenGraph::new(10.0, 8);
+        register_many![g,
+            "fq" => 0.5,
+            "osc" => UGSine::new(),
+        ];
+        connect_many![g, "fq.out" -> "osc.freq"];
+
+        // 1.0 second at 10 Hz sample rate => 10 samples
+        // "fq" has 1 output, "osc" (UGSine) has 2 outputs (wave, trigger) → 3 channels
+        let r1 = Recorder::from_duration(g, None, 1.0);
+        assert_eq!(r1.get_shape(), (3, 10));
+    }
+
+    #[test]
+    fn test_recorder_output_names_ordered_from_labels() {
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "clock" => UGClock::new(16.0, UnitRate::Samples),
+            "env" => UGEnvAR::new(),
+            "a" => 4,
+            "r" => 8,
+            "round" => UGRound::new(4, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "env.trigger",
+            "a.out" -> "env.attack_dur",
+            "r.out" -> "env.release_dur",
+            "env.out" -> "round.in"
+        ];
+
+        // Provide a specific, reversed order for output_labels
+        let labels = vec!["round.out".to_string(), "clock.out".to_string()];
+        let r1 = Recorder::from_samples(g, Some(labels.clone()), 16);
+        // output_names must reflect the order we passed in
+        assert_eq!(r1.output_names, labels);
+        assert_eq!(r1.get_shape(), (2, 16));
+    }
+
+    #[test]
+    fn test_recorder_to_wav_single_channel() {
+        use tempfile::NamedTempFile;
+
+        let mut g = GenGraph::new(10.0, 8);
+        register_many![g,
+            "fq" => 0.5,
+            "osc" => UGSine::new(),
+            "round" => UGRound::new(4, ModeRound::Round),
+        ];
+        connect_many![g,
+            "fq.out" -> "osc.freq",
+            "osc.wave" -> "round.in"
+        ];
+
+        let labels = Some(vec!["round.out".to_string()]);
+        let r1 = Recorder::from_samples(g, labels, 10);
+
+        let tmp = NamedTempFile::new().unwrap();
+        r1.to_wav(tmp.path()).unwrap();
+
+        // Re-open and verify header
+        let mut reader = hound::WavReader::open(tmp.path()).unwrap();
+        let spec = reader.spec();
+        assert_eq!(spec.channels, 1);
+        assert_eq!(spec.sample_rate, 10);
+        assert_eq!(spec.bits_per_sample, 32);
+        assert_eq!(spec.sample_format, hound::SampleFormat::Float);
+
+        // Verify sample count and values
+        let written: Vec<f32> = reader
+            .samples::<f32>()
+            .map(|s| s.unwrap())
+            .collect();
+        assert_eq!(written.len(), 10);
+
+        let expected = r1.get_output_by_label("round.out");
+        for (a, b) in written.iter().zip(expected.iter()) {
+            assert!(
+                (a - b).abs() < 1e-6,
+                "WAV sample mismatch: {a} != {b}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_recorder_to_wav_multi_channel() {
+        use tempfile::NamedTempFile;
+
+        let mut g = GenGraph::new(10.0, 8);
+        register_many![g,
+            "fq" => 0.5,
+            "osc" => UGSine::new(),
+            "round" => UGRound::new(4, ModeRound::Round),
+        ];
+        connect_many![g,
+            "fq.out" -> "osc.freq",
+            "osc.wave" -> "round.in"
+        ];
+
+        // Record two channels in a specific order
+        let labels = Some(vec!["round.out".to_string(), "osc.wave".to_string()]);
+        let r1 = Recorder::from_samples(g, labels, 10);
+
+        let tmp = NamedTempFile::new().unwrap();
+        r1.to_wav(tmp.path()).unwrap();
+
+        let mut reader = hound::WavReader::open(tmp.path()).unwrap();
+        let spec = reader.spec();
+        assert_eq!(spec.channels, 2);
+        assert_eq!(spec.sample_rate, 10);
+        assert_eq!(spec.bits_per_sample, 32);
+        assert_eq!(spec.sample_format, hound::SampleFormat::Float);
+
+        // Samples are interleaved: [ch0[0], ch1[0], ch0[1], ch1[1], ...]
+        let written: Vec<f32> = reader
+            .samples::<f32>()
+            .map(|s| s.unwrap())
+            .collect();
+        assert_eq!(written.len(), 20); // 10 frames × 2 channels
+
+        let ch0 = r1.get_output_by_label("round.out");
+        let ch1 = r1.get_output_by_label("osc.wave");
+        for i in 0..10 {
+            assert!(
+                (written[i * 2] - ch0[i]).abs() < 1e-6,
+                "ch0 mismatch at frame {i}: {} != {}",
+                written[i * 2],
+                ch0[i]
+            );
+            assert!(
+                (written[i * 2 + 1] - ch1[i]).abs() < 1e-6,
+                "ch1 mismatch at frame {i}: {} != {}",
+                written[i * 2 + 1],
+                ch1[i]
+            );
+        }
     }
 
     #[test]
