@@ -317,6 +317,6 @@ mod tests {
     fn test_build_index_a() {
         let fp_src = Path::new("doc/example");
         let fp_dst = Path::new("doc/out");
-        let _ = build_markdown_index(&fp_src, &fp_dst, 100.0, 10, 100).unwrap();
+        let _ = build_markdown_index(&fp_src, &fp_dst, 100.0, 8, 100).unwrap();
     }
 }

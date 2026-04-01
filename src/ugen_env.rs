@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn test_env_break_point_b() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(1.0, UnitRate::Samples),
             "step" => 1,
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn test_env_break_point_c() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(1.0, UnitRate::Samples),
             "step" => 1,
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn test_env_ar_b() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock" => UGClock::new(30.0, UnitRate::Samples),
             "env" => UGEnvAR::new(),
@@ -423,7 +423,7 @@ mod tests {
 
     #[test]
     fn test_env_ar_c() {
-        let mut g = GenGraph::new(8.0, 20);
+        let mut g = GenGraph::new(8.0, 16);
         register_many![g,
             "clock1" => UGClock::new(30.0, UnitRate::Samples),
             "clock2" => UGClock::new(47.0, UnitRate::Samples),
