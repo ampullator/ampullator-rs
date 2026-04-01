@@ -10,6 +10,17 @@ use std::io::Write;
 use std::process::Command;
 use tempfile::NamedTempFile;
 
+/// Selects the sample format and bit depth used when writing a WAV file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WavFormat {
+    /// 32-bit IEEE floating-point (lossless for `f32` samples).
+    Float32,
+    /// 16-bit signed integer (quantises samples in `[-1.0, 1.0]` to `[-32768, 32767]`).
+    Int16,
+    /// 24-bit signed integer (quantises samples in `[-1.0, 1.0]` to `[-8388608, 8388607]`).
+    Int24,
+}
+
 pub struct Recorder {
     sample_rate: f32,
     recorded: HashMap<String, Vec<Sample>>,
@@ -95,24 +106,45 @@ impl Recorder {
     //--------------------------------------------------------------------------
     /// Write all recorded outputs to a multi-channel WAV file at `fp`.
     /// Each output in `output_names` becomes a distinct channel, in order.
-    /// Samples are written interleaved as 32-bit floats at the graph's sample rate.
+    /// Samples are interleaved across channels for each frame.
     /// All channels are the same length after recording; any channel shorter than
     /// the maximum length is zero-padded for completeness.
-    pub fn to_wav(&self, fp: &Path) -> Result<(), hound::Error> {
+    ///
+    /// The `format` argument controls the bit depth and sample encoding:
+    /// - `WavFormat::Float32` — 32-bit IEEE float (lossless for `f32` samples)
+    /// - `WavFormat::Int16`   — 16-bit signed integer (samples scaled to `[-32768, 32767]`)
+    /// - `WavFormat::Int24`   — 24-bit signed integer (samples scaled to `[-8388608, 8388607]`)
+    pub fn to_wav(&self, fp: &Path, format: WavFormat) -> Result<(), hound::Error> {
         let channels = self.output_names.len() as u16;
+        let (bits_per_sample, sample_format) = match format {
+            WavFormat::Float32 => (32, hound::SampleFormat::Float),
+            WavFormat::Int16 => (16, hound::SampleFormat::Int),
+            WavFormat::Int24 => (24, hound::SampleFormat::Int),
+        };
         let spec = hound::WavSpec {
             channels,
             sample_rate: self.sample_rate as u32,
-            bits_per_sample: 32,
-            sample_format: hound::SampleFormat::Float,
+            bits_per_sample,
+            sample_format,
         };
         let mut writer = hound::WavWriter::create(fp, spec)?;
         let (_, length) = self.get_shape();
         for i in 0..length {
             for name in &self.output_names {
                 let samples = &self.recorded[name];
-                let sample: f32 = if i < samples.len() { samples[i] } else { 0.0 };
-                writer.write_sample(sample)?;
+                let s: f32 = if i < samples.len() { samples[i] } else { 0.0 };
+                match format {
+                    WavFormat::Float32 => writer.write_sample(s)?,
+                    WavFormat::Int16 => {
+                        let v = (s * 32768.0).round().clamp(-32768.0, 32767.0) as i16;
+                        writer.write_sample(v)?;
+                    }
+                    WavFormat::Int24 => {
+                        let v =
+                            (s * 8388608.0).round().clamp(-8388608.0, 8388607.0) as i32;
+                        writer.write_sample(v)?;
+                    }
+                }
             }
         }
         writer.finalize()?;
@@ -341,7 +373,7 @@ mod tests {
         let r1 = Recorder::from_samples(g, labels, 10);
 
         let tmp = NamedTempFile::new().unwrap();
-        r1.to_wav(tmp.path()).unwrap();
+        r1.to_wav(tmp.path(), WavFormat::Float32).unwrap();
 
         // Re-open and verify header
         let mut reader = hound::WavReader::open(tmp.path()).unwrap();
@@ -387,7 +419,7 @@ mod tests {
         let r1 = Recorder::from_samples(g, labels, 10);
 
         let tmp = NamedTempFile::new().unwrap();
-        r1.to_wav(tmp.path()).unwrap();
+        r1.to_wav(tmp.path(), WavFormat::Float32).unwrap();
 
         let mut reader = hound::WavReader::open(tmp.path()).unwrap();
         let spec = reader.spec();
@@ -417,6 +449,95 @@ mod tests {
                 "ch1 mismatch at frame {i}: {} != {}",
                 written[i * 2 + 1],
                 ch1[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_recorder_to_wav_int16() {
+        use tempfile::NamedTempFile;
+
+        let mut g = GenGraph::new(10.0, 8);
+        register_many![g,
+            "fq" => 0.5,
+            "osc" => UGSine::new(),
+            "round" => UGRound::new(4, ModeRound::Round),
+        ];
+        connect_many![g,
+            "fq.out" -> "osc.freq",
+            "osc.wave" -> "round.in"
+        ];
+
+        let labels = Some(vec!["round.out".to_string()]);
+        let r1 = Recorder::from_samples(g, labels, 10);
+
+        let tmp = NamedTempFile::new().unwrap();
+        r1.to_wav(tmp.path(), WavFormat::Int16).unwrap();
+
+        let mut reader = hound::WavReader::open(tmp.path()).unwrap();
+        let spec = reader.spec();
+        assert_eq!(spec.channels, 1);
+        assert_eq!(spec.sample_rate, 10);
+        assert_eq!(spec.bits_per_sample, 16);
+        assert_eq!(spec.sample_format, hound::SampleFormat::Int);
+
+        let written: Vec<i16> = reader
+            .samples::<i16>()
+            .map(|s| s.unwrap())
+            .collect();
+        assert_eq!(written.len(), 10);
+
+        let expected = r1.get_output_by_label("round.out");
+        for (i, (got, src)) in written.iter().zip(expected.iter()).enumerate() {
+            let want = (*src * 32768.0).round().clamp(-32768.0, 32767.0) as i16;
+            assert_eq!(
+                *got, want,
+                "Int16 sample mismatch at frame {i}: {got} != {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_recorder_to_wav_int24() {
+        use tempfile::NamedTempFile;
+
+        let mut g = GenGraph::new(10.0, 8);
+        register_many![g,
+            "fq" => 0.5,
+            "osc" => UGSine::new(),
+            "round" => UGRound::new(4, ModeRound::Round),
+        ];
+        connect_many![g,
+            "fq.out" -> "osc.freq",
+            "osc.wave" -> "round.in"
+        ];
+
+        let labels = Some(vec!["round.out".to_string()]);
+        let r1 = Recorder::from_samples(g, labels, 10);
+
+        let tmp = NamedTempFile::new().unwrap();
+        r1.to_wav(tmp.path(), WavFormat::Int24).unwrap();
+
+        let mut reader = hound::WavReader::open(tmp.path()).unwrap();
+        let spec = reader.spec();
+        assert_eq!(spec.channels, 1);
+        assert_eq!(spec.sample_rate, 10);
+        assert_eq!(spec.bits_per_sample, 24);
+        assert_eq!(spec.sample_format, hound::SampleFormat::Int);
+
+        // hound reads 24-bit samples as i32
+        let written: Vec<i32> = reader
+            .samples::<i32>()
+            .map(|s| s.unwrap())
+            .collect();
+        assert_eq!(written.len(), 10);
+
+        let expected = r1.get_output_by_label("round.out");
+        for (i, (got, src)) in written.iter().zip(expected.iter()).enumerate() {
+            let want = (*src * 8388608.0).round().clamp(-8388608.0, 8388607.0) as i32;
+            assert_eq!(
+                *got, want,
+                "Int24 sample mismatch at frame {i}: {got} != {want}"
             );
         }
     }
