@@ -17,46 +17,20 @@ use crate::util::UnitRate;
 use std::collections::HashMap;
 use std::path::Path;
 
+// The UGFacade provides enum-based deserialization of JSON encodings of UGen definition and intialization parameters.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, tag = "0", content = "1")]
 pub enum UGFacade {
-    Const {
-        value: Sample,
+    AsHz {
+        mode: UnitRate,
     },
+    Ceil {},
     Clock {
         value: Sample,
         mode: UnitRate,
     },
-    Select {
-        values: Vec<f32>,
-        mode: ModeSelect,
-        seed: Option<u64>,
-    },
-    Round {
-        places: i32,
-        mode: ModeRound,
-    },
-    Sum {
-        input_count: usize,
-    },
-    White {
-        seed: Option<u64>,
-    },
-    AsHz {
-        mode: UnitRate,
-    },
-    Floor {},
-    Ceil {},
-    Mult {
-        input_count: usize,
-    },
-    Sine {},
-    Trigger {},
-    LowPass {
-        roll_off_db: f32,
-    },
-    LowPassQ {
-        roll_off_db: f32,
+    Const {
+        value: Sample,
     },
     EnvBreakPoint {
         duration_values: Vec<Sample>,
@@ -66,9 +40,36 @@ pub enum UGFacade {
         seed: Option<u64>,
     },
     EnvAR {},
+    Floor {},
+    LowPass {
+        roll_off_db: f32,
+    },
+    LowPassQ {
+        roll_off_db: f32,
+    },
+    Mult {
+        input_count: usize,
+    },
     PulseSelect {
         duration_values: Vec<Sample>,
         duration_mode: ModeSelect,
+        seed: Option<u64>,
+    },
+    Round {
+        places: i32,
+        mode: ModeRound,
+    },
+    Select {
+        values: Vec<f32>,
+        mode: ModeSelect,
+        seed: Option<u64>,
+    },
+    Sine {},
+    Sum {
+        input_count: usize,
+    },
+    Trigger {},
+    White {
         seed: Option<u64>,
     },
 }
