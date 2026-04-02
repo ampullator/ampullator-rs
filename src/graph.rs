@@ -25,7 +25,7 @@ pub struct GraphNode {
     pub(crate) id: NodeId,
     pub(crate) name: String,
     pub(crate) node: Box<dyn UGen>,
-    // `inputs` are unsorted `NodeEdge``, defining a node, an output of that node to read from, the input to apply to this node.
+    // `inputs` are unsorted `NodeEdge``, defining another NodeId, an output index of that node to read from, and the input index to apply to this node. Every input is another node's output.
     pub(crate) inputs: Vec<NodeEdge>,
     // Output samples from `process()` are stored in the `GraphNode`
     pub(crate) outputs: Vec<Vec<Sample>>,
@@ -48,7 +48,7 @@ impl GenGraph {
     /// Create a new graph. Creates an empty Vec and HashMap for storing `nodes`` and `name_to_node_id``.
     pub fn new(sample_rate: f32, buffer_size: usize) -> Self {
         assert!(
-            buffer_size % 8 == 0 && buffer_size > 0,
+            buffer_size > 0 && buffer_size.is_multiple_of(8),
             "buffer_size must be a non-zero multiple of 8 (SIMD lane width), got {buffer_size}"
         );
         Self {
@@ -88,7 +88,7 @@ impl GenGraph {
             name,
             node,
             inputs: Vec::new(),
-            outputs: vec![vec![0.0; self.buffer_size]; output_count],
+            outputs: vec![vec![0.0; self.buffer_size]; output_count], // allocate output storage
             name_to_output_index,
         });
 
@@ -120,6 +120,7 @@ impl GenGraph {
         }
     }
 
+    /// Given string representations of src.output and dst.input, lookup NodeIDs and input / output indices, and create a connection.
     pub fn connect(&mut self, src: &str, dst: &str) {
         let (src_name, output_name) = split_name(src);
         let (dst_name, input_name) = split_name(dst);
@@ -134,11 +135,16 @@ impl GenGraph {
             .input_names()
             .iter()
             .position(|&name| name == input_name)
-            .expect(format!("For {dst_name}, invalid input name: {input_name}").as_str());
+            .unwrap_or_else(|| {
+                panic!("For {dst_name}, invalid input name: {input_name}")
+            });
 
-        let output_index = src_node.name_to_output_index.get(output_name).expect(
-            format!("For {src_name}, invalid output name: {output_name}").as_str(),
-        );
+        let output_index = src_node
+            .name_to_output_index
+            .get(output_name)
+            .unwrap_or_else(|| {
+                panic!("For {src_name}, invalid output name: {output_name}")
+            });
 
         self.connect_ids(src_id, *output_index, dst_id, input_index);
     }
@@ -147,7 +153,7 @@ impl GenGraph {
     pub fn update_execution_node_ids(&mut self) {
         // if not None, and reuse
         if self.execution_order.is_some() {
-            return ();
+            return;
         }
         let mut indegree = vec![0; self.nodes.len()];
         for node in &self.nodes {
@@ -189,7 +195,11 @@ impl GenGraph {
         post
     }
 
-    pub fn len(self) -> usize {
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
         self.nodes.len()
     }
 
@@ -204,7 +214,7 @@ impl GenGraph {
             let mut input_slices: Vec<&[Sample]> =
                 vec![&[]; node.node.input_names().len()];
 
-            // for each input edge, as the the appropriate output
+            // for each input edge, as the appropriate output
             for edge in &node.inputs {
                 input_slices[edge.input_index] = if edge.src.0 < node_index {
                     &left[edge.src.0].outputs[edge.output_index]
@@ -239,7 +249,7 @@ impl GenGraph {
         let index = node
             .name_to_output_index
             .get(output_name)
-            .expect(format!("Invalid output name: {}", output_name).as_str());
+            .unwrap_or_else(|| panic!("Invalid output name: {output_name}"));
 
         &node.outputs[*index]
     }

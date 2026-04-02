@@ -5,6 +5,7 @@ fn db_per_octave_to_poles(db: f32) -> usize {
     ((db / 6.0).round()).clamp(1.0, 12.0) as usize
 }
 
+/// A low pass filter with variable cutoff frequency. Rolloff configurable at initialization.
 pub struct UGLowPass {
     poles: usize,
     state: Vec<Sample>,
@@ -52,7 +53,7 @@ impl UGen for UGLowPass {
                 .unwrap_or(1000.0)
                 .clamp(1.0, sample_rate / 2.0);
             let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
-            println!("g: {g:?}");
+            // println!("g: {g:?}");
 
             let mut y = x;
             for p in 0..self.poles {
@@ -65,6 +66,7 @@ impl UGen for UGLowPass {
     }
 }
 
+/// A low pass filter with variable cutoff and resonance. Roll-off configuraable at initialization.
 pub struct UGLowPassQ {
     poles: usize,
     state: Vec<Sample>,

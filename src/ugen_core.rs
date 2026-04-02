@@ -1,7 +1,7 @@
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde::Serialize;
-use wide::f32x8;
+use wide::{CmpNe, f32x8};
 
 use crate::util::Sample;
 use crate::util::UnitRate;
@@ -121,15 +121,62 @@ impl UGen for UGAsHz {
     ) {
         let input = inputs.first().copied().unwrap_or(&[]);
         let out = &mut outputs[0];
-        for i in 0..out.len() {
-            let x = input.get(i).copied().unwrap_or(0.0);
-            out[i] = unit_rate_to_hz(x, self.mode, sample_rate)
+        let chunks = out.len() / 8;
+        let zero = f32x8::splat(0.0);
+
+        //  zero-safe divide for Seconds and Samples works by bitwise-ANDing the computed reciprocal with the simd_ne mask — positions where the input is zero have all-zero mask bits, which zero out the Inf result cleanly.
+
+        // NOTE: util::unit_rate_to_hz provides an element-wise implementation.
+        match self.mode {
+            UnitRate::Hz => {
+                for c in 0..chunks {
+                    let i = c * 8;
+                    out[i..i + 8].copy_from_slice(&simd_load(input, i).to_array());
+                }
+            }
+            UnitRate::Seconds => {
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    let result = x.simd_ne(zero) & (f32x8::splat(1.0) / x);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
+                }
+            }
+            UnitRate::Samples => {
+                let sr = f32x8::splat(sample_rate);
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    let result = x.simd_ne(zero) & (sr / x);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
+                }
+            }
+            UnitRate::Midi => {
+                let base = f32x8::splat(2.0);
+                let a = f32x8::splat(440.0);
+                let offset = f32x8::splat(69.0);
+                let inv12 = f32x8::splat(1.0 / 12.0);
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    let result = a * base.pow_f32x8((x - offset) * inv12);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
+                }
+            }
+            UnitRate::Bpm => {
+                let inv60 = f32x8::splat(1.0 / 60.0);
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    out[i..i + 8].copy_from_slice(&(x * inv60).to_array());
+                }
+            }
         }
     }
 }
 
 //------------------------------------------------------------------------------
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ModeRound {
     Round,
     Floor,
@@ -218,6 +265,12 @@ impl UGFloor {
     }
 }
 
+impl Default for UGFloor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UGen for UGFloor {
     fn type_name(&self) -> &'static str {
         "UGFloor"
@@ -256,6 +309,12 @@ pub struct UGCeil;
 impl UGCeil {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for UGCeil {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -450,7 +509,7 @@ impl UGWhite {
             default_min: -1.0,
             default_max: 1.0,
             rng: StdRng::seed_from_u64(actual_seed),
-            seed: seed, // original user-provided seed
+            seed, // original user-provided seed
         }
     }
 }
@@ -489,12 +548,34 @@ impl UGen for UGWhite {
     ) {
         let min_in = inputs.first().copied().unwrap_or(&[]);
         let max_in = inputs.get(1).copied().unwrap_or(&[]);
-
         let out = &mut outputs[0];
-        for (i, v) in out.iter_mut().enumerate() {
-            let min = min_in.get(i).copied().unwrap_or(self.default_min);
-            let max = max_in.get(i).copied().unwrap_or(self.default_max);
-            *v = self.rng.random_range(min..=max);
+        let n = out.len();
+
+        match (min_in.len() >= n, max_in.len() >= n) {
+            // most comon case
+            (false, false) => {
+                let (min, max) = (self.default_min, self.default_max);
+                for v in out.iter_mut() {
+                    *v = self.rng.random_range(min..=max);
+                }
+            }
+            (true, false) => {
+                let max = self.default_max;
+                for i in 0..n {
+                    out[i] = self.rng.random_range(min_in[i]..=max);
+                }
+            }
+            (false, true) => {
+                let min = self.default_min;
+                for i in 0..n {
+                    out[i] = self.rng.random_range(min..=max_in[i]);
+                }
+            }
+            (true, true) => {
+                for i in 0..n {
+                    out[i] = self.rng.random_range(min_in[i]..=max_in[i]);
+                }
+            }
         }
     }
 }
@@ -518,6 +599,12 @@ impl UGSine {
             default_min: -1.0,
             default_max: 1.0,
         }
+    }
+}
+
+impl Default for UGSine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -561,27 +648,76 @@ impl UGen for UGSine {
         let trig_out = &mut rest[0];
 
         let dt = 1.0 / sample_rate;
+        let n = wave_out.len();
 
-        for i in 0..wave_out.len() {
-            // let global_sample = time_sample + i;
+        let phase_connected = phase_in.len() >= n;
+        let min_connected = min_in.len() >= n;
+        let max_connected = max_in.len() >= n;
+        let freq_connected = freq_in.len() >= n;
 
-            let freq = freq_in.get(i).copied().unwrap_or(self.default_freq);
-            let phase_offset = phase_in
-                .get(i)
-                .copied()
-                .unwrap_or(self.default_phase_offset);
-            let min = min_in.get(i).copied().unwrap_or(self.default_min);
-            let max = max_in.get(i).copied().unwrap_or(self.default_max);
-
-            self.phase += freq * dt;
-            let crossed = self.phase >= 1.0;
-            if crossed {
-                self.phase -= 1.0;
+        if !phase_connected && !min_connected && !max_connected {
+            // common case: phase/min/max at defaults
+            let phase_offset = self.default_phase_offset;
+            let (min, max) = (self.default_min, self.default_max);
+            if freq_connected {
+                for i in 0..n {
+                    self.phase += freq_in[i] * dt;
+                    let crossed = self.phase >= 1.0;
+                    if crossed {
+                        self.phase -= 1.0;
+                    }
+                    let norm =
+                        ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
+                    wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
+                    trig_out[i] = if crossed { 1.0 } else { 0.0 };
+                }
+            } else {
+                // freq also constant: precompute phase increment
+                let phase_inc = self.default_freq * dt;
+                for i in 0..n {
+                    self.phase += phase_inc;
+                    let crossed = self.phase >= 1.0;
+                    if crossed {
+                        self.phase -= 1.0;
+                    }
+                    let norm =
+                        ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
+                    wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
+                    trig_out[i] = if crossed { 1.0 } else { 0.0 };
+                }
             }
-
-            let norm = ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
-            wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
-            trig_out[i] = if crossed { 1.0 } else { 0.0 };
+        } else {
+            // general case: at least one of phase/min/max is connected
+            for i in 0..n {
+                let freq = if freq_connected {
+                    freq_in[i]
+                } else {
+                    self.default_freq
+                };
+                let phase_offset = if phase_connected {
+                    phase_in[i]
+                } else {
+                    self.default_phase_offset
+                };
+                let min = if min_connected {
+                    min_in[i]
+                } else {
+                    self.default_min
+                };
+                let max = if max_connected {
+                    max_in[i]
+                } else {
+                    self.default_max
+                };
+                self.phase += freq * dt;
+                let crossed = self.phase >= 1.0;
+                if crossed {
+                    self.phase -= 1.0;
+                }
+                let norm = ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
+                wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
+                trig_out[i] = if crossed { 1.0 } else { 0.0 };
+            }
         }
     }
 }
@@ -596,6 +732,12 @@ pub struct UGTrigger {
 impl UGTrigger {
     pub fn new() -> Self {
         Self { phase: 0.0 }
+    }
+}
+
+impl Default for UGTrigger {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

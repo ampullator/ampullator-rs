@@ -8,7 +8,7 @@ mod ugen_rhythm;
 mod ugen_select;
 mod util;
 
-pub use recorder::Recorder;
+pub use recorder::{Recorder, WavFormat};
 
 pub use ugen_core::{
     ModeRound, UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGMult, UGRound, UGSine, UGSum,
