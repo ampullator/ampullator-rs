@@ -48,7 +48,7 @@ impl GenGraph {
     /// Create a new graph. Creates an empty Vec and HashMap for storing `nodes`` and `name_to_node_id``.
     pub fn new(sample_rate: f32, buffer_size: usize) -> Self {
         assert!(
-            buffer_size % 8 == 0 && buffer_size > 0,
+            buffer_size > 0 && buffer_size.is_multiple_of(8),
             "buffer_size must be a non-zero multiple of 8 (SIMD lane width), got {buffer_size}"
         );
         Self {
