@@ -52,7 +52,7 @@ impl Recorder {
             }
         }
 
-        let iterations = (total_samples + buffer_size - 1) / buffer_size;
+        let iterations = total_samples.div_ceil(buffer_size);
 
         for _ in 0..iterations {
             graph.process();
@@ -99,7 +99,7 @@ impl Recorder {
     pub fn get_output_by_label(&self, label: &str) -> &[Sample] {
         self.recorded
             .get(label)
-            .expect(format!("No such label: {}", label).as_str())
+            .unwrap_or_else(|| panic!("No such label: {label}"))
     }
 
     //--------------------------------------------------------------------------
@@ -199,7 +199,7 @@ set multiplot
             let values = self
                 .recorded
                 .get(label)
-                .expect(format!("expected label {label} not found").as_str());
+                .unwrap_or_else(|| panic!("expected label {label} not found"));
             let panel = i + 1;
             let block_label = label.replace(['.', '-', ' '], "_");
 

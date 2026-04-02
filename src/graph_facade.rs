@@ -89,7 +89,7 @@ impl UGFacade {
             }
             UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
             UGFacade::White { seed } => Box::new(UGWhite::new(*seed)),
-            UGFacade::AsHz { mode } => Box::new(UGAsHz::new(mode.clone())),
+            UGFacade::AsHz { mode } => Box::new(UGAsHz::new(*mode)),
             UGFacade::Floor {} => Box::new(UGFloor::new()),
             UGFacade::Ceil {} => Box::new(UGCeil::new()),
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
@@ -238,7 +238,7 @@ pub fn build_markdown_index(
     for entry in std::fs::read_dir(input_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        if path.extension().map_or(false, |ext| ext == "json") {
+        if path.extension().is_some_and(|ext| ext == "json") {
             println!("build_markdown_index: parsing: {:?}", path);
 
             let json_str = std::fs::read_to_string(&path)

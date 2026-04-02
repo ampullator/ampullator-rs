@@ -134,11 +134,12 @@ impl GenGraph {
             .input_names()
             .iter()
             .position(|&name| name == input_name)
-            .expect(format!("For {dst_name}, invalid input name: {input_name}").as_str());
+            .unwrap_or_else(|| panic!("For {dst_name}, invalid input name: {input_name}"));
 
-        let output_index = src_node.name_to_output_index.get(output_name).expect(
-            format!("For {src_name}, invalid output name: {output_name}").as_str(),
-        );
+        let output_index = src_node
+            .name_to_output_index
+            .get(output_name)
+            .unwrap_or_else(|| panic!("For {src_name}, invalid output name: {output_name}"));
 
         self.connect_ids(src_id, *output_index, dst_id, input_index);
     }
@@ -189,7 +190,11 @@ impl GenGraph {
         post
     }
 
-    pub fn len(self) -> usize {
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
         self.nodes.len()
     }
 
@@ -239,7 +244,7 @@ impl GenGraph {
         let index = node
             .name_to_output_index
             .get(output_name)
-            .expect(format!("Invalid output name: {}", output_name).as_str());
+            .unwrap_or_else(|| panic!("Invalid output name: {output_name}"));
 
         &node.outputs[*index]
     }
