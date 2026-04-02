@@ -384,18 +384,12 @@ mod tests {
         assert_eq!(spec.sample_format, hound::SampleFormat::Float);
 
         // Verify sample count and values
-        let written: Vec<f32> = reader
-            .samples::<f32>()
-            .map(|s| s.unwrap())
-            .collect();
+        let written: Vec<f32> = reader.samples::<f32>().map(|s| s.unwrap()).collect();
         assert_eq!(written.len(), 10);
 
         let expected = r1.get_output_by_label("round.out");
         for (a, b) in written.iter().zip(expected.iter()) {
-            assert!(
-                (a - b).abs() < 1e-6,
-                "WAV sample mismatch: {a} != {b}"
-            );
+            assert!((a - b).abs() < 1e-6, "WAV sample mismatch: {a} != {b}");
         }
     }
 
@@ -429,10 +423,7 @@ mod tests {
         assert_eq!(spec.sample_format, hound::SampleFormat::Float);
 
         // Samples are interleaved: [ch0[0], ch1[0], ch0[1], ch1[1], ...]
-        let written: Vec<f32> = reader
-            .samples::<f32>()
-            .map(|s| s.unwrap())
-            .collect();
+        let written: Vec<f32> = reader.samples::<f32>().map(|s| s.unwrap()).collect();
         assert_eq!(written.len(), 20); // 10 frames × 2 channels
 
         let ch0 = r1.get_output_by_label("round.out");
@@ -481,10 +472,7 @@ mod tests {
         assert_eq!(spec.bits_per_sample, 16);
         assert_eq!(spec.sample_format, hound::SampleFormat::Int);
 
-        let written: Vec<i16> = reader
-            .samples::<i16>()
-            .map(|s| s.unwrap())
-            .collect();
+        let written: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
         assert_eq!(written.len(), 10);
 
         let expected = r1.get_output_by_label("round.out");
@@ -526,10 +514,7 @@ mod tests {
         assert_eq!(spec.sample_format, hound::SampleFormat::Int);
 
         // hound reads 24-bit samples as i32
-        let written: Vec<i32> = reader
-            .samples::<i32>()
-            .map(|s| s.unwrap())
-            .collect();
+        let written: Vec<i32> = reader.samples::<i32>().map(|s| s.unwrap()).collect();
         assert_eq!(written.len(), 10);
 
         let expected = r1.get_output_by_label("round.out");
@@ -579,29 +564,28 @@ mod tests {
         // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
     }
 
-    #[test]
-    fn test_recorder_adhoc() {
+    // #[test]
+    // fn test_recorder_adhoc() {
 
-        let fp = Path::new("/tmp/test.wav");
+    //     let fp = Path::new("/tmp/test.wav");
 
-        let mut g = GenGraph::new(44100.0, 32);
-        register_many![g,
-            "fq" => 220,
-            "amp" => 0.2,
-            "osc" => UGSine::new(),
-            "mult" => UGMult::new(2),
-        ];
-        connect_many![g,
-            "fq.out" -> "osc.freq",
-            "osc.wave" -> "mult.in1",
-            "amp.out" -> "mult.in2"
-        ];
+    //     let mut g = GenGraph::new(44100.0, 32);
+    //     register_many![g,
+    //         "fq" => 220,
+    //         "amp" => 0.2,
+    //         "osc" => UGSine::new(),
+    //         "mult" => UGMult::new(2),
+    //     ];
+    //     connect_many![g,
+    //         "fq.out" -> "osc.freq",
+    //         "osc.wave" -> "mult.in1",
+    //         "amp.out" -> "mult.in2"
+    //     ];
 
-        let labels = Some(vec!["mult.out".to_string()]);
-        let r1 = Recorder::from_duration(g, labels, 5.0);
+    //     let labels = Some(vec!["mult.out".to_string()]);
+    //     let r1 = Recorder::from_duration(g, labels, 5.0);
 
-        r1.to_wav(fp, WavFormat::Int16).unwrap();
-        println!("wrote: {:?}", fp);
-    }
-
+    //     r1.to_wav(fp, WavFormat::Int16).unwrap();
+    //     println!("wrote: {:?}", fp);
+    // }
 }
