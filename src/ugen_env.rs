@@ -134,6 +134,12 @@ impl UGEnvAR {
     }
 }
 
+impl Default for UGEnvAR {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UGen for UGEnvAR {
     fn type_name(&self) -> &'static str {
         "UGEnvAR"

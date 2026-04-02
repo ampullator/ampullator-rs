@@ -5,7 +5,6 @@ use crate::GenGraph;
 use std::collections::HashSet;
 use std::path::Path;
 
-use hound;
 use std::io::Write;
 use std::process::Command;
 use tempfile::NamedTempFile;
@@ -58,8 +57,8 @@ impl Recorder {
         for _ in 0..iterations {
             graph.process();
             for label in &collected_labels {
-                let buffer = graph.get_output_by_label(&label);
-                recorded.get_mut(&*label).unwrap().extend_from_slice(buffer);
+                let buffer = graph.get_output_by_label(label);
+                recorded.get_mut(label).unwrap().extend_from_slice(buffer);
             }
         }
 
@@ -264,7 +263,7 @@ mod tests {
     use crate::GenGraph;
     use crate::connect_many;
     use crate::register_many;
-    use crate::{ModeRound, UGClock, UGEnvAR, UGMult, UGRound, UGSine, UnitRate};
+    use crate::{ModeRound, UGClock, UGEnvAR, UGRound, UGSine, UnitRate};
 
     #[test]
     fn test_recorder_a() {

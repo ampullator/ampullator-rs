@@ -147,7 +147,7 @@ impl GenGraph {
     pub fn update_execution_node_ids(&mut self) {
         // if not None, and reuse
         if self.execution_order.is_some() {
-            return ();
+            return;
         }
         let mut indegree = vec![0; self.nodes.len()];
         for node in &self.nodes {

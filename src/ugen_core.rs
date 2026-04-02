@@ -129,7 +129,7 @@ impl UGen for UGAsHz {
 }
 
 //------------------------------------------------------------------------------
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum ModeRound {
     Round,
     Floor,
@@ -218,6 +218,12 @@ impl UGFloor {
     }
 }
 
+impl Default for UGFloor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UGen for UGFloor {
     fn type_name(&self) -> &'static str {
         "UGFloor"
@@ -256,6 +262,12 @@ pub struct UGCeil;
 impl UGCeil {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for UGCeil {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -450,7 +462,7 @@ impl UGWhite {
             default_min: -1.0,
             default_max: 1.0,
             rng: StdRng::seed_from_u64(actual_seed),
-            seed: seed, // original user-provided seed
+            seed, // original user-provided seed
         }
     }
 }
@@ -518,6 +530,12 @@ impl UGSine {
             default_min: -1.0,
             default_max: 1.0,
         }
+    }
+}
+
+impl Default for UGSine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -596,6 +614,12 @@ pub struct UGTrigger {
 impl UGTrigger {
     pub fn new() -> Self {
         Self { phase: 0.0 }
+    }
+}
+
+impl Default for UGTrigger {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

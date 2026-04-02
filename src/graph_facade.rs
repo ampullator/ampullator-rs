@@ -79,13 +79,13 @@ impl UGFacade {
         match self {
             UGFacade::Const { value } => Box::new(UGConst::new(*value)),
             UGFacade::Clock { value, mode } => {
-                Box::new(UGClock::new(*value, mode.clone()))
+                Box::new(UGClock::new(*value, *mode))
             }
             UGFacade::Select { values, mode, seed } => {
                 Box::new(UGSelect::new(values.clone(), *mode, *seed))
             }
             UGFacade::Round { places, mode } => {
-                Box::new(UGRound::new(*places, mode.clone()))
+                Box::new(UGRound::new(*places, *mode))
             }
             UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
             UGFacade::White { seed } => Box::new(UGWhite::new(*seed)),
@@ -134,6 +134,7 @@ pub enum Facade {
     Full(UGFacade), // ["Clock", { ... }] or ["Round", { ... }]
 }
 
+#[allow(unused)]
 impl Facade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
@@ -153,7 +154,7 @@ impl Facade {
 //     }
 // }
 
-/// Connects nodes in a GenGraph using a JSON string of `"src": "dst"` mappings.
+// /// Connects nodes in a GenGraph using a JSON string of `"src": "dst"` mappings.
 // pub fn connect_many(graph: &mut GenGraph, j: &str) {
 //     let pairs: HashMap<String, String> =
 //         serde_json::from_str(j).expect("Failed to parse connection JSON");
@@ -164,6 +165,7 @@ impl Facade {
 
 //------------------------------------------------------------------------------
 
+#[allow(unused)]
 #[derive(Deserialize, Debug)]
 struct GraphFacade {
     title: Option<String>,
@@ -172,6 +174,7 @@ struct GraphFacade {
     connect: Vec<(String, String)>,
 }
 
+#[allow(unused)]
 impl GraphFacade {
     pub fn from_json(json: &str) -> Result<Self, String> {
         serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))
@@ -219,6 +222,7 @@ impl GraphFacade {
     }
 }
 
+#[allow(unused)]
 pub fn build_markdown_index(
     input_dir: &Path,
     output_dir: &Path,
@@ -248,7 +252,7 @@ pub fn build_markdown_index(
             let label = parsed.label.clone().unwrap_or("label".to_string());
 
             let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(
-                &output_dir,
+                output_dir,
                 sample_rate,
                 buffer_size,
                 total_samples,
