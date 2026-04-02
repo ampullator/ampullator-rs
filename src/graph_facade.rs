@@ -78,15 +78,11 @@ impl UGFacade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
             UGFacade::Const { value } => Box::new(UGConst::new(*value)),
-            UGFacade::Clock { value, mode } => {
-                Box::new(UGClock::new(*value, *mode))
-            }
+            UGFacade::Clock { value, mode } => Box::new(UGClock::new(*value, *mode)),
             UGFacade::Select { values, mode, seed } => {
                 Box::new(UGSelect::new(values.clone(), *mode, *seed))
             }
-            UGFacade::Round { places, mode } => {
-                Box::new(UGRound::new(*places, *mode))
-            }
+            UGFacade::Round { places, mode } => Box::new(UGRound::new(*places, *mode)),
             UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
             UGFacade::White { seed } => Box::new(UGWhite::new(*seed)),
             UGFacade::AsHz { mode } => Box::new(UGAsHz::new(*mode)),

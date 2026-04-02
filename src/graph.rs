@@ -134,12 +134,16 @@ impl GenGraph {
             .input_names()
             .iter()
             .position(|&name| name == input_name)
-            .unwrap_or_else(|| panic!("For {dst_name}, invalid input name: {input_name}"));
+            .unwrap_or_else(|| {
+                panic!("For {dst_name}, invalid input name: {input_name}")
+            });
 
         let output_index = src_node
             .name_to_output_index
             .get(output_name)
-            .unwrap_or_else(|| panic!("For {src_name}, invalid output name: {output_name}"));
+            .unwrap_or_else(|| {
+                panic!("For {src_name}, invalid output name: {output_name}")
+            });
 
         self.connect_ids(src_id, *output_index, dst_id, input_index);
     }
