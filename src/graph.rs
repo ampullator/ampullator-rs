@@ -25,7 +25,7 @@ pub struct GraphNode {
     pub(crate) id: NodeId,
     pub(crate) name: String,
     pub(crate) node: Box<dyn UGen>,
-    // `inputs` are unsorted `NodeEdge``, defining a node, an output of that node to read from, the input to apply to this node.
+    // `inputs` are unsorted `NodeEdge``, defining another NodeId, an output index of that node to read from, and the input index to apply to this node. Every input is another node's output.
     pub(crate) inputs: Vec<NodeEdge>,
     // Output samples from `process()` are stored in the `GraphNode`
     pub(crate) outputs: Vec<Vec<Sample>>,
@@ -88,7 +88,7 @@ impl GenGraph {
             name,
             node,
             inputs: Vec::new(),
-            outputs: vec![vec![0.0; self.buffer_size]; output_count],
+            outputs: vec![vec![0.0; self.buffer_size]; output_count], // allocate output storage
             name_to_output_index,
         });
 
@@ -120,6 +120,7 @@ impl GenGraph {
         }
     }
 
+    /// Given string representations of src.output and dst.input, lookup NodeIDs and input / output indices, and create a connection.
     pub fn connect(&mut self, src: &str, dst: &str) {
         let (src_name, output_name) = split_name(src);
         let (dst_name, input_name) = split_name(dst);
@@ -213,7 +214,7 @@ impl GenGraph {
             let mut input_slices: Vec<&[Sample]> =
                 vec![&[]; node.node.input_names().len()];
 
-            // for each input edge, as the the appropriate output
+            // for each input edge, as the appropriate output
             for edge in &node.inputs {
                 input_slices[edge.input_index] = if edge.src.0 < node_index {
                     &left[edge.src.0].outputs[edge.output_index]
