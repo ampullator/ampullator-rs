@@ -35,6 +35,7 @@ impl FromStr for UnitRate {
     }
 }
 
+// Given value, convert it to Hertz. The `UnitRate` `mode` defines the input type. Thus, providing `value` 60 and `mode` MIDI will return the Hz for middle C.
 pub(crate) fn unit_rate_to_hz(
     value: Sample,
     mode: UnitRate,

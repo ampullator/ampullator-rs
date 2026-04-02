@@ -1,7 +1,7 @@
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde::Serialize;
-use wide::f32x8;
+use wide::{CmpNe, f32x8};
 
 use crate::util::Sample;
 use crate::util::UnitRate;
@@ -121,9 +121,56 @@ impl UGen for UGAsHz {
     ) {
         let input = inputs.first().copied().unwrap_or(&[]);
         let out = &mut outputs[0];
-        for i in 0..out.len() {
-            let x = input.get(i).copied().unwrap_or(0.0);
-            out[i] = unit_rate_to_hz(x, self.mode, sample_rate)
+        let chunks = out.len() / 8;
+        let zero = f32x8::splat(0.0);
+
+        //  zero-safe divide for Seconds and Samples works by bitwise-ANDing the computed reciprocal with the simd_ne mask — positions where the input is zero have all-zero mask bits, which zero out the Inf result cleanly.
+
+        // NOTE: util::unit_rate_to_hz provides an element-wise implementation.
+        match self.mode {
+            UnitRate::Hz => {
+                for c in 0..chunks {
+                    let i = c * 8;
+                    out[i..i + 8].copy_from_slice(&simd_load(input, i).to_array());
+                }
+            }
+            UnitRate::Seconds => {
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    let result = x.simd_ne(zero) & (f32x8::splat(1.0) / x);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
+                }
+            }
+            UnitRate::Samples => {
+                let sr = f32x8::splat(sample_rate);
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    let result = x.simd_ne(zero) & (sr / x);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
+                }
+            }
+            UnitRate::Midi => {
+                let base = f32x8::splat(2.0);
+                let a = f32x8::splat(440.0);
+                let offset = f32x8::splat(69.0);
+                let inv12 = f32x8::splat(1.0 / 12.0);
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    let result = a * base.pow_f32x8((x - offset) * inv12);
+                    out[i..i + 8].copy_from_slice(&result.to_array());
+                }
+            }
+            UnitRate::Bpm => {
+                let inv60 = f32x8::splat(1.0 / 60.0);
+                for c in 0..chunks {
+                    let i = c * 8;
+                    let x = simd_load(input, i);
+                    out[i..i + 8].copy_from_slice(&(x * inv60).to_array());
+                }
+            }
         }
     }
 }
@@ -501,12 +548,34 @@ impl UGen for UGWhite {
     ) {
         let min_in = inputs.first().copied().unwrap_or(&[]);
         let max_in = inputs.get(1).copied().unwrap_or(&[]);
-
         let out = &mut outputs[0];
-        for (i, v) in out.iter_mut().enumerate() {
-            let min = min_in.get(i).copied().unwrap_or(self.default_min);
-            let max = max_in.get(i).copied().unwrap_or(self.default_max);
-            *v = self.rng.random_range(min..=max);
+        let n = out.len();
+
+        match (min_in.len() >= n, max_in.len() >= n) {
+            // most comon case
+            (false, false) => {
+                let (min, max) = (self.default_min, self.default_max);
+                for v in out.iter_mut() {
+                    *v = self.rng.random_range(min..=max);
+                }
+            }
+            (true, false) => {
+                let max = self.default_max;
+                for i in 0..n {
+                    out[i] = self.rng.random_range(min_in[i]..=max);
+                }
+            }
+            (false, true) => {
+                let min = self.default_min;
+                for i in 0..n {
+                    out[i] = self.rng.random_range(min..=max_in[i]);
+                }
+            }
+            (true, true) => {
+                for i in 0..n {
+                    out[i] = self.rng.random_range(min_in[i]..=max_in[i]);
+                }
+            }
         }
     }
 }
