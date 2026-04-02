@@ -264,7 +264,7 @@ mod tests {
     use crate::GenGraph;
     use crate::connect_many;
     use crate::register_many;
-    use crate::{ModeRound, UGClock, UGEnvAR, UGRound, UGSine, UnitRate};
+    use crate::{ModeRound, UGClock, UGEnvAR, UGMult, UGRound, UGSine, UnitRate};
 
     #[test]
     fn test_recorder_a() {
@@ -578,4 +578,30 @@ mod tests {
         );
         // r1.to_gnuplot_fp("/tmp/ampullator.png").unwrap();
     }
+
+    #[test]
+    fn test_recorder_adhoc() {
+
+        let fp = Path::new("/tmp/test.wav");
+
+        let mut g = GenGraph::new(44100.0, 32);
+        register_many![g,
+            "fq" => 220,
+            "amp" => 0.2,
+            "osc" => UGSine::new(),
+            "mult" => UGMult::new(2),
+        ];
+        connect_many![g,
+            "fq.out" -> "osc.freq",
+            "osc.wave" -> "mult.in1",
+            "amp.out" -> "mult.in2"
+        ];
+
+        let labels = Some(vec!["mult.out".to_string()]);
+        let r1 = Recorder::from_duration(g, labels, 5.0);
+
+        r1.to_wav(fp, WavFormat::Int16).unwrap();
+        println!("wrote: {:?}", fp);
+    }
+
 }
