@@ -648,27 +648,76 @@ impl UGen for UGSine {
         let trig_out = &mut rest[0];
 
         let dt = 1.0 / sample_rate;
+        let n = wave_out.len();
 
-        for i in 0..wave_out.len() {
-            // let global_sample = time_sample + i;
+        let phase_connected = phase_in.len() >= n;
+        let min_connected = min_in.len() >= n;
+        let max_connected = max_in.len() >= n;
+        let freq_connected = freq_in.len() >= n;
 
-            let freq = freq_in.get(i).copied().unwrap_or(self.default_freq);
-            let phase_offset = phase_in
-                .get(i)
-                .copied()
-                .unwrap_or(self.default_phase_offset);
-            let min = min_in.get(i).copied().unwrap_or(self.default_min);
-            let max = max_in.get(i).copied().unwrap_or(self.default_max);
-
-            self.phase += freq * dt;
-            let crossed = self.phase >= 1.0;
-            if crossed {
-                self.phase -= 1.0;
+        if !phase_connected && !min_connected && !max_connected {
+            // common case: phase/min/max at defaults
+            let phase_offset = self.default_phase_offset;
+            let (min, max) = (self.default_min, self.default_max);
+            if freq_connected {
+                for i in 0..n {
+                    self.phase += freq_in[i] * dt;
+                    let crossed = self.phase >= 1.0;
+                    if crossed {
+                        self.phase -= 1.0;
+                    }
+                    let norm =
+                        ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
+                    wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
+                    trig_out[i] = if crossed { 1.0 } else { 0.0 };
+                }
+            } else {
+                // freq also constant: precompute phase increment
+                let phase_inc = self.default_freq * dt;
+                for i in 0..n {
+                    self.phase += phase_inc;
+                    let crossed = self.phase >= 1.0;
+                    if crossed {
+                        self.phase -= 1.0;
+                    }
+                    let norm =
+                        ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
+                    wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
+                    trig_out[i] = if crossed { 1.0 } else { 0.0 };
+                }
             }
-
-            let norm = ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
-            wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
-            trig_out[i] = if crossed { 1.0 } else { 0.0 };
+        } else {
+            // general case: at least one of phase/min/max is connected
+            for i in 0..n {
+                let freq = if freq_connected {
+                    freq_in[i]
+                } else {
+                    self.default_freq
+                };
+                let phase_offset = if phase_connected {
+                    phase_in[i]
+                } else {
+                    self.default_phase_offset
+                };
+                let min = if min_connected {
+                    min_in[i]
+                } else {
+                    self.default_min
+                };
+                let max = if max_connected {
+                    max_in[i]
+                } else {
+                    self.default_max
+                };
+                self.phase += freq * dt;
+                let crossed = self.phase >= 1.0;
+                if crossed {
+                    self.phase -= 1.0;
+                }
+                let norm = ((self.phase + phase_offset) * std::f32::consts::TAU).sin();
+                wave_out[i] = min + (norm + 1.0) * 0.5 * (max - min);
+                trig_out[i] = if crossed { 1.0 } else { 0.0 };
+            }
         }
     }
 }
