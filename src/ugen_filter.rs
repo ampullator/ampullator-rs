@@ -258,6 +258,24 @@ impl UGen for UGHighPassQ {
     }
 }
 
+/// Compute normalized biquad peaking EQ coefficients (Audio EQ Cookbook, R. Bristow-Johnson).
+/// Returns `(b0, b1, b2, a1, a2)` — all normalized by `a0`.
+fn peaking_eq_coeffs(db_gain: f32, bw: f32, fc: f32, sample_rate: f32) -> (f32, f32, f32, f32, f32) {
+    let a = 10.0_f32.powf(db_gain / 40.0);
+    let w0 = 2.0 * std::f32::consts::PI * fc / sample_rate;
+    let sin_w0 = w0.sin().max(1e-6); // guard against division by zero near Nyquist
+    let cos_w0 = w0.cos();
+    let alpha = sin_w0 * (std::f32::consts::LN_2 / 2.0 * bw * w0 / sin_w0).sinh();
+
+    let a0 = 1.0 + alpha / a;
+    let b0 = (1.0 + alpha * a) / a0;
+    let b1 = -2.0 * cos_w0 / a0;
+    let b2 = (1.0 - alpha * a) / a0;
+    let a1 = -2.0 * cos_w0 / a0;
+    let a2 = (1.0 - alpha / a) / a0;
+    (b0, b1, b2, a1, a2)
+}
+
 /// A fully sweepable parametric equalizer with variable gain, bandwidth, and center frequency.
 /// Uses a biquad peaking EQ filter (Audio EQ Cookbook). No initialization arguments;
 /// all parameters are controlled via signal inputs.
@@ -325,20 +343,7 @@ impl UGen for UGParametric {
                 .unwrap_or(1000.0)
                 .clamp(1.0, sample_rate * 0.5 - 1.0);
 
-            // Biquad peaking EQ coefficients (Audio EQ Cookbook, R. Bristow-Johnson)
-            let a = 10.0_f32.powf(db_gain / 40.0);
-            let w0 = 2.0 * std::f32::consts::PI * fc / sample_rate;
-            let sin_w0 = w0.sin().max(1e-6); // guard against division by zero near Nyquist
-            let cos_w0 = w0.cos();
-            let alpha =
-                sin_w0 * (std::f32::consts::LN_2 / 2.0 * bw * w0 / sin_w0).sinh();
-
-            let a0 = 1.0 + alpha / a;
-            let b0 = (1.0 + alpha * a) / a0;
-            let b1 = -2.0 * cos_w0 / a0;
-            let b2 = (1.0 - alpha * a) / a0;
-            let a1 = -2.0 * cos_w0 / a0;
-            let a2 = (1.0 - alpha / a) / a0;
+            let (b0, b1, b2, a1, a2) = peaking_eq_coeffs(db_gain, bw, fc, sample_rate);
 
             let y =
                 b0 * x + b1 * self.x1 + b2 * self.x2 - a1 * self.y1 - a2 * self.y2;
@@ -348,6 +353,72 @@ impl UGen for UGParametric {
             self.y2 = self.y1;
             self.y1 = y;
 
+            out[i] = y;
+        }
+    }
+}
+
+/// A parametric equalizer with gain, bandwidth, and center frequency fixed at initialization.
+/// Uses the same biquad peaking EQ filter as `UGParametric`. Only the audio signal is a
+/// signal input; the EQ parameters are constant across the lifetime of the node.
+pub struct UGParametricConst {
+    db_gain: f32,
+    bandwidth: f32,
+    freq: f32,
+    x1: Sample,
+    x2: Sample,
+    y1: Sample,
+    y2: Sample,
+}
+
+impl UGParametricConst {
+    pub fn new(db_gain: f32, bandwidth: f32, freq: f32) -> Self {
+        Self {
+            db_gain,
+            bandwidth: bandwidth.max(0.001),
+            freq,
+            x1: 0.0,
+            x2: 0.0,
+            y1: 0.0,
+            y2: 0.0,
+        }
+    }
+}
+
+impl UGen for UGParametricConst {
+    fn type_name(&self) -> &'static str {
+        "UGParametricConst"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["in"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs[0];
+        let out = &mut outputs[0];
+
+        let fc = self.freq.clamp(1.0, sample_rate * 0.5 - 1.0);
+        let (b0, b1, b2, a1, a2) =
+            peaking_eq_coeffs(self.db_gain, self.bandwidth, fc, sample_rate);
+
+        for i in 0..out.len() {
+            let x = input[i];
+            let y = b0 * x + b1 * self.x1 + b2 * self.x2 - a1 * self.y1 - a2 * self.y2;
+            self.x2 = self.x1;
+            self.x1 = x;
+            self.y2 = self.y1;
+            self.y1 = y;
             out[i] = y;
         }
     }
@@ -536,6 +607,81 @@ mod tests {
             vec![
                 0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
                 -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
+            ]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_parametric_const_passthrough() {
+        // With gain = 0 dB the parametric EQ is transparent: output equals input.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "pqc" => UGParametricConst::new(0.0, 1.0 / 3.0, 60.0),
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "pqc.in",
+            "pqc.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_parametric_const_boost_a() {
+        // 6 dB boost at 60 Hz with 1/3-octave bandwidth.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "pqc" => UGParametricConst::new(6.0, 1.0 / 3.0, 60.0),
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "pqc.in",
+            "pqc.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005,
+                -0.0, -0.005, -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
+            ]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_parametric_const_cut_a() {
+        // 6 dB cut at 60 Hz with 1/3-octave bandwidth.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "pqc" => UGParametricConst::new(-6.0, 1.0 / 3.0, 60.0),
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "pqc.in",
+            "pqc.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.985, -0.028, -0.025, -0.021, -0.017, -0.012, -0.007, -0.003,
+                0.002, 0.006, 0.01, 0.013, 0.016, 0.018, 0.019, 0.019,
             ]
         );
     }
