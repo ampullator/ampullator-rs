@@ -9,7 +9,7 @@ use crate::ugen_core::{
     UGWhite,
 };
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
-use crate::ugen_filter::{UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ};
+use crate::ugen_filter::{UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric};
 use crate::ugen_rhythm::UGPulseSelect;
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
@@ -53,6 +53,7 @@ pub enum UGFacade {
     LowPassQ {
         roll_off_db: f32,
     },
+    Parametric {},
     Mult {
         input_count: usize,
     },
@@ -104,6 +105,7 @@ impl UGFacade {
             }
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
+            UGFacade::Parametric {} => Box::new(UGParametric::new()),
             UGFacade::EnvBreakPoint {
                 duration_values,
                 duration_mode,
@@ -739,4 +741,37 @@ mod tests {
     //     let fp_dst = Path::new("doc/out");
     //     let _ = build_markdown_index(&fp_src, &fp_dst, 100.0, 8, 100).unwrap();
     // }
+
+    #[test]
+    fn test_ug_facade_parametric() {
+        // 6 dB boost at 60 Hz with 1/3-octave bandwidth via JSON facade.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "gain": 6.0,
+                "bw": 0.333,
+                "freq": 60.0,
+                "pq": ["Parametric", {}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "pq.in"],
+                ["gain.out", "pq.gain"],
+                ["bw.out", "pq.bandwidth"],
+                ["freq.out", "pq.freq"],
+                ["pq.out", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005,
+                -0.0, -0.005, -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
+            ]
+        );
+    }
 }

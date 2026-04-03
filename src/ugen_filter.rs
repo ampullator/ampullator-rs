@@ -258,6 +258,95 @@ impl UGen for UGHighPassQ {
     }
 }
 
+/// A fully sweepable parametric equalizer with variable gain, bandwidth, and center frequency.
+/// Uses a biquad peaking EQ filter (Audio EQ Cookbook). No initialization arguments;
+/// all parameters are controlled via signal inputs.
+pub struct UGParametric {
+    x1: Sample,
+    x2: Sample,
+    y1: Sample,
+    y2: Sample,
+}
+
+impl UGParametric {
+    pub fn new() -> Self {
+        Self {
+            x1: 0.0,
+            x2: 0.0,
+            y1: 0.0,
+            y2: 0.0,
+        }
+    }
+}
+
+impl UGen for UGParametric {
+    fn type_name(&self) -> &'static str {
+        "UGParametric"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["in", "gain", "bandwidth", "freq"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs[0];
+        let gain = inputs.get(1).copied().unwrap_or(&[]);
+        let bandwidth = inputs.get(2).copied().unwrap_or(&[]);
+        let freq = inputs.get(3).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let x = input[i];
+            let db_gain = gain.get(i).copied().unwrap_or(0.0);
+            let bw = bandwidth
+                .get(i)
+                .copied()
+                .unwrap_or(1.0 / 3.0)
+                .max(0.001);
+            let fc = freq
+                .get(i)
+                .copied()
+                .unwrap_or(1000.0)
+                .clamp(1.0, sample_rate * 0.5 - 1.0);
+
+            // Biquad peaking EQ coefficients (Audio EQ Cookbook, R. Bristow-Johnson)
+            let a = 10.0_f32.powf(db_gain / 40.0);
+            let w0 = 2.0 * std::f32::consts::PI * fc / sample_rate;
+            let sin_w0 = w0.sin().max(1e-6);
+            let cos_w0 = w0.cos();
+            let alpha =
+                sin_w0 * (std::f32::consts::LN_2 / 2.0 * bw * w0 / sin_w0).sinh();
+
+            let a0 = 1.0 + alpha / a;
+            let b0 = (1.0 + alpha * a) / a0;
+            let b1 = -2.0 * cos_w0 / a0;
+            let b2 = (1.0 - alpha * a) / a0;
+            let a1 = -2.0 * cos_w0 / a0;
+            let a2 = (1.0 - alpha / a) / a0;
+
+            let y =
+                b0 * x + b1 * self.x1 + b2 * self.x2 - a1 * self.y1 - a2 * self.y2;
+
+            self.x2 = self.x1;
+            self.x1 = x;
+            self.y2 = self.y1;
+            self.y1 = y;
+
+            out[i] = y;
+        }
+    }
+}
+
 //------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
@@ -321,6 +410,99 @@ mod tests {
             vec![
                 0.659, -0.248, -0.178, -0.126, -0.086, -0.058, -0.037, -0.021, -0.011,
                 -0.003, 0.002, 0.005, 0.007, 0.008, 0.008, 0.008
+            ]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_parametric_passthrough() {
+        // With gain = 0 dB the parametric EQ is transparent: output equals input.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "pq" => UGParametric::new(),
+            "gain" => 0.0_f32,
+            "bw" => 0.333_f32,
+            "freq" => 60.0_f32,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "pq.in",
+            "gain.out" -> "pq.gain",
+            "bw.out" -> "pq.bandwidth",
+            "freq.out" -> "pq.freq",
+            "pq.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            ]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_parametric_boost_a() {
+        // 6 dB boost at 60 Hz with 1/3-octave bandwidth.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "pq" => UGParametric::new(),
+            "gain" => 6.0_f32,
+            "bw" => 0.333_f32,
+            "freq" => 60.0_f32,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "pq.in",
+            "gain.out" -> "pq.gain",
+            "bw.out" -> "pq.bandwidth",
+            "freq.out" -> "pq.freq",
+            "pq.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005,
+                -0.0, -0.005, -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
+            ]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_parametric_cut_a() {
+        // 6 dB cut at 60 Hz with 1/3-octave bandwidth.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "pq" => UGParametric::new(),
+            "gain" => -6.0_f32,
+            "bw" => 0.333_f32,
+            "freq" => 60.0_f32,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "pq.in",
+            "gain.out" -> "pq.gain",
+            "bw.out" -> "pq.bandwidth",
+            "freq.out" -> "pq.freq",
+            "pq.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.985, -0.028, -0.025, -0.021, -0.017, -0.012, -0.007, -0.003,
+                0.002, 0.006, 0.01, 0.013, 0.016, 0.018, 0.019, 0.019,
             ]
         );
     }
