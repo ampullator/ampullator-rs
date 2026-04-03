@@ -99,7 +99,9 @@ impl UGFacade {
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
             UGFacade::HighPass { roll_off_db } => Box::new(UGHighPass::new(*roll_off_db)),
-            UGFacade::HighPassQ { roll_off_db } => Box::new(UGHighPassQ::new(*roll_off_db)),
+            UGFacade::HighPassQ { roll_off_db } => {
+                Box::new(UGHighPassQ::new(*roll_off_db))
+            }
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
             UGFacade::EnvBreakPoint {
