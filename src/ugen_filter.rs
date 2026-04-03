@@ -261,7 +261,12 @@ impl UGen for UGHighPassQ {
 /// Compute normalized biquad peaking EQ coefficients (Audio EQ Cookbook, R. Bristow-Johnson).
 /// Returns `(b0, b1, b2, a1, a2)` — all normalized by `a0`.
 #[inline]
-fn peaking_eq_coeffs(db_gain: f32, bw: f32, fc: f32, sample_rate: f32) -> (f32, f32, f32, f32, f32) {
+fn peaking_eq_coeffs(
+    db_gain: f32,
+    bw: f32,
+    fc: f32,
+    sample_rate: f32,
+) -> (f32, f32, f32, f32, f32) {
     let a = 10.0_f32.powf(db_gain / 40.0);
     let w0 = 2.0 * std::f32::consts::PI * fc / sample_rate;
     let sin_w0 = w0.sin().max(1e-6); // guard against division by zero near Nyquist
@@ -333,11 +338,7 @@ impl UGen for UGParametric {
         for i in 0..out.len() {
             let x = input[i];
             let db_gain = gain.get(i).copied().unwrap_or(0.0);
-            let bw = bandwidth
-                .get(i)
-                .copied()
-                .unwrap_or(1.0 / 3.0)
-                .max(0.001);
+            let bw = bandwidth.get(i).copied().unwrap_or(1.0 / 3.0).max(0.001);
             let fc = freq
                 .get(i)
                 .copied()
@@ -346,8 +347,7 @@ impl UGen for UGParametric {
 
             let (b0, b1, b2, a1, a2) = peaking_eq_coeffs(db_gain, bw, fc, sample_rate);
 
-            let y =
-                b0 * x + b1 * self.x1 + b2 * self.x2 - a1 * self.y1 - a2 * self.y2;
+            let y = b0 * x + b1 * self.x1 + b2 * self.x2 - a1 * self.y1 - a2 * self.y2;
 
             self.x2 = self.x1;
             self.x1 = x;
@@ -517,8 +517,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0,
             ]
         );
     }
@@ -548,8 +548,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005,
-                -0.0, -0.005, -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
+                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005, -0.0, -0.005,
+                -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
             ]
         );
     }
@@ -579,8 +579,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                0.985, -0.028, -0.025, -0.021, -0.017, -0.012, -0.007, -0.003,
-                0.002, 0.006, 0.01, 0.013, 0.016, 0.018, 0.019, 0.019,
+                0.985, -0.028, -0.025, -0.021, -0.017, -0.012, -0.007, -0.003, 0.002,
+                0.006, 0.01, 0.013, 0.016, 0.018, 0.019, 0.019,
             ]
         );
     }
@@ -631,8 +631,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0,
             ]
         );
     }
@@ -656,8 +656,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005,
-                -0.0, -0.005, -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
+                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005, -0.0, -0.005,
+                -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
             ]
         );
     }
@@ -681,8 +681,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                0.985, -0.028, -0.025, -0.021, -0.017, -0.012, -0.007, -0.003,
-                0.002, 0.006, 0.01, 0.013, 0.016, 0.018, 0.019, 0.019,
+                0.985, -0.028, -0.025, -0.021, -0.017, -0.012, -0.007, -0.003, 0.002,
+                0.006, 0.01, 0.013, 0.016, 0.018, 0.019, 0.019,
             ]
         );
     }

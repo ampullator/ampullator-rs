@@ -9,7 +9,9 @@ use crate::ugen_core::{
     UGWhite,
 };
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
-use crate::ugen_filter::{UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst};
+use crate::ugen_filter::{
+    UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+};
 use crate::ugen_rhythm::UGPulseSelect;
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
@@ -111,9 +113,11 @@ impl UGFacade {
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
             UGFacade::Parametric {} => Box::new(UGParametric::new()),
-            UGFacade::ParametricConst { gain, bandwidth, freq } => {
-                Box::new(UGParametricConst::new(*gain, *bandwidth, *freq))
-            }
+            UGFacade::ParametricConst {
+                gain,
+                bandwidth,
+                freq,
+            } => Box::new(UGParametricConst::new(*gain, *bandwidth, *freq)),
             UGFacade::EnvBreakPoint {
                 duration_values,
                 duration_mode,
@@ -777,8 +781,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005,
-                -0.0, -0.005, -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
+                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005, -0.0, -0.005,
+                -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
             ]
         );
     }
@@ -804,8 +808,8 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("r.out"),
             vec![
-                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005,
-                -0.0, -0.005, -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
+                1.015, 0.029, 0.027, 0.024, 0.02, 0.015, 0.01, 0.005, -0.0, -0.005,
+                -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
             ]
         );
     }
