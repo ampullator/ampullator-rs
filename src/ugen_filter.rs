@@ -132,6 +132,132 @@ impl UGen for UGLowPassQ {
     }
 }
 
+/// A high pass filter with variable cutoff frequency. Rolloff configurable at initialization.
+pub struct UGHighPass {
+    poles: usize,
+    state: Vec<Sample>,
+}
+
+impl UGHighPass {
+    pub fn new(roll_off_db: f32) -> Self {
+        let poles = db_per_octave_to_poles(roll_off_db);
+        Self {
+            poles,
+            state: vec![0.0; poles],
+        }
+    }
+}
+
+impl UGen for UGHighPass {
+    fn type_name(&self) -> &'static str {
+        "UGHighPass"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["in", "cutoff"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs[0];
+        let cutoff = inputs.get(1).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let x = input[i];
+            let fc = cutoff
+                .get(i)
+                .copied()
+                .unwrap_or(1000.0)
+                .clamp(1.0, sample_rate / 2.0);
+            let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
+
+            let mut y = x;
+            for p in 0..self.poles {
+                self.state[p] += g * (y - self.state[p]);
+                y -= self.state[p];
+            }
+
+            out[i] = y;
+        }
+    }
+}
+
+/// A high pass filter with variable cutoff and resonance. Roll-off configurable at initialization.
+pub struct UGHighPassQ {
+    poles: usize,
+    state: Vec<Sample>,
+    z1: Sample,
+}
+
+impl UGHighPassQ {
+    pub fn new(roll_off_db: f32) -> Self {
+        let poles = db_per_octave_to_poles(roll_off_db);
+        Self {
+            poles,
+            state: vec![0.0; poles],
+            z1: 0.0,
+        }
+    }
+}
+
+impl UGen for UGHighPassQ {
+    fn type_name(&self) -> &'static str {
+        "UGHighPassQ"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &["in", "cutoff", "resonance"]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let input = inputs[0];
+        let cutoff = inputs.get(1).copied().unwrap_or(&[]);
+        let resonance = inputs.get(2).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let x = input[i];
+            let fc = cutoff
+                .get(i)
+                .copied()
+                .unwrap_or(1000.0)
+                .clamp(1.0, sample_rate / 2.0);
+            let res = resonance.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0);
+
+            let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
+            let mut y = x - res * self.z1;
+
+            for p in 0..self.poles {
+                self.state[p] += g * (y - self.state[p]);
+                y -= self.state[p];
+            }
+
+            self.z1 = y; // feedback storage
+            out[i] = y;
+        }
+    }
+}
+
 //------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
@@ -169,6 +295,59 @@ mod tests {
             vec![
                 0.036, 0.058, 0.07, 0.076, 0.077, 0.075, 0.071, 0.066, 0.06, 0.054,
                 0.048, 0.043, 0.038, 0.033, 0.029, 0.025
+            ]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_high_pass_a() {
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "hpf" => UGHighPass::new(12.0),
+            "fq" => 60,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "hpf.in",
+            "fq.out" -> "hpf.cutoff",
+            "hpf.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.248, -0.178, -0.126, -0.086, -0.058, -0.037, -0.021, -0.011,
+                -0.003, 0.002, 0.005, 0.007, 0.008, 0.008, 0.008
+            ]
+        );
+    }
+
+    #[test]
+    fn test_high_pass_q_a() {
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "hpfq" => UGHighPassQ::new(12.0),
+            "fq" => 60,
+            "res" => 0.5_f32,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "hpfq.in",
+            "fq.out" -> "hpfq.cutoff",
+            "res.out" -> "hpfq.resonance",
+            "hpfq.out" -> "r.in"
+        ];
+        g.process();
+
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
+                -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
             ]
         );
     }

@@ -17,7 +17,7 @@ pub use ugen_core::{
 
 pub use ugen_select::{ModeSelect, UGSelect};
 
-pub use ugen_filter::{UGLowPass, UGLowPassQ};
+pub use ugen_filter::{UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ};
 
 pub use ugen_env::{UGEnvAR, UGEnvBreakPoint};
 

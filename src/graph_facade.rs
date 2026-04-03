@@ -9,7 +9,7 @@ use crate::ugen_core::{
     UGWhite,
 };
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
-use crate::ugen_filter::{UGLowPass, UGLowPassQ};
+use crate::ugen_filter::{UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ};
 use crate::ugen_rhythm::UGPulseSelect;
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
@@ -41,6 +41,12 @@ pub enum UGFacade {
     },
     EnvAR {},
     Floor {},
+    HighPass {
+        roll_off_db: f32,
+    },
+    HighPassQ {
+        roll_off_db: f32,
+    },
     LowPass {
         roll_off_db: f32,
     },
@@ -92,6 +98,10 @@ impl UGFacade {
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
+            UGFacade::HighPass { roll_off_db } => Box::new(UGHighPass::new(*roll_off_db)),
+            UGFacade::HighPassQ { roll_off_db } => {
+                Box::new(UGHighPassQ::new(*roll_off_db))
+            }
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
             UGFacade::EnvBreakPoint {
@@ -560,6 +570,64 @@ mod tests {
             vec![
                 0.036, 0.058, 0.07, 0.076, 0.077, 0.075, 0.071, 0.066, 0.06, 0.054,
                 0.048, 0.043, 0.038, 0.033, 0.029, 0.025
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ug_facade_high_pass() {
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "cutoff": 60.0,
+                "hpf": ["HighPass", {"roll_off_db": 12.0}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "hpf.in"],
+                ["cutoff.out", "hpf.cutoff"],
+                ["hpf.out", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.248, -0.178, -0.126, -0.086, -0.058, -0.037, -0.021, -0.011,
+                -0.003, 0.002, 0.005, 0.007, 0.008, 0.008, 0.008
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ug_facade_high_pass_q() {
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "cutoff": 60.0,
+                "resonance": 0.5,
+                "hpfq": ["HighPassQ", {"roll_off_db": 12.0}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "hpfq.in"],
+                ["cutoff.out", "hpfq.cutoff"],
+                ["resonance.out", "hpfq.resonance"],
+                ["hpfq.out", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
+                -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
             ]
         );
     }
