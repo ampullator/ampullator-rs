@@ -260,6 +260,7 @@ impl UGen for UGHighPassQ {
 
 /// Compute normalized biquad peaking EQ coefficients (Audio EQ Cookbook, R. Bristow-Johnson).
 /// Returns `(b0, b1, b2, a1, a2)` — all normalized by `a0`.
+#[inline]
 fn peaking_eq_coeffs(db_gain: f32, bw: f32, fc: f32, sample_rate: f32) -> (f32, f32, f32, f32, f32) {
     let a = 10.0_f32.powf(db_gain / 40.0);
     let w0 = 2.0 * std::f32::consts::PI * fc / sample_rate;
