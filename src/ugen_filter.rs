@@ -279,6 +279,12 @@ impl UGParametric {
     }
 }
 
+impl Default for UGParametric {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UGen for UGParametric {
     fn type_name(&self) -> &'static str {
         "UGParametric"
@@ -322,7 +328,7 @@ impl UGen for UGParametric {
             // Biquad peaking EQ coefficients (Audio EQ Cookbook, R. Bristow-Johnson)
             let a = 10.0_f32.powf(db_gain / 40.0);
             let w0 = 2.0 * std::f32::consts::PI * fc / sample_rate;
-            let sin_w0 = w0.sin().max(1e-6);
+            let sin_w0 = w0.sin().max(1e-6); // guard against division by zero near Nyquist
             let cos_w0 = w0.cos();
             let alpha =
                 sin_w0 * (std::f32::consts::LN_2 / 2.0 * bw * w0 / sin_w0).sinh();
