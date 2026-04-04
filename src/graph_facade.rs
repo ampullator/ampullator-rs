@@ -190,7 +190,9 @@ pub(crate) struct GraphFacade {
     title: Option<String>,
     label: Option<String>,
     chain: Option<String>,
+    #[serde(default)]
     register: HashMap<String, Facade>,
+    #[serde(default)]
     connect: Vec<(String, String)>,
 }
 
@@ -293,8 +295,7 @@ pub fn build_markdown_index(
                 .map_err(|e| e.to_string())?
                 .trim()
                 .to_string();
-            let parsed: GraphFacade =
-                serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+            let parsed = GraphFacade::from_json(&json_str)?;
 
             let title = parsed.title.clone().unwrap_or("title".to_string());
             let label = parsed.label.clone().unwrap_or("label".to_string());
@@ -773,13 +774,6 @@ mod tests {
             ]
         );
     }
-
-    // #[test]
-    // fn test_build_index_a() {
-    //     let fp_src = Path::new("doc/example");
-    //     let fp_dst = Path::new("doc/out");
-    //     let _ = build_markdown_index(&fp_src, &fp_dst, 100.0, 8, 100).unwrap();
-    // }
 
     #[test]
     fn test_ug_facade_parametric() {

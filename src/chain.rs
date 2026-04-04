@@ -39,6 +39,8 @@ enum Token {
     Assign,        // =
     Plus,          // +
     Star,          // *
+    LBracket,      // [
+    RBracket,      // ]
     Ident(String), // identifier
     Number(f32),   // numeric literal
 }
@@ -79,6 +81,14 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
             }
             '*' => {
                 tokens.push(Token::Star);
+                i += 1;
+            }
+            '[' => {
+                tokens.push(Token::LBracket);
+                i += 1;
+            }
+            ']' => {
+                tokens.push(Token::RBracket);
                 i += 1;
             }
             '-' if i + 1 < chars.len() && chars[i + 1] == '>' => {
@@ -279,21 +289,12 @@ impl ChainParser {
     /// the tagged-array JSON form `["TypeName", {fields…}]`.
     fn make_facade(
         type_name: &str,
-        args: &HashMap<String, String>,
+        args: &HashMap<String, serde_json::Value>,
     ) -> Result<Facade, String> {
         let mut obj = serde_json::Map::new();
 
         for (k, v) in args {
-            if let Ok(n) = v.parse::<f64>() {
-                if let Some(num) = serde_json::Number::from_f64(n) {
-                    obj.insert(k.clone(), serde_json::Value::Number(num));
-                } else {
-                    // Infinity / NaN – keep as string and let serde reject it
-                    obj.insert(k.clone(), serde_json::Value::String(v.clone()));
-                }
-            } else {
-                obj.insert(k.clone(), serde_json::Value::String(v.clone()));
-            }
+            obj.insert(k.clone(), v.clone());
         }
 
         // Sensible chain-DSL defaults for fields that are required in the
@@ -352,8 +353,8 @@ impl ChainParser {
         Ok(Facade::Full(ug_facade))
     }
 
-    /// Parse keyword args inside `(…)`.  Returns key → value-string pairs.
-    fn parse_args(&mut self) -> Result<HashMap<String, String>, String> {
+    /// Parse keyword args inside `(…)`.  Returns key → JSON value pairs.
+    fn parse_args(&mut self) -> Result<HashMap<String, serde_json::Value>, String> {
         let mut args = HashMap::new();
         if self.peek() == Some(&Token::RParen) {
             return Ok(args);
@@ -364,10 +365,17 @@ impl ChainParser {
                 t => return Err(format!("Expected argument name, got {t:?}")),
             };
             self.expect(&Token::Assign)?;
-            let value = match self.consume() {
-                Some(Token::Number(n)) => format!("{n}"),
-                Some(Token::Ident(s)) => s,
-                t => return Err(format!("Expected argument value, got {t:?}")),
+            let value = match self.peek() {
+                Some(Token::LBracket) => self.parse_list()?,
+                _ => match self.consume() {
+                    Some(Token::Number(n)) => {
+                        serde_json::Number::from_f64(n as f64)
+                            .map(serde_json::Value::Number)
+                            .unwrap_or(serde_json::Value::String(format!("{n}")))
+                    }
+                    Some(Token::Ident(s)) => serde_json::Value::String(s),
+                    t => return Err(format!("Expected argument value, got {t:?}")),
+                },
             };
             args.insert(key, value);
 
@@ -382,6 +390,37 @@ impl ChainParser {
             }
         }
         Ok(args)
+    }
+
+    /// Parse a list literal `[value, value, ...]`.
+    fn parse_list(&mut self) -> Result<serde_json::Value, String> {
+        self.expect(&Token::LBracket)?;
+        let mut items = Vec::new();
+        if self.peek() != Some(&Token::RBracket) {
+            loop {
+                match self.consume() {
+                    Some(Token::Number(n)) => {
+                        let v = serde_json::Number::from_f64(n as f64)
+                            .map(serde_json::Value::Number)
+                            .unwrap_or(serde_json::Value::String(format!("{n}")));
+                        items.push(v);
+                    }
+                    Some(Token::Ident(s)) => {
+                        items.push(serde_json::Value::String(s));
+                    }
+                    t => return Err(format!("Expected list element, got {t:?}")),
+                }
+                match self.peek() {
+                    Some(Token::Comma) => {
+                        self.consume();
+                    }
+                    Some(Token::RBracket) => break,
+                    t => return Err(format!("Expected ',' or ']', got {t:?}")),
+                }
+            }
+        }
+        self.expect(&Token::RBracket)?;
+        Ok(serde_json::Value::Array(items))
     }
 
     /// Parse a UGen call (type name + optional `(args)`) and immediately register it.

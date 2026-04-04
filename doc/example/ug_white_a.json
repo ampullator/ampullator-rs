@@ -1,16 +1,5 @@
 {
     "title": "White Noise Masking",
     "label": "ug_white-mask_select",
-    "register": {
-        "clock": ["Clock", { "value": 20.0, "mode": "Samples" }],
-        "sel-a": ["Select", {"values": [5, 50, 25], "mode": "Cycle"}],
-        "sel-b": ["Select", {"values": [-5, -50, -25], "mode": "Cycle"}],
-        "sig": ["White", {}]
-    },
-    "connect": [
-        ["clock.out", "sel-a.trigger"],
-        ["clock.out", "sel-b.trigger"],
-        ["sel-a.out", "sig.max"],
-        ["sel-b.out", "sig.min"]
-    ]
+    "chain": "White() => noise | Clock(value=20, mode=Samples) => clock | clock -> Select(values=[5, 50, 25], mode=Cycle) ->:max noise | clock -> Select(values=[-5, -50, -25], mode=Cycle) ->:min noise"
 }

@@ -29,3 +29,5 @@ pub use ugen_rhythm::UGPulseSelect;
 pub use util::{Sample, UnitRate};
 
 pub use graph::GenGraph;
+
+pub use graph_facade::build_markdown_index;
