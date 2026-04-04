@@ -189,6 +189,7 @@ impl Facade {
 pub(crate) struct GraphFacade {
     title: Option<String>,
     label: Option<String>,
+    chain: Option<String>,
     register: HashMap<String, Facade>,
     connect: Vec<(String, String)>,
 }
@@ -196,7 +197,19 @@ pub(crate) struct GraphFacade {
 #[allow(unused)]
 impl GraphFacade {
     pub fn from_json(json: &str) -> Result<Self, String> {
-        serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))
+        let mut facade: Self = serde_json::from_str(json)
+            .map_err(|e| format!("Failed to parse JSON: {e}"))?;
+        if let Some(ref chain) = facade.chain {
+            if !facade.register.is_empty() || !facade.connect.is_empty() {
+                return Err(
+                    "Cannot specify both 'chain' and 'register'/'connect'".to_string()
+                );
+            }
+            let (register, connect) = crate::chain::parse_chain(chain)?;
+            facade.register = register;
+            facade.connect = connect;
+        }
+        Ok(facade)
     }
 
     /// Construct a `GraphFacade` by parsing a Chain DSL string.
@@ -209,6 +222,7 @@ impl GraphFacade {
         Ok(Self {
             title: None,
             label: None,
+            chain: Some(chain.to_string()),
             register,
             connect,
         })
