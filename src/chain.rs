@@ -368,11 +368,9 @@ impl ChainParser {
             let value = match self.peek() {
                 Some(Token::LBracket) => self.parse_list()?,
                 _ => match self.consume() {
-                    Some(Token::Number(n)) => {
-                        serde_json::Number::from_f64(n as f64)
-                            .map(serde_json::Value::Number)
-                            .unwrap_or(serde_json::Value::String(format!("{n}")))
-                    }
+                    Some(Token::Number(n)) => serde_json::Number::from_f64(n as f64)
+                        .map(serde_json::Value::Number)
+                        .unwrap_or(serde_json::Value::String(format!("{n}"))),
                     Some(Token::Ident(s)) => serde_json::Value::String(s),
                     t => return Err(format!("Expected argument value, got {t:?}")),
                 },
@@ -633,12 +631,12 @@ impl ChainParser {
 // Public API
 // ---------------------------------------------------------------------------
 
+pub type ChainResult = (HashMap<String, Facade>, Vec<(String, String)>);
+
 /// Parse a Chain DSL string and return the resulting `register` and `connect`
 /// containers that can be passed to `GraphFacade::from_chain` /
 /// `register_and_connect`.
-pub fn parse_chain(
-    input: &str,
-) -> Result<(HashMap<String, Facade>, Vec<(String, String)>), String> {
+pub fn parse_chain(input: &str) -> Result<ChainResult, String> {
     let tokens = tokenize(input)?;
     let mut parser = ChainParser::new(tokens);
     parser.parse()?;

@@ -299,7 +299,7 @@ impl GenGraph {
         dot.push_str("  rankdir=TB;\n");
         dot.push_str("  bgcolor=\"#12131E\";\n");
         dot.push_str("  node [shape=record, fontsize=9, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n");
-        dot.push_str("  edge [color=\"#c4c5bf\"];\n");
+        dot.push_str("  edge [color=\"#c4c5bf\", arrowsize=0.5];\n");
 
         // Define nodes with input and output labels
         for &node_id in self.execution_order.as_ref().unwrap() {

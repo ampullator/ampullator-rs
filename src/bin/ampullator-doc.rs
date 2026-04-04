@@ -3,7 +3,10 @@ use std::path::PathBuf;
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(name = "ampullator-doc", about = "Build Ampullator documentation and examples")]
+#[command(
+    name = "ampullator-doc",
+    about = "Build Ampullator documentation and examples"
+)]
 struct Cli {
     /// Input directory containing example files
     #[arg(short, long, default_value = "doc/example")]
