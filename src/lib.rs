@@ -2,6 +2,7 @@ mod graph;
 mod graph_facade;
 mod recorder;
 mod ugen_core;
+mod ugen_drum;
 mod ugen_env;
 mod ugen_filter;
 mod ugen_rhythm;
@@ -24,6 +25,8 @@ pub use ugen_filter::{
 pub use ugen_env::{UGEnvAR, UGEnvBreakPoint};
 
 pub use ugen_rhythm::UGPulseSelect;
+
+pub use ugen_drum::UGSnareDrum;
 
 pub use util::{Sample, UnitRate};
 
