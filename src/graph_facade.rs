@@ -113,11 +113,9 @@ impl UGFacade {
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
             UGFacade::Parametric {} => Box::new(UGParametric::new()),
-            UGFacade::ParametricConst {
-                gain,
-                bw,
-                freq,
-            } => Box::new(UGParametricConst::new(*gain, *bw, *freq)),
+            UGFacade::ParametricConst { gain, bw, freq } => {
+                Box::new(UGParametricConst::new(*gain, *bw, *freq))
+            }
             UGFacade::EnvBreakPoint {
                 duration_values,
                 duration_mode,
