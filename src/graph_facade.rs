@@ -313,7 +313,7 @@ pub fn build_markdown_index(
                 for (i, segment) in chain.split('|').enumerate() {
                     let segment = segment.trim();
                     if i == 0 {
-                        entries.push(format!("{segment}"));
+                        entries.push(segment.to_string());
                     } else {
                         entries.push(format!("| {segment}"));
                     }
