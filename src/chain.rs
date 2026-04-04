@@ -277,7 +277,10 @@ impl ChainParser {
     ///
     /// The existing `UGFacade` serde deserialisation is re-used by constructing
     /// the tagged-array JSON form `["TypeName", {fields…}]`.
-    fn make_facade(type_name: &str, args: &HashMap<String, String>) -> Result<Facade, String> {
+    fn make_facade(
+        type_name: &str,
+        args: &HashMap<String, String>,
+    ) -> Result<Facade, String> {
         let mut obj = serde_json::Map::new();
 
         for (k, v) in args {
@@ -330,7 +333,8 @@ impl ChainParser {
         }
 
         // Default `input_count = 2` for Sum / Mult when not explicitly supplied.
-        if (type_name == "Sum" || type_name == "Mult") && !obj.contains_key("input_count") {
+        if (type_name == "Sum" || type_name == "Mult") && !obj.contains_key("input_count")
+        {
             obj.insert(
                 "input_count".to_string(),
                 serde_json::Value::Number(2.into()),
@@ -423,7 +427,9 @@ impl ChainParser {
     /// - next = `:`               → `:dst` form (src defaults to first output)
     /// - next = Ident, then `:`   → `src:dst` form
     /// - otherwise                → no port spec
-    fn parse_port_spec_opt(&mut self) -> Result<(Option<String>, Option<String>), String> {
+    fn parse_port_spec_opt(
+        &mut self,
+    ) -> Result<(Option<String>, Option<String>), String> {
         match (self.peek(), self.peek_at(1)) {
             (Some(Token::Colon), _) => {
                 self.consume(); // consume ':'
@@ -475,7 +481,9 @@ impl ChainParser {
                 self.expect(&Token::RParen)?;
                 Ok(result)
             }
-            t => Err(format!("Expected atom (UGen, name, number, or '('), got {t:?}")),
+            t => Err(format!(
+                "Expected atom (UGen, name, number, or '('), got {t:?}"
+            )),
         }
     }
 
@@ -549,10 +557,8 @@ impl ChainParser {
 
             let lhs_out = self.default_output(&lhs)?;
             let rhs_out = self.default_output(&rhs)?;
-            self.connect
-                .push((lhs_out, format!("{op_name}.in1")));
-            self.connect
-                .push((rhs_out, format!("{op_name}.in2")));
+            self.connect.push((lhs_out, format!("{op_name}.in1")));
+            self.connect.push((rhs_out, format!("{op_name}.in2")));
 
             lhs = op_name;
         }
@@ -653,7 +659,9 @@ mod tests {
 
     #[test]
     fn test_chain_simple_ugens_no_connections() {
-        let (reg, conn) = parse("White() | ParametricConst(gain=1, bw=.6, freq=2000) | Clock(value=20.0, mode=Samples)");
+        let (reg, conn) = parse(
+            "White() | ParametricConst(gain=1, bw=.6, freq=2000) | Clock(value=20.0, mode=Samples)",
+        );
         // Three UGens registered, no connections
         assert_eq!(reg.len(), 3);
         assert!(conn.is_empty());
@@ -661,8 +669,9 @@ mod tests {
 
     #[test]
     fn test_chain_named_ugens_no_connections() {
-        let (reg, conn) =
-            parse("White() => noise | ParametricConst(gain=1, bw=.6, freq=2000) => f1 | Clock(value=20.0, mode=Samples) => metro");
+        let (reg, conn) = parse(
+            "White() => noise | ParametricConst(gain=1, bw=.6, freq=2000) => f1 | Clock(value=20.0, mode=Samples) => metro",
+        );
         assert!(reg.contains_key("noise"), "register should contain 'noise'");
         assert!(reg.contains_key("f1"), "register should contain 'f1'");
         assert!(reg.contains_key("metro"), "register should contain 'metro'");
@@ -688,9 +697,8 @@ mod tests {
 
     #[test]
     fn test_chain_named_arrow_connections() {
-        let (reg, conn) = parse(
-            "White() => noise -> LowPass() => lpf -> HighPass() => hpf",
-        );
+        let (reg, conn) =
+            parse("White() => noise -> LowPass() => lpf -> HighPass() => hpf");
         assert!(reg.contains_key("noise"));
         assert!(reg.contains_key("lpf"));
         assert!(reg.contains_key("hpf"));
@@ -721,9 +729,7 @@ mod tests {
     #[test]
     fn test_chain_port_spec_src_and_dst() {
         // Explicit src:dst port annotation
-        let (reg, conn) = parse(
-            "White() => noise ->out:in LowPass() => lpf",
-        );
+        let (reg, conn) = parse("White() => noise ->out:in LowPass() => lpf");
         assert!(reg.contains_key("noise"));
         assert!(reg.contains_key("lpf"));
         assert!(conn.contains(&("noise.out".to_string(), "lpf.in".to_string())));
@@ -735,9 +741,8 @@ mod tests {
 
     #[test]
     fn test_chain_numeric_literal_creates_const() {
-        let (reg, conn) = parse(
-            "White() => noise -> LowPass() => lpf | 4000 ->:cutoff lpf",
-        );
+        let (reg, conn) =
+            parse("White() => noise -> LowPass() => lpf | 4000 ->:cutoff lpf");
         // An implicit Const node is created for the numeric literal
         let const_key = reg.keys().find(|k| k.starts_with("_const_"));
         assert!(
@@ -774,9 +779,8 @@ mod tests {
 
     #[test]
     fn test_chain_mult_operator() {
-        let (reg, conn) = parse(
-            "Const(value=2.0) => a | Const(value=3.0) => b | (a * b) => product",
-        );
+        let (reg, conn) =
+            parse("Const(value=2.0) => a | Const(value=3.0) => b | (a * b) => product");
         assert!(reg.contains_key("a"));
         assert!(reg.contains_key("b"));
         assert!(reg.contains_key("product"));
@@ -829,8 +833,7 @@ mod tests {
     #[test]
     fn test_chain_multiline_whitespace() {
         // Newlines and leading spaces should be treated as whitespace
-        let chain =
-            "White() => noise\n  -> ParametricConst(gain=1, bw=.6, freq=2000)\n  => f1\n  |\n  Const(value=4000) ->:in f1";
+        let chain = "White() => noise\n  -> ParametricConst(gain=1, bw=.6, freq=2000)\n  => f1\n  |\n  Const(value=4000) ->:in f1";
         let (reg, conn) = parse(chain);
         assert!(reg.contains_key("noise"));
         assert!(reg.contains_key("f1"));
