@@ -308,9 +308,22 @@ pub fn build_markdown_index(
             )?;
 
             entries.push(format!("## {title}"));
-            entries.push("```json".to_string());
-            entries.push(json_str.clone()); // clone because used in formatting
-            entries.push("```".to_string());
+            if let Some(ref chain) = parsed.chain {
+                entries.push("```text".to_string());
+                for (i, segment) in chain.split('|').enumerate() {
+                    let segment = segment.trim();
+                    if i == 0 {
+                        entries.push(format!("{segment}"));
+                    } else {
+                        entries.push(format!("| {segment}"));
+                    }
+                }
+                entries.push("```".to_string());
+            } else {
+                entries.push("```json".to_string());
+                entries.push(json_str.clone());
+                entries.push("```".to_string());
+            }
             entries.push(format!("![{label}]({fn_graph})"));
             entries.push(format!("![{label}]({fn_time_domain})"));
             entries.push("".to_string()); // blank line for spacing
