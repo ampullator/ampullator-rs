@@ -315,7 +315,7 @@ impl UGen for UGParametric {
     }
 
     fn input_names(&self) -> &[&'static str] {
-        &["in", "gain", "bandwidth", "freq"]
+        &["in", "gain", "bw", "freq"]
     }
 
     fn output_names(&self) -> &[&'static str] {
@@ -364,7 +364,7 @@ impl UGen for UGParametric {
 /// signal input; the EQ parameters are constant across the lifetime of the node.
 pub struct UGParametricConst {
     db_gain: f32,
-    bandwidth: f32,
+    bw: f32,
     freq: f32,
     x1: Sample,
     x2: Sample,
@@ -373,10 +373,10 @@ pub struct UGParametricConst {
 }
 
 impl UGParametricConst {
-    pub fn new(db_gain: f32, bandwidth: f32, freq: f32) -> Self {
+    pub fn new(db_gain: f32, bw: f32, freq: f32) -> Self {
         Self {
             db_gain,
-            bandwidth: bandwidth.max(0.001),
+            bw: bw.max(0.001),
             freq,
             x1: 0.0,
             x2: 0.0,
@@ -411,7 +411,7 @@ impl UGen for UGParametricConst {
 
         let fc = self.freq.clamp(1.0, sample_rate * 0.5 - 1.0);
         let (b0, b1, b2, a1, a2) =
-            peaking_eq_coeffs(self.db_gain, self.bandwidth, fc, sample_rate);
+            peaking_eq_coeffs(self.db_gain, self.bw, fc, sample_rate);
 
         for i in 0..out.len() {
             let x = input[i];
@@ -508,7 +508,7 @@ mod tests {
         connect_many![g,
             "clock.out" -> "pq.in",
             "gain.out" -> "pq.gain",
-            "bw.out" -> "pq.bandwidth",
+            "bw.out" -> "pq.bw",
             "freq.out" -> "pq.freq",
             "pq.out" -> "r.in"
         ];
@@ -539,7 +539,7 @@ mod tests {
         connect_many![g,
             "clock.out" -> "pq.in",
             "gain.out" -> "pq.gain",
-            "bw.out" -> "pq.bandwidth",
+            "bw.out" -> "pq.bw",
             "freq.out" -> "pq.freq",
             "pq.out" -> "r.in"
         ];
@@ -570,7 +570,7 @@ mod tests {
         connect_many![g,
             "clock.out" -> "pq.in",
             "gain.out" -> "pq.gain",
-            "bw.out" -> "pq.bandwidth",
+            "bw.out" -> "pq.bw",
             "freq.out" -> "pq.freq",
             "pq.out" -> "r.in"
         ];

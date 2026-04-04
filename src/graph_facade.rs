@@ -58,7 +58,7 @@ pub enum UGFacade {
     Parametric {},
     ParametricConst {
         gain: f32,
-        bandwidth: f32,
+        bw: f32,
         freq: f32,
     },
     Mult {
@@ -115,9 +115,9 @@ impl UGFacade {
             UGFacade::Parametric {} => Box::new(UGParametric::new()),
             UGFacade::ParametricConst {
                 gain,
-                bandwidth,
+                bw,
                 freq,
-            } => Box::new(UGParametricConst::new(*gain, *bandwidth, *freq)),
+            } => Box::new(UGParametricConst::new(*gain, *bw, *freq)),
             UGFacade::EnvBreakPoint {
                 duration_values,
                 duration_mode,
@@ -756,7 +756,7 @@ mod tests {
 
     #[test]
     fn test_ug_facade_parametric() {
-        // 6 dB boost at 60 Hz with 1/3-octave bandwidth via JSON facade.
+        // 6 dB boost at 60 Hz with 1/3-octave bw via JSON facade.
         let json = r#"{
             "register": {
                 "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
@@ -769,7 +769,7 @@ mod tests {
             "connect": [
                 ["clock.out", "pq.in"],
                 ["gain.out", "pq.gain"],
-                ["bw.out", "pq.bandwidth"],
+                ["bw.out", "pq.bw"],
                 ["freq.out", "pq.freq"],
                 ["pq.out", "r.in"]
             ]
@@ -789,11 +789,11 @@ mod tests {
 
     #[test]
     fn test_ug_facade_parametric_const() {
-        // 6 dB boost at 60 Hz with 1/3-octave bandwidth via JSON facade (constant params).
+        // 6 dB boost at 60 Hz with 1/3-octave bw via JSON facade (constant params).
         let json = r#"{
             "register": {
                 "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
-                "pqc": ["ParametricConst", {"gain": 6.0, "bandwidth": 0.333, "freq": 60.0}],
+                "pqc": ["ParametricConst", {"gain": 6.0, "bw": 0.333, "freq": 60.0}],
                 "r": ["Round", {"places": 3, "mode": "Round"}]
             },
             "connect": [
