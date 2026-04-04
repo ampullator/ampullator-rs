@@ -1,3 +1,4 @@
+mod chain;
 mod graph;
 mod graph_facade;
 mod recorder;

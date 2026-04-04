@@ -186,7 +186,7 @@ impl Facade {
 
 #[allow(unused)]
 #[derive(Deserialize, Debug)]
-struct GraphFacade {
+pub(crate) struct GraphFacade {
     title: Option<String>,
     label: Option<String>,
     register: HashMap<String, Facade>,
@@ -197,6 +197,21 @@ struct GraphFacade {
 impl GraphFacade {
     pub fn from_json(json: &str) -> Result<Self, String> {
         serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))
+    }
+
+    /// Construct a `GraphFacade` by parsing a Chain DSL string.
+    ///
+    /// The resulting `register` and `connect` containers are equivalent to
+    /// those you would get from the JSON form and can be used with
+    /// [`register_and_connect`] to build a [`GenGraph`].
+    pub fn from_chain(chain: &str) -> Result<Self, String> {
+        let (register, connect) = crate::chain::parse_chain(chain)?;
+        Ok(Self {
+            title: None,
+            label: None,
+            register,
+            connect,
+        })
     }
 
     pub fn register_and_connect(&self, graph: &mut GenGraph) -> Result<(), String> {
