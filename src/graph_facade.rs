@@ -154,32 +154,20 @@ impl UGFacade {
     /// Return `true` if `name` is a recognised UGFacade variant name.
     ///
     /// Used by the Chain DSL parser to distinguish UGen type names from
-    /// user-defined node name references.
+    /// user-defined node name references. The check is driven by serde:
+    /// `["name", {}]` is attempted; an "unknown variant" error means the
+    /// name is not a valid variant, while any other outcome (success or a
+    /// different deserialization error such as a missing required field)
+    /// confirms the name is a valid variant.
     pub fn is_variant_name(name: &str) -> bool {
-        matches!(
-            name,
-            "AsHz"
-                | "Ceil"
-                | "Clock"
-                | "Const"
-                | "EnvBreakPoint"
-                | "EnvAR"
-                | "Floor"
-                | "HighPass"
-                | "HighPassQ"
-                | "LowPass"
-                | "LowPassQ"
-                | "Parametric"
-                | "ParametricConst"
-                | "Mult"
-                | "PulseSelect"
-                | "Round"
-                | "Select"
-                | "Sine"
-                | "Sum"
-                | "Trigger"
-                | "White"
-        )
+        let probe = serde_json::Value::Array(vec![
+            serde_json::Value::String(name.to_string()),
+            serde_json::Value::Object(serde_json::Map::new()),
+        ]);
+        match serde_json::from_value::<UGFacade>(probe) {
+            Ok(_) => true,
+            Err(e) => !e.to_string().contains("unknown variant"),
+        }
     }
 
     // Serde default helpers -- used by `#[serde(default = "...")]` on UGFacade fields.
