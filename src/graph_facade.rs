@@ -24,6 +24,7 @@ use std::path::Path;
 #[serde(deny_unknown_fields, tag = "0", content = "1")]
 pub enum UGFacade {
     AsHz {
+        #[serde(default = "UGFacade::default_unit_rate_hz")]
         mode: UnitRate,
     },
     Ceil {},
@@ -44,15 +45,19 @@ pub enum UGFacade {
     EnvAR {},
     Floor {},
     HighPass {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     HighPassQ {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     LowPass {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     LowPassQ {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     Parametric {},
@@ -62,6 +67,7 @@ pub enum UGFacade {
         freq: f32,
     },
     Mult {
+        #[serde(default = "UGFacade::default_input_count")]
         input_count: usize,
     },
     PulseSelect {
@@ -70,7 +76,9 @@ pub enum UGFacade {
         seed: Option<u64>,
     },
     Round {
+        #[serde(default = "UGFacade::default_round_places")]
         places: i32,
+        #[serde(default = "UGFacade::default_mode_round")]
         mode: ModeRound,
     },
     Select {
@@ -80,6 +88,7 @@ pub enum UGFacade {
     },
     Sine {},
     Sum {
+        #[serde(default = "UGFacade::default_input_count")]
         input_count: usize,
     },
     Trigger {},
@@ -140,6 +149,59 @@ impl UGFacade {
                 *seed,
             )),
         }
+    }
+
+    /// Return `true` if `name` is a recognised UGFacade variant name.
+    ///
+    /// Used by the Chain DSL parser to distinguish UGen type names from
+    /// user-defined node name references.
+    pub fn is_variant_name(name: &str) -> bool {
+        matches!(
+            name,
+            "AsHz"
+                | "Ceil"
+                | "Clock"
+                | "Const"
+                | "EnvBreakPoint"
+                | "EnvAR"
+                | "Floor"
+                | "HighPass"
+                | "HighPassQ"
+                | "LowPass"
+                | "LowPassQ"
+                | "Parametric"
+                | "ParametricConst"
+                | "Mult"
+                | "PulseSelect"
+                | "Round"
+                | "Select"
+                | "Sine"
+                | "Sum"
+                | "Trigger"
+                | "White"
+        )
+    }
+
+    // Serde default helpers -- used by `#[serde(default = "...")]` on UGFacade fields.
+
+    fn default_roll_off_db() -> f32 {
+        6.0
+    }
+
+    fn default_unit_rate_hz() -> UnitRate {
+        UnitRate::Hz
+    }
+
+    fn default_round_places() -> i32 {
+        0
+    }
+
+    fn default_mode_round() -> ModeRound {
+        ModeRound::Round
+    }
+
+    fn default_input_count() -> usize {
+        2
     }
 }
 

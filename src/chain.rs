@@ -252,41 +252,15 @@ impl ChainParser {
         }
     }
 
-    /// Return true if `name` is a UGFacade variant (a UGen type name).
-    fn is_ugen_type(name: &str) -> bool {
-        matches!(
-            name,
-            "AsHz"
-                | "Ceil"
-                | "Clock"
-                | "Const"
-                | "EnvBreakPoint"
-                | "EnvAR"
-                | "Floor"
-                | "HighPass"
-                | "HighPassQ"
-                | "LowPass"
-                | "LowPassQ"
-                | "Parametric"
-                | "ParametricConst"
-                | "Mult"
-                | "PulseSelect"
-                | "Round"
-                | "Select"
-                | "Sine"
-                | "Sum"
-                | "Trigger"
-                | "White"
-        )
-    }
-
     /// Build a `Facade` from a UGen type name and a key→value argument map.
     ///
     /// Values are parsed as numbers where possible; everything else is treated
     /// as a string (for enum discriminants such as `mode = Samples`).
     ///
     /// The existing `UGFacade` serde deserialisation is re-used by constructing
-    /// the tagged-array JSON form `["TypeName", {fields…}]`.
+    /// the tagged-array JSON form `["TypeName", {fields…}]`. Serde defaults
+    /// defined on `UGFacade` fields are applied automatically for any omitted
+    /// fields (e.g. `roll_off_db`, `input_count`, `mode` on `AsHz`, etc.).
     fn make_facade(
         type_name: &str,
         args: &HashMap<String, serde_json::Value>,
@@ -295,51 +269,6 @@ impl ChainParser {
 
         for (k, v) in args {
             obj.insert(k.clone(), v.clone());
-        }
-
-        // Sensible chain-DSL defaults for fields that are required in the
-        // serde schema but are commonly omitted when writing chain strings.
-        let defaults: &[(&str, &[(&str, serde_json::Value)])] = &[
-            (
-                "LowPass",
-                &[("roll_off_db", serde_json::Value::Number(6.into()))],
-            ),
-            (
-                "LowPassQ",
-                &[("roll_off_db", serde_json::Value::Number(6.into()))],
-            ),
-            (
-                "HighPass",
-                &[("roll_off_db", serde_json::Value::Number(6.into()))],
-            ),
-            (
-                "HighPassQ",
-                &[("roll_off_db", serde_json::Value::Number(6.into()))],
-            ),
-            ("AsHz", &[("mode", serde_json::Value::String("Hz".into()))]),
-            (
-                "Round",
-                &[
-                    ("places", serde_json::Value::Number(0.into())),
-                    ("mode", serde_json::Value::String("Round".into())),
-                ],
-            ),
-        ];
-        for (tname, fields) in defaults {
-            if *tname == type_name {
-                for (k, v) in *fields {
-                    obj.entry(k.to_string()).or_insert_with(|| v.clone());
-                }
-            }
-        }
-
-        // Default `input_count = 2` for Sum / Mult when not explicitly supplied.
-        if (type_name == "Sum" || type_name == "Mult") && !obj.contains_key("input_count")
-        {
-            obj.insert(
-                "input_count".to_string(),
-                serde_json::Value::Number(2.into()),
-            );
         }
 
         let json_val = serde_json::Value::Array(vec![
@@ -447,7 +376,7 @@ impl ChainParser {
     /// return it, or return `None` if the next token cannot be a port name.
     fn try_read_port_name(&mut self) -> Option<String> {
         match self.peek() {
-            Some(Token::Ident(s)) if !Self::is_ugen_type(s) => {
+            Some(Token::Ident(s)) if !UGFacade::is_variant_name(s) => {
                 let s = s.clone();
                 self.consume();
                 Some(s)
@@ -502,7 +431,7 @@ impl ChainParser {
             }
             Some(Token::Ident(id)) => {
                 let id = id.clone();
-                if Self::is_ugen_type(&id) {
+                if UGFacade::is_variant_name(&id) {
                     self.parse_ugen_call()
                 } else {
                     self.consume();
