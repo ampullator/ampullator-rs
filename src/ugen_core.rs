@@ -498,6 +498,8 @@ pub struct UGPan {
     output_refs: Vec<&'static str>,
 }
 
+const UG_PAN_DEFAULT_PAN: Sample = 0.5;
+
 impl UGPan {
     pub fn new() -> Self {
         Self::new_n(2)
@@ -539,7 +541,7 @@ impl UGen for UGPan {
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         match input_name {
-            "pan" => Some(0.5),
+            "pan" => Some(UG_PAN_DEFAULT_PAN),
             _ => None,
         }
     }
@@ -564,7 +566,11 @@ impl UGen for UGPan {
 
         for i in 0..n {
             let x = input.get(i).copied().unwrap_or(0.0);
-            let p = pan.get(i).copied().unwrap_or(0.5).clamp(0.0, 1.0);
+            let p = pan
+                .get(i)
+                .copied()
+                .unwrap_or(UG_PAN_DEFAULT_PAN)
+                .clamp(0.0, 1.0);
             let pair_pos = p * (output_count - 1) as f32;
             let left_index = pair_pos.floor() as usize;
 
