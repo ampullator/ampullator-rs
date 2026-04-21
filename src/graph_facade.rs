@@ -13,8 +13,8 @@ use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
     UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
 };
-use crate::ugen_rhythm::UGPulseSelect;
 use crate::ugen_reverb::UGReverb;
+use crate::ugen_rhythm::UGPulseSelect;
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
 use crate::util::UnitRate;

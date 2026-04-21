@@ -57,7 +57,13 @@ impl Comb {
     }
 
     #[inline]
-    fn process(&mut self, input: f32, delay_samples: usize, feedback: f32, damping_coeff: f32) -> f32 {
+    fn process(
+        &mut self,
+        input: f32,
+        delay_samples: usize,
+        feedback: f32,
+        damping_coeff: f32,
+    ) -> f32 {
         let delayed = self.delay.read(delay_samples.max(1));
         self.damp_state += damping_coeff * (delayed - self.damp_state);
         self.delay
@@ -131,8 +137,10 @@ impl UGReverb {
             .unwrap_or(0)
             .max(base_ap_l.iter().copied().max().unwrap_or(0));
 
-        let comb_capacity = ((max_comb as f32 * max_size * max_sr / 44_100.0).ceil() as usize) + 4;
-        let ap_capacity = ((max_ap as f32 * max_size * max_sr / 44_100.0).ceil() as usize) + 4;
+        let comb_capacity =
+            ((max_comb as f32 * max_size * max_sr / 44_100.0).ceil() as usize) + 4;
+        let ap_capacity =
+            ((max_ap as f32 * max_size * max_sr / 44_100.0).ceil() as usize) + 4;
 
         Self {
             pre_l: DelayLine::new(max_pre_samples),
@@ -228,7 +236,11 @@ impl UGen for UGReverb {
             let dry_l = in_l.get(i).copied().unwrap_or(0.0);
             let dry_r = in_r.get(i).copied().unwrap_or(0.0);
 
-            let decay_v = decay.get(i).copied().unwrap_or(DEFAULT_DECAY).clamp(0.0, 0.98);
+            let decay_v = decay
+                .get(i)
+                .copied()
+                .unwrap_or(DEFAULT_DECAY)
+                .clamp(0.0, 0.98);
             let pre_ms = pre_delay
                 .get(i)
                 .copied()
@@ -261,24 +273,30 @@ impl UGen for UGReverb {
 
             let mut wet_l = 0.0;
             for (idx, comb) in self.comb_l.iter_mut().enumerate() {
-                let delay = ((comb_base_l[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
+                let delay = ((comb_base_l[idx] as f32 * size_v * sr_ratio).round()
+                    as usize)
+                    .max(1);
                 wet_l += comb.process(tank_in_l, delay, decay_v, damp_coeff);
             }
             wet_l /= self.comb_l.len() as f32;
 
             let mut wet_r = 0.0;
             for (idx, comb) in self.comb_r.iter_mut().enumerate() {
-                let delay = ((comb_base_r[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
+                let delay = ((comb_base_r[idx] as f32 * size_v * sr_ratio).round()
+                    as usize)
+                    .max(1);
                 wet_r += comb.process(tank_in_r, delay, decay_v, damp_coeff);
             }
             wet_r /= self.comb_r.len() as f32;
 
             for (idx, ap) in self.allpass_l.iter_mut().enumerate() {
-                let delay = ((ap_base_l[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
+                let delay =
+                    ((ap_base_l[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
                 wet_l = ap.process(wet_l, delay, diffusion_v);
             }
             for (idx, ap) in self.allpass_r.iter_mut().enumerate() {
-                let delay = ((ap_base_r[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
+                let delay =
+                    ((ap_base_r[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
                 wet_r = ap.process(wet_r, delay, diffusion_v);
             }
 

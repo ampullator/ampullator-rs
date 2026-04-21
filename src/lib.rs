@@ -25,8 +25,8 @@ pub use ugen_filter::{
 
 pub use ugen_env::{UGEnvAR, UGEnvBreakPoint};
 
-pub use ugen_rhythm::UGPulseSelect;
 pub use ugen_reverb::UGReverb;
+pub use ugen_rhythm::UGPulseSelect;
 
 pub use ugen_drum::UGSnareDrum;
 
