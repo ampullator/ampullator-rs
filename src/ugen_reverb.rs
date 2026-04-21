@@ -9,6 +9,7 @@ const DEFAULT_DIFFUSION: f32 = 0.75;
 const DEFAULT_DAMPING_HZ: f32 = 7000.0;
 
 const MAX_PRE_DELAY_MS: f32 = 500.0;
+// Mix a small amount of each channel into the opposite tank to decorrelate tails.
 const CROSSFEED_GAIN: f32 = 0.2;
 
 #[derive(Debug)]
@@ -115,7 +116,9 @@ pub struct UGReverb {
 
 impl UGReverb {
     pub fn new() -> Self {
-        // Buffers sized for up to 48 kHz; larger sample rates still work using clamped delay taps.
+        // Buffers are sized for 48 kHz and up to `MAX_PRE_DELAY_MS`.
+        // At sample rates above 48 kHz, delay taps clamp to buffer capacity, so effective
+        // delay times become somewhat shorter than requested and the room character is tighter.
         let max_sr = 48_000.0_f32;
         let max_pre_samples = ((max_sr * MAX_PRE_DELAY_MS) / 1000.0).ceil() as usize + 2;
         let max_size = 1.5_f32;
@@ -267,7 +270,8 @@ impl UGen for UGReverb {
             self.pre_l.write_advance(dry_l);
             self.pre_r.write_advance(dry_r);
 
-            // Slight crossfeed widens the tail and keeps the effect stereo.
+            // Feed a little of each channel into the opposite tank so each side contains
+            // different reflection histories; this avoids dual-mono tails and increases width.
             let tank_in_l = pdl + pdr * CROSSFEED_GAIN;
             let tank_in_r = pdr + pdl * CROSSFEED_GAIN;
             let damp_coeff = damping_coeff(damping_v, sample_rate);
