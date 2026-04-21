@@ -498,8 +498,6 @@ pub struct UGPan {
     output_refs: Vec<&'static str>,
 }
 
-const UG_PAN_DEFAULT_PAN: Sample = 0.5;
-
 impl UGPan {
     pub fn new() -> Self {
         Self::new_n(2)
@@ -541,7 +539,7 @@ impl UGen for UGPan {
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         match input_name {
-            "pan" => Some(UG_PAN_DEFAULT_PAN),
+            "pan" => Some((self.output_refs.len() as Sample - 1.0) * 0.5),
             _ => None,
         }
     }
@@ -566,12 +564,11 @@ impl UGen for UGPan {
 
         for i in 0..n {
             let x = input.get(i).copied().unwrap_or(0.0);
-            let p = pan
+            let pair_pos = pan
                 .get(i)
                 .copied()
-                .unwrap_or(UG_PAN_DEFAULT_PAN)
-                .clamp(0.0, 1.0);
-            let pair_pos = p * (output_count - 1) as f32;
+                .unwrap_or((output_count as Sample - 1.0) * 0.5)
+                .clamp(0.0, output_count as Sample - 1.0);
             let left_index = pair_pos.floor() as usize;
 
             if left_index >= output_count - 1 {
@@ -1072,7 +1069,7 @@ mod tests {
         let mut g = GenGraph::new(120.0, 8);
         register_many![g,
             "in" => 1,
-            "pan_pos" => 0.5,
+            "pan_pos" => 1.5,
             "pan" => UGPan::new_n(4),
             "r2" => UGRound::new(3, ModeRound::Round),
             "r3" => UGRound::new(3, ModeRound::Round),
@@ -1099,6 +1096,59 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("pan.out4"),
             vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_pan_multichannel_index_routing() {
+        let mut g = GenGraph::new(120.0, 8);
+        register_many![g,
+            "in" => 1,
+            "pan_pos_2" => 2.0,
+            "pan_pos_3" => 3.0,
+            "pan2" => UGPan::new_n(4),
+            "pan3" => UGPan::new_n(4),
+        ];
+        connect_many![g,
+        "in.out" -> "pan2.in",
+        "pan_pos_2.out" -> "pan2.pan",
+        "in.out" -> "pan3.in",
+        "pan_pos_3.out" -> "pan3.pan",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("pan2.out1"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("pan2.out2"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("pan2.out3"),
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("pan2.out4"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+
+        assert_eq!(
+            g.get_output_by_label("pan3.out1"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("pan3.out2"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("pan3.out3"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("pan3.out4"),
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         );
     }
 
