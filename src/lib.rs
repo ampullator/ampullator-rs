@@ -26,7 +26,7 @@ pub use ugen_env::{UGEnvAR, UGEnvBreakPoint};
 
 pub use ugen_rhythm::UGPulseSelect;
 
-pub use ugen_drum::UGSnareDrum;
+pub use ugen_drum::{UGBassDrum, UGSnareDrum};
 
 pub use util::{Sample, UnitRate};
 
