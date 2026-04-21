@@ -8,7 +8,7 @@ use crate::ugen_core::{
     UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGMult, UGRound, UGSine, UGSum, UGTrigger,
     UGWhite,
 };
-use crate::ugen_drum::UGSnareDrum;
+use crate::ugen_drum::{UGBassDrum, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
     UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
@@ -80,6 +80,7 @@ pub enum UGFacade {
         seed: Option<u64>,
     },
     Sine {},
+    BassDrum {},
     SnareDrum {
         seed: Option<u64>,
     },
@@ -109,6 +110,7 @@ impl UGFacade {
             UGFacade::Ceil {} => Box::new(UGCeil::new()),
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
             UGFacade::Sine {} => Box::new(UGSine::new()),
+            UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
             UGFacade::HighPass { roll_off_db } => Box::new(UGHighPass::new(*roll_off_db)),
@@ -756,6 +758,28 @@ mod tests {
     //     let fp_dst = Path::new("doc/out");
     //     let _ = build_markdown_index(&fp_src, &fp_dst, 100.0, 8, 100).unwrap();
     // }
+
+    #[test]
+    fn test_ug_facade_bass_drum() {
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"value": 32.0, "mode": "Samples"}],
+                "kick": ["BassDrum", {}]
+            },
+            "connect": [
+                ["clock.out", "kick.gate"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(44100.0, 32);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        let out = g.get_output_by_label("kick.out");
+        assert!(
+            out.iter().any(|s| s.abs() > 0.0),
+            "bass drum facade should produce output when triggered"
+        );
+    }
 
     #[test]
     fn test_ug_facade_parametric() {
