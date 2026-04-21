@@ -351,6 +351,8 @@ impl UGen for UGBassDrum {
 
         let out = &mut outputs[0];
         let dt = 1.0 / sample_rate;
+        // 1.5 ms click decay: exp(-LN_1000 / tau_samples) reaches ~-60 dB at tau.
+        // Using LN_1000 keeps envelope shapes consistent with other drum decays.
         let click_decay_coeff = (-LN_1000 / (0.0015 * sample_rate).max(1.0)).exp();
 
         for (i, o) in out.iter_mut().enumerate() {
@@ -359,6 +361,8 @@ impl UGen for UGBassDrum {
                 .get(i)
                 .copied()
                 .unwrap_or(self.default_tune)
+                // Keep oscillator well below Nyquist (0.5*sr): 0.45 leaves headroom to
+                // reduce aliasing under modulation/saturation.
                 .clamp(20.0, sample_rate * 0.45);
             let decay_v = decay.get(i).copied().unwrap_or(self.default_decay).max(1.0);
             let punch_v = punch.get(i).copied().unwrap_or(self.default_punch).max(1.0);
@@ -393,8 +397,12 @@ impl UGen for UGBassDrum {
                 self.phase -= 1.0;
             }
             let sine = (self.phase * std::f32::consts::TAU).sin();
+            // 0.85/0.15 blend adds a small sine^3 term (odd-harmonic warmth) while
+            // keeping the fundamental dominant; no DC shift is introduced.
             let body = (0.85 * sine + 0.15 * sine.powi(3)) * self.amp_env * tone_v;
 
+            // Click oscillator is intentionally very high: ~45x tune gives a short
+            // beater-like attack burst in the low-kHz range for typical kick tuning.
             let click_freq = (tune_v * 45.0).min(sample_rate * 0.45);
             self.click_phase += click_freq * dt;
             if self.click_phase >= 1.0 {
