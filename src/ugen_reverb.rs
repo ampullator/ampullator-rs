@@ -9,6 +9,7 @@ const DEFAULT_DIFFUSION: f32 = 0.75;
 const DEFAULT_DAMPING_HZ: f32 = 7000.0;
 
 const MAX_PRE_DELAY_MS: f32 = 500.0;
+const CROSSFEED_GAIN: f32 = 0.2;
 
 #[derive(Debug)]
 struct DelayLine {
@@ -267,8 +268,8 @@ impl UGen for UGReverb {
             self.pre_r.write_advance(dry_r);
 
             // Slight crossfeed widens the tail and keeps the effect stereo.
-            let tank_in_l = pdl + pdr * 0.2;
-            let tank_in_r = pdr + pdl * 0.2;
+            let tank_in_l = pdl + pdr * CROSSFEED_GAIN;
+            let tank_in_r = pdr + pdl * CROSSFEED_GAIN;
             let damp_coeff = damping_coeff(damping_v, sample_rate);
 
             let mut wet_l = 0.0;
@@ -313,6 +314,10 @@ mod tests {
     use crate::GenGraph;
     use crate::Recorder;
     use crate::UGConst;
+
+    fn max_abs(values: &[f32]) -> f32 {
+        values.iter().fold(0.0_f32, |m, v| m.max(v.abs()))
+    }
 
     #[test]
     fn test_reverb_metadata_and_defaults() {
@@ -377,8 +382,8 @@ mod tests {
         let r1 = Recorder::from_samples(g, None, 6000);
         let l = r1.get_output_by_label("rev.out_l");
         let r = r1.get_output_by_label("rev.out_r");
-        let max_l = l.iter().fold(0.0_f32, |m, v| m.max(v.abs()));
-        let max_r = r.iter().fold(0.0_f32, |m, v| m.max(v.abs()));
+        let max_l = max_abs(l);
+        let max_r = max_abs(r);
         assert!(max_l > 1e-4, "max_l={max_l}");
         assert!(max_r > 1e-6, "max_r={max_r}");
     }
