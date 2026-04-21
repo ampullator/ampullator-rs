@@ -9,6 +9,16 @@ const DEFAULT_DIFFUSION: f32 = 0.75;
 const DEFAULT_DAMPING_HZ: f32 = 7000.0;
 
 const MAX_PRE_DELAY_MS: f32 = 500.0;
+const REFERENCE_SAMPLE_RATE: f32 = 44_100.0;
+
+// These delay lengths are the classic Schroeder/Freeverb-style tap set at 44.1 kHz:
+// four longer comb delays per side and two shorter allpass diffusion delays per side.
+// Right-channel taps are offset from left to reduce channel correlation.
+const COMB_BASE_DELAYS_L: [usize; 4] = [1116, 1188, 1277, 1356];
+const COMB_BASE_DELAYS_R: [usize; 4] = [1139, 1211, 1300, 1379];
+const ALLPASS_BASE_DELAYS_L: [usize; 2] = [556, 441];
+const ALLPASS_BASE_DELAYS_R: [usize; 2] = [579, 464];
+
 // Mix a small amount of each channel into the opposite tank to decorrelate tails.
 const CROSSFEED_GAIN: f32 = 0.2;
 
@@ -44,6 +54,10 @@ impl DelayLine {
     }
 }
 
+/// Comb filter stage used for dense late reflections.
+///
+/// This stage applies feedback around a delay line to create decaying echoes, with
+/// a one-pole damping filter in the feedback path to roll off high frequencies over time.
 #[derive(Debug)]
 struct Comb {
     delay: DelayLine,
@@ -53,6 +67,8 @@ struct Comb {
 impl Comb {
     fn new(max_delay_samples: usize) -> Self {
         Self {
+            // +1 ensures we can safely address a 1-sample minimum delay tap while keeping
+            // modulo indexing simple for read/write positions.
             delay: DelayLine::new(max_delay_samples + 1),
             damp_state: 0.0,
         }
@@ -74,6 +90,10 @@ impl Comb {
     }
 }
 
+/// Allpass diffusion stage used after comb summation.
+///
+/// Unlike comb filters, allpass filters primarily smear phase/transients (diffusion)
+/// without building strong resonant peaks, which helps smooth the reverb tail texture.
 #[derive(Debug)]
 struct AllPass {
     delay: DelayLine,
@@ -82,6 +102,7 @@ struct AllPass {
 impl AllPass {
     fn new(max_delay_samples: usize) -> Self {
         Self {
+            // +1 for the same indexing headroom used in `Comb`.
             delay: DelayLine::new(max_delay_samples + 1),
         }
     }
@@ -116,6 +137,10 @@ pub struct UGReverb {
 
 impl UGReverb {
     pub fn new() -> Self {
+        // Delay tap lengths above are defined at `REFERENCE_SAMPLE_RATE`.
+        // We pre-allocate buffers large enough for 48 kHz, then scale taps at runtime by
+        // `sample_rate / REFERENCE_SAMPLE_RATE`.
+        //
         // Buffers are sized for 48 kHz and up to `MAX_PRE_DELAY_MS`.
         // At sample rates above 48 kHz, delay taps clamp to buffer capacity, so effective
         // delay times become somewhat shorter than requested and the room character is tighter.
@@ -123,45 +148,42 @@ impl UGReverb {
         let max_pre_samples = ((max_sr * MAX_PRE_DELAY_MS) / 1000.0).ceil() as usize + 2;
         let max_size = 1.5_f32;
 
-        let base_comb_l = [1116, 1188, 1277, 1356];
-        let base_comb_r = [1139, 1211, 1300, 1379];
-        let base_ap_l = [556, 441];
-        let base_ap_r = [579, 464];
-
-        let max_comb = base_comb_r
+        let max_comb = COMB_BASE_DELAYS_R
             .iter()
             .copied()
             .max()
             .unwrap_or(0)
-            .max(base_comb_l.iter().copied().max().unwrap_or(0));
-        let max_ap = base_ap_r
+            .max(COMB_BASE_DELAYS_L.iter().copied().max().unwrap_or(0));
+        let max_ap = ALLPASS_BASE_DELAYS_R
             .iter()
             .copied()
             .max()
             .unwrap_or(0)
-            .max(base_ap_l.iter().copied().max().unwrap_or(0));
+            .max(ALLPASS_BASE_DELAYS_L.iter().copied().max().unwrap_or(0));
 
-        let comb_capacity =
-            ((max_comb as f32 * max_size * max_sr / 44_100.0).ceil() as usize) + 4;
-        let ap_capacity =
-            ((max_ap as f32 * max_size * max_sr / 44_100.0).ceil() as usize) + 4;
+        let comb_capacity = ((max_comb as f32 * max_size * max_sr / REFERENCE_SAMPLE_RATE)
+            .ceil() as usize)
+            + 4;
+        let ap_capacity = ((max_ap as f32 * max_size * max_sr / REFERENCE_SAMPLE_RATE)
+            .ceil() as usize)
+            + 4;
 
         Self {
             pre_l: DelayLine::new(max_pre_samples),
             pre_r: DelayLine::new(max_pre_samples),
-            comb_l: base_comb_l
+            comb_l: COMB_BASE_DELAYS_L
                 .iter()
                 .map(|_| Comb::new(comb_capacity))
                 .collect(),
-            comb_r: base_comb_r
+            comb_r: COMB_BASE_DELAYS_R
                 .iter()
                 .map(|_| Comb::new(comb_capacity))
                 .collect(),
-            allpass_l: base_ap_l
+            allpass_l: ALLPASS_BASE_DELAYS_L
                 .iter()
                 .map(|_| AllPass::new(ap_capacity))
                 .collect(),
-            allpass_r: base_ap_r
+            allpass_r: ALLPASS_BASE_DELAYS_R
                 .iter()
                 .map(|_| AllPass::new(ap_capacity))
                 .collect(),
@@ -230,11 +252,7 @@ impl UGen for UGReverb {
         let out_l = &mut left[0];
         let out_r = &mut right[0];
 
-        let comb_base_l = [1116_usize, 1188, 1277, 1356];
-        let comb_base_r = [1139_usize, 1211, 1300, 1379];
-        let ap_base_l = [556_usize, 441];
-        let ap_base_r = [579_usize, 464];
-        let sr_ratio = sample_rate / 44_100.0;
+        let sr_ratio = sample_rate / REFERENCE_SAMPLE_RATE;
 
         for i in 0..out_l.len() {
             let dry_l = in_l.get(i).copied().unwrap_or(0.0);
@@ -278,7 +296,7 @@ impl UGen for UGReverb {
 
             let mut wet_l = 0.0;
             for (idx, comb) in self.comb_l.iter_mut().enumerate() {
-                let delay = ((comb_base_l[idx] as f32 * size_v * sr_ratio).round()
+                let delay = ((COMB_BASE_DELAYS_L[idx] as f32 * size_v * sr_ratio).round()
                     as usize)
                     .max(1);
                 wet_l += comb.process(tank_in_l, delay, decay_v, damp_coeff);
@@ -287,7 +305,7 @@ impl UGen for UGReverb {
 
             let mut wet_r = 0.0;
             for (idx, comb) in self.comb_r.iter_mut().enumerate() {
-                let delay = ((comb_base_r[idx] as f32 * size_v * sr_ratio).round()
+                let delay = ((COMB_BASE_DELAYS_R[idx] as f32 * size_v * sr_ratio).round()
                     as usize)
                     .max(1);
                 wet_r += comb.process(tank_in_r, delay, decay_v, damp_coeff);
@@ -295,13 +313,15 @@ impl UGen for UGReverb {
             wet_r /= self.comb_r.len() as f32;
 
             for (idx, ap) in self.allpass_l.iter_mut().enumerate() {
-                let delay =
-                    ((ap_base_l[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
+                let delay = ((ALLPASS_BASE_DELAYS_L[idx] as f32 * size_v * sr_ratio)
+                    .round() as usize)
+                    .max(1);
                 wet_l = ap.process(wet_l, delay, diffusion_v);
             }
             for (idx, ap) in self.allpass_r.iter_mut().enumerate() {
-                let delay =
-                    ((ap_base_r[idx] as f32 * size_v * sr_ratio).round() as usize).max(1);
+                let delay = ((ALLPASS_BASE_DELAYS_R[idx] as f32 * size_v * sr_ratio)
+                    .round() as usize)
+                    .max(1);
                 wet_r = ap.process(wet_r, delay, diffusion_v);
             }
 
