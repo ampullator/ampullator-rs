@@ -307,8 +307,11 @@ impl GraphFacade {
     }
 
     pub fn register_and_connect(&self, graph: &mut GenGraph) -> Result<(), String> {
-        // Register all nodes
-        for (name, facade) in &self.register {
+        // Register all nodes in sorted order for deterministic output
+        let mut keys: Vec<_> = self.register.keys().collect();
+        keys.sort();
+        for name in keys {
+            let facade = &self.register[name];
             println!("register: {:?}", name);
             graph.add_node(name, facade.to_ugen());
         }
