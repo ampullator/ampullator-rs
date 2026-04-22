@@ -303,7 +303,10 @@ impl ChainParser {
                 Some(Token::LBracket) => self.parse_list()?,
                 _ => match self.consume() {
                     Some(Token::Number(n)) => {
-                        if n.fract() == 0.0 && n >= i64::MIN as f32 && n <= i64::MAX as f32 {
+                        if n.fract() == 0.0
+                            && n >= i64::MIN as f32
+                            && n <= i64::MAX as f32
+                        {
                             serde_json::Value::Number((n as i64).into())
                         } else {
                             serde_json::Number::from_f64(n as f64)
@@ -730,7 +733,9 @@ mod tests {
         // An implicit Const node is created for the numeric literal
         // Auto-generated names are "n" followed by 8 hex chars
         let const_key = reg.keys().find(|k| {
-            k.len() == 9 && k.starts_with('n') && k[1..].chars().all(|c| c.is_ascii_hexdigit())
+            k.len() == 9
+                && k.starts_with('n')
+                && k[1..].chars().all(|c| c.is_ascii_hexdigit())
         });
         assert!(
             const_key.is_some(),
