@@ -284,6 +284,44 @@ impl ChainParser {
         Ok(Facade::Full(ug_facade))
     }
 
+    /// Parse a list literal `[value, value, ...]`.
+    fn parse_list(&mut self) -> Result<serde_json::Value, String> {
+        self.expect(&Token::LBracket)?;
+        let mut items = Vec::new();
+        if self.peek() != Some(&Token::RBracket) {
+            loop {
+                match self.consume() {
+                    Some(Token::Number(n)) => {
+                        let v = if n.fract() == 0.0
+                            && n >= i64::MIN as f32
+                            && n <= i64::MAX as f32
+                        {
+                            serde_json::Value::Number((n as i64).into())
+                        } else {
+                            serde_json::Number::from_f64(n as f64)
+                                .map(serde_json::Value::Number)
+                                .unwrap_or(serde_json::Value::String(format!("{n}")))
+                        };
+                        items.push(v);
+                    }
+                    Some(Token::Ident(s)) => {
+                        items.push(serde_json::Value::String(s));
+                    }
+                    t => return Err(format!("Expected list element, got {t:?}")),
+                }
+                match self.peek() {
+                    Some(Token::Comma) => {
+                        self.consume();
+                    }
+                    Some(Token::RBracket) => break,
+                    t => return Err(format!("Expected ',' or ']', got {t:?}")),
+                }
+            }
+        }
+        self.expect(&Token::RBracket)?;
+        Ok(serde_json::Value::Array(items))
+    }
+
     /// Parse keyword args inside `(…)`.  Returns key → JSON value pairs.
     fn parse_args(&mut self) -> Result<HashMap<String, serde_json::Value>, String> {
         let mut args = HashMap::new();
@@ -328,44 +366,6 @@ impl ChainParser {
             }
         }
         Ok(args)
-    }
-
-    /// Parse a list literal `[value, value, ...]`.
-    fn parse_list(&mut self) -> Result<serde_json::Value, String> {
-        self.expect(&Token::LBracket)?;
-        let mut items = Vec::new();
-        if self.peek() != Some(&Token::RBracket) {
-            loop {
-                match self.consume() {
-                    Some(Token::Number(n)) => {
-                        let v = if n.fract() == 0.0
-                            && n >= i64::MIN as f32
-                            && n <= i64::MAX as f32
-                        {
-                            serde_json::Value::Number((n as i64).into())
-                        } else {
-                            serde_json::Number::from_f64(n as f64)
-                                .map(serde_json::Value::Number)
-                                .unwrap_or(serde_json::Value::String(format!("{n}")))
-                        };
-                        items.push(v);
-                    }
-                    Some(Token::Ident(s)) => {
-                        items.push(serde_json::Value::String(s));
-                    }
-                    t => return Err(format!("Expected list element, got {t:?}")),
-                }
-                match self.peek() {
-                    Some(Token::Comma) => {
-                        self.consume();
-                    }
-                    Some(Token::RBracket) => break,
-                    t => return Err(format!("Expected ',' or ']', got {t:?}")),
-                }
-            }
-        }
-        self.expect(&Token::RBracket)?;
-        Ok(serde_json::Value::Array(items))
     }
 
     /// Parse a UGen call and return the facade and a generated fallback name,
