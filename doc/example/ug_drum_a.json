@@ -1,7 +1,7 @@
 {
     "title": "Drum Trigger",
     "label": "ug_drum-trigger",
-    "chain": "Clock(value=500, mode=Samples) => trigger -> SnareDrum() => sd | trigger -> Select(values=[100, 1000], mode=Cycle) ->:tone_decay sd",
+    "chain": "Clock(value=500, mode=Samples) => trigger -> SnareDrum(seed=42) => sd | trigger -> Select(values=[100, 1000], mode=Cycle) ->:tone_decay sd",
     "sample_rate": 100.0,
     "buffer_size": 8,
     "total_samples": 1000

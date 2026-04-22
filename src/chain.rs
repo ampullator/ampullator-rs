@@ -302,9 +302,15 @@ impl ChainParser {
             let value = match self.peek() {
                 Some(Token::LBracket) => self.parse_list()?,
                 _ => match self.consume() {
-                    Some(Token::Number(n)) => serde_json::Number::from_f64(n as f64)
-                        .map(serde_json::Value::Number)
-                        .unwrap_or(serde_json::Value::String(format!("{n}"))),
+                    Some(Token::Number(n)) => {
+                        if n.fract() == 0.0 && n >= i64::MIN as f32 && n <= i64::MAX as f32 {
+                            serde_json::Value::Number((n as i64).into())
+                        } else {
+                            serde_json::Number::from_f64(n as f64)
+                                .map(serde_json::Value::Number)
+                                .unwrap_or(serde_json::Value::String(format!("{n}")))
+                        }
+                    }
                     Some(Token::Ident(s)) => serde_json::Value::String(s),
                     t => return Err(format!("Expected argument value, got {t:?}")),
                 },
@@ -332,9 +338,16 @@ impl ChainParser {
             loop {
                 match self.consume() {
                     Some(Token::Number(n)) => {
-                        let v = serde_json::Number::from_f64(n as f64)
-                            .map(serde_json::Value::Number)
-                            .unwrap_or(serde_json::Value::String(format!("{n}")));
+                        let v = if n.fract() == 0.0
+                            && n >= i64::MIN as f32
+                            && n <= i64::MAX as f32
+                        {
+                            serde_json::Value::Number((n as i64).into())
+                        } else {
+                            serde_json::Number::from_f64(n as f64)
+                                .map(serde_json::Value::Number)
+                                .unwrap_or(serde_json::Value::String(format!("{n}")))
+                        };
                         items.push(v);
                     }
                     Some(Token::Ident(s)) => {
