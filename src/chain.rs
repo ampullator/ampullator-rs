@@ -25,7 +25,6 @@ use crate::graph_facade::UGFacade;
 
 // ---------------------------------------------------------------------------
 // Tokeniser
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
@@ -148,7 +147,13 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
 
 // ---------------------------------------------------------------------------
 // Parser
-// ---------------------------------------------------------------------------
+
+/// Result of parsing an atom: either a new node not yet registered
+/// (Pending) or an already-registered name (Registered).
+enum Atom {
+    Pending { facade: Facade, fallback: String },
+    Registered(String),
+}
 
 struct ChainParser {
     tokens: Vec<Token>,
@@ -205,36 +210,28 @@ impl ChainParser {
         }
     }
 
-    /// Get the default output connection string "name.first_output" for a registered node.
     fn default_output(&self, name: &str) -> Result<String, String> {
-        match self.register.get(name) {
-            Some(facade) => {
-                let ugen = facade.to_ugen();
-                let outs = ugen.output_names();
-                if outs.is_empty() {
-                    Err(format!("UGen '{name}' has no outputs"))
-                } else {
-                    Ok(format!("{name}.{}", outs[0]))
-                }
-            }
-            None => Err(format!("Unknown node: '{name}'")),
-        }
+        let facade = self
+            .register
+            .get(name)
+            .ok_or_else(|| format!("Unknown node: '{name}'"))?;
+        let ugen = facade.to_ugen();
+        let port = ugen
+            .first_output()
+            .ok_or_else(|| format!("UGen '{name}' has no outputs"))?;
+        Ok(format!("{name}.{port}"))
     }
 
-    /// Get the default input connection string "name.first_input" for a registered node.
     fn default_input(&self, name: &str) -> Result<String, String> {
-        match self.register.get(name) {
-            Some(facade) => {
-                let ugen = facade.to_ugen();
-                let ins = ugen.input_names();
-                if ins.is_empty() {
-                    Err(format!("UGen '{name}' has no inputs"))
-                } else {
-                    Ok(format!("{name}.{}", ins[0]))
-                }
-            }
-            None => Err(format!("Unknown node: '{name}'")),
-        }
+        let facade = self
+            .register
+            .get(name)
+            .ok_or_else(|| format!("Unknown node: '{name}'"))?;
+        let ugen = facade.to_ugen();
+        let port = ugen
+            .first_input()
+            .ok_or_else(|| format!("UGen '{name}' has no inputs"))?;
+        Ok(format!("{name}.{port}"))
     }
 
     /// Rename an already-registered node, updating all connect entries.
@@ -371,8 +368,9 @@ impl ChainParser {
         Ok(serde_json::Value::Array(items))
     }
 
-    /// Parse a UGen call (type name + optional `(args)`) and immediately register it.
-    fn parse_ugen_call(&mut self) -> Result<String, String> {
+    /// Parse a UGen call and return the facade and a generated fallback name,
+    /// but do not register it yet — the caller decides the final name.
+    fn parse_ugen_call(&mut self) -> Result<(Facade, String), String> {
         let type_name = match self.consume() {
             Some(Token::Ident(s)) => s,
             t => return Err(format!("Expected UGen type name, got {t:?}")),
@@ -388,9 +386,8 @@ impl ChainParser {
         };
 
         let facade = Self::make_facade(&type_name, &args)?;
-        let name = self.gen_name(&type_name.to_lowercase());
-        self.register.insert(name.clone(), facade);
-        Ok(name)
+        let fallback = self.gen_name(&type_name.to_lowercase());
+        Ok((facade, fallback))
     }
 
     /// Attempt to read a port name (an identifier that is not a UGen type) and
@@ -436,37 +433,41 @@ impl ChainParser {
         }
     }
 
-    /// Parse an atom and return its registered node name.
+    /// Parse an atom.
     ///
-    /// Atoms are: UGen call, name reference, numeric literal, or `(` expr `)`.
-    fn parse_atom(&mut self) -> Result<String, String> {
+    /// UGen calls and numeric literals return `Pending` (not yet registered).
+    /// Name references and grouped expressions return `Registered`.
+    fn parse_atom(&mut self) -> Result<Atom, String> {
         match self.peek() {
             Some(Token::Number(_)) => {
                 let n = match self.consume() {
                     Some(Token::Number(n)) => n,
                     _ => unreachable!(),
                 };
-                let name = self.gen_name("const");
-                self.register.insert(name.clone(), Facade::Short(n));
-                Ok(name)
+                let fallback = self.gen_name("const");
+                Ok(Atom::Pending {
+                    facade: Facade::Short(n),
+                    fallback,
+                })
             }
             Some(Token::Ident(id)) => {
                 let id = id.clone();
                 if UGFacade::is_variant_name(&id) {
-                    self.parse_ugen_call()
+                    let (facade, fallback) = self.parse_ugen_call()?;
+                    Ok(Atom::Pending { facade, fallback })
                 } else {
                     self.consume();
                     if !self.register.contains_key(&id) {
                         return Err(format!("Unknown name reference: '{id}'"));
                     }
-                    Ok(id)
+                    Ok(Atom::Registered(id))
                 }
             }
             Some(Token::LParen) => {
                 self.consume(); // consume '('
                 let result = self.parse_addmul_expr()?;
                 self.expect(&Token::RParen)?;
-                Ok(result)
+                Ok(Atom::Registered(result))
             }
             t => Err(format!(
                 "Expected atom (UGen, name, number, or '('), got {t:?}"
@@ -476,21 +477,36 @@ impl ChainParser {
 
     /// Parse `atom ("=>" Ident)?`.
     ///
-    /// If `=>` is present the node is (re-)registered under the user-supplied name.
+    /// For pending atoms, registers under the alias if `=>` is present,
+    /// otherwise under the generated fallback name.
+    /// For already-registered atoms, renames if `=>` is present.
     fn parse_named_atom(&mut self) -> Result<String, String> {
-        let name = self.parse_atom()?;
+        let atom = self.parse_atom()?;
 
-        if self.peek() == Some(&Token::FatArrow) {
+        let alias = if self.peek() == Some(&Token::FatArrow) {
             self.consume(); // consume '=>'
             match self.consume() {
-                Some(Token::Ident(alias)) => {
-                    self.rename(&name, &alias);
-                    Ok(alias)
-                }
-                t => Err(format!("Expected name after '=>', got {t:?}")),
+                Some(Token::Ident(s)) => Some(s),
+                t => return Err(format!("Expected name after '=>', got {t:?}")),
             }
         } else {
-            Ok(name)
+            None
+        };
+
+        match atom {
+            Atom::Pending { facade, fallback } => {
+                let name = alias.unwrap_or(fallback);
+                self.register.insert(name.clone(), facade);
+                Ok(name)
+            }
+            Atom::Registered(name) => {
+                if let Some(alias) = alias {
+                    self.rename(&name, &alias);
+                    Ok(alias)
+                } else {
+                    Ok(name)
+                }
+            }
         }
     }
 
