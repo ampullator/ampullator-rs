@@ -1,5 +1,8 @@
 {
     "title": "Pulse Select",
     "label": "ug_pulse-select",
-    "chain": "Clock(value=1, mode=Samples)=> metro | Clock(value=20, mode=Samples) -> Select(values=[1, 2, 4], mode=Cycle) => step | metro -> PulseSelect(duration_values=[2, 4, 8], duration_mode=Cycle) => m1 | step ->:step m1 | metro -> PulseSelect(duration_values=[2, 4, 8, 16], duration_mode=Shuffle) => m2 | step ->:step m2"
+    "chain": "Clock(value=1, mode=Samples)=> metro | Clock(value=20, mode=Samples) -> Select(values=[1, 2, 4], mode=Cycle) => step | metro -> PulseSelect(duration_values=[2, 4, 8], duration_mode=Cycle) => m1 | step ->:step m1 | metro -> PulseSelect(duration_values=[2, 4, 8, 16], duration_mode=Shuffle) => m2 | step ->:step m2",
+    "sample_rate": 100.0,
+    "buffer_size": 8,
+    "total_samples": 100
 }

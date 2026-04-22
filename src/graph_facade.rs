@@ -247,6 +247,12 @@ pub(crate) struct GraphFacade {
     title: Option<String>,
     label: Option<String>,
     chain: Option<String>,
+    #[serde(default = "GraphFacade::default_sample_rate")]
+    sample_rate: f32,
+    #[serde(default = "GraphFacade::default_buffer_size")]
+    buffer_size: usize,
+    #[serde(default = "GraphFacade::default_total_samples")]
+    total_samples: usize,
     #[serde(default)]
     register: HashMap<String, Facade>,
     #[serde(default)]
@@ -255,6 +261,16 @@ pub(crate) struct GraphFacade {
 
 #[allow(unused)]
 impl GraphFacade {
+    fn default_sample_rate() -> f32 {
+        100.0
+    }
+    fn default_buffer_size() -> usize {
+        8
+    }
+    fn default_total_samples() -> usize {
+        100
+    }
+
     pub fn from_json(json: &str) -> Result<Self, String> {
         let mut facade: Self = serde_json::from_str(json)
             .map_err(|e| format!("Failed to parse JSON: {e}"))?;
@@ -282,6 +298,9 @@ impl GraphFacade {
             title: None,
             label: None,
             chain: Some(chain.to_string()),
+            sample_rate: Self::default_sample_rate(),
+            buffer_size: Self::default_buffer_size(),
+            total_samples: Self::default_total_samples(),
             register,
             connect,
         })
@@ -305,11 +324,8 @@ impl GraphFacade {
     fn to_rendered_figures(
         &self,
         dir: &Path,
-        sample_rate: f32,
-        buffer_size: usize,
-        total_samples: usize,
     ) -> Result<(String, String), String> {
-        let mut g = GenGraph::new(sample_rate, buffer_size);
+        let mut g = GenGraph::new(self.sample_rate, self.buffer_size);
         let _ = self.register_and_connect(&mut g);
 
         let name = self.label.clone().unwrap_or_else(|| "graph".to_string());
@@ -322,7 +338,7 @@ impl GraphFacade {
         let _ = g.to_dot_fp(&fp_graph);
 
         let fp_time_domain = dir.join(&fn_time_domain);
-        let r1 = Recorder::from_samples(g, None, total_samples);
+        let r1 = Recorder::from_samples(g, None, self.total_samples);
         r1.to_gnuplot_fp(fp_time_domain.to_str().unwrap()).unwrap();
 
         Ok((fn_graph, fn_time_domain))
@@ -333,9 +349,6 @@ impl GraphFacade {
 pub fn build_markdown_index(
     input_dir: &Path,
     output_dir: &Path,
-    sample_rate: f32,
-    buffer_size: usize,
-    total_samples: usize,
 ) -> Result<(), String> {
     let mut entries = Vec::new();
     entries.push("# Ampullator\n\n".to_string());
@@ -357,12 +370,8 @@ pub fn build_markdown_index(
             let title = parsed.title.clone().unwrap_or("title".to_string());
             let label = parsed.label.clone().unwrap_or("label".to_string());
 
-            let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(
-                output_dir,
-                sample_rate,
-                buffer_size,
-                total_samples,
-            )?;
+            let (fn_graph, fn_time_domain) =
+                parsed.to_rendered_figures(output_dir)?;
 
             entries.push(format!("## {title}"));
             if let Some(ref chain) = parsed.chain {

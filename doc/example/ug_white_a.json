@@ -1,5 +1,8 @@
 {
     "title": "White Noise Masking",
     "label": "ug_white-mask_select",
-    "chain": "White() => noise | Clock(value=20, mode=Samples) => clock | clock -> Select(values=[5, 50, 25], mode=Cycle) ->:max noise | clock -> Select(values=[-5, -50, -25], mode=Cycle) ->:min noise"
+    "chain": "White() => noise | Clock(value=20, mode=Samples) => clock | clock -> Select(values=[5, 50, 25], mode=Cycle) ->:max noise | clock -> Select(values=[-5, -50, -25], mode=Cycle) ->:min noise",
+    "sample_rate": 100.0,
+    "buffer_size": 8,
+    "total_samples": 100
 }

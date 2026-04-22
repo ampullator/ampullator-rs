@@ -1,5 +1,8 @@
 {
     "title": "Clock Mixture",
     "label": "ug_clock-mix",
-    "chain": "Clock(value=12, mode=Samples) + Clock(value=5, mode=Samples)"
+    "chain": "Clock(value=12, mode=Samples) + Clock(value=5, mode=Samples)",
+    "sample_rate": 100.0,
+    "buffer_size": 8,
+    "total_samples": 100
 }
