@@ -19,26 +19,8 @@
 <polyline fill="none" stroke="#c4c5bf" points="52.25,-204 130.5,-204"/>
 <text xml:space="preserve" text-anchor="middle" x="91.12" y="-191.45" font-family="Arial" font-size="9.00" fill="#c4c5bf">out</text>
 </g>
-<!-- n694e29ce -->
-<g id="node2" class="node">
-<title>n694e29ce</title>
-<polygon fill="none" stroke="#c4c5bf" points="124.38,-93 124.38,-148.5 230.38,-148.5 230.38,-93 124.38,-93"/>
-<text xml:space="preserve" text-anchor="middle" x="153" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">trigger</text>
-<polyline fill="none" stroke="#c4c5bf" points="181.62,-130 181.62,-148.5"/>
-<text xml:space="preserve" text-anchor="middle" x="205.75" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">step</text>
-<polyline fill="none" stroke="#c4c5bf" points="124.38,-130 230.38,-130"/>
-<text xml:space="preserve" text-anchor="middle" x="177.38" y="-117.45" font-family="Arial" font-size="9.00" fill="#c4c5bf">UGSelect: n694e29ce</text>
-<polyline fill="none" stroke="#c4c5bf" points="124.38,-111.5 230.38,-111.5"/>
-<text xml:space="preserve" text-anchor="middle" x="177.25" y="-98.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">out</text>
-</g>
-<!-- clock&#45;&gt;n694e29ce -->
-<g id="edge1" class="edge">
-<title>clock:s&#45;&gt;n694e29ce:n</title>
-<path fill="none" stroke="#c4c5bf" d="M91.12,-185C91.12,-155.55 144.16,-177.04 152.03,-155.15"/>
-<polygon fill="#c4c5bf" stroke="#c4c5bf" points="153.71,-155.71 152.76,-150.49 150.25,-155.16 153.71,-155.71"/>
-</g>
 <!-- n32a1b729 -->
-<g id="node3" class="node">
+<g id="node2" class="node">
 <title>n32a1b729</title>
 <polygon fill="none" stroke="#c4c5bf" points="0,-93 0,-148.5 106.75,-148.5 106.75,-93 0,-93"/>
 <text xml:space="preserve" text-anchor="middle" x="28.62" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">trigger</text>
@@ -50,10 +32,28 @@
 <text xml:space="preserve" text-anchor="middle" x="53.38" y="-98.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">out</text>
 </g>
 <!-- clock&#45;&gt;n32a1b729 -->
-<g id="edge2" class="edge">
+<g id="edge1" class="edge">
 <title>clock:s&#45;&gt;n32a1b729:n</title>
 <path fill="none" stroke="#c4c5bf" d="M91.12,-185C91.12,-155.32 37.56,-177.21 29.61,-155.19"/>
 <polygon fill="#c4c5bf" stroke="#c4c5bf" points="31.37,-155.16 28.86,-150.49 27.92,-155.71 31.37,-155.16"/>
+</g>
+<!-- n694e29ce -->
+<g id="node3" class="node">
+<title>n694e29ce</title>
+<polygon fill="none" stroke="#c4c5bf" points="124.38,-93 124.38,-148.5 230.38,-148.5 230.38,-93 124.38,-93"/>
+<text xml:space="preserve" text-anchor="middle" x="153" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">trigger</text>
+<polyline fill="none" stroke="#c4c5bf" points="181.62,-130 181.62,-148.5"/>
+<text xml:space="preserve" text-anchor="middle" x="205.75" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">step</text>
+<polyline fill="none" stroke="#c4c5bf" points="124.38,-130 230.38,-130"/>
+<text xml:space="preserve" text-anchor="middle" x="177.38" y="-117.45" font-family="Arial" font-size="9.00" fill="#c4c5bf">UGSelect: n694e29ce</text>
+<polyline fill="none" stroke="#c4c5bf" points="124.38,-111.5 230.38,-111.5"/>
+<text xml:space="preserve" text-anchor="middle" x="177.25" y="-98.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">out</text>
+</g>
+<!-- clock&#45;&gt;n694e29ce -->
+<g id="edge2" class="edge">
+<title>clock:s&#45;&gt;n694e29ce:n</title>
+<path fill="none" stroke="#c4c5bf" d="M91.12,-185C91.12,-155.55 144.16,-177.04 152.03,-155.15"/>
+<polygon fill="#c4c5bf" stroke="#c4c5bf" points="153.71,-155.71 152.76,-150.49 150.25,-155.16 153.71,-155.71"/>
 </g>
 <!-- noise -->
 <g id="node4" class="node">
@@ -67,17 +67,17 @@
 <polyline fill="none" stroke="#c4c5bf" points="76.5,-19 156.25,-19"/>
 <text xml:space="preserve" text-anchor="middle" x="116.38" y="-6.45" font-family="Arial" font-size="9.00" fill="#c4c5bf">out</text>
 </g>
-<!-- n694e29ce&#45;&gt;noise -->
-<g id="edge3" class="edge">
-<title>n694e29ce:s&#45;&gt;noise:n</title>
-<path fill="none" stroke="#c4c5bf" d="M177.25,-92.5C177.25,-70.18 142.65,-78.98 136.17,-62.49"/>
-<polygon fill="#c4c5bf" stroke="#c4c5bf" points="137.96,-62.62 135.38,-57.99 134.52,-63.22 137.96,-62.62"/>
-</g>
 <!-- n32a1b729&#45;&gt;noise -->
 <g id="edge4" class="edge">
 <title>n32a1b729:s&#45;&gt;noise:n</title>
 <path fill="none" stroke="#c4c5bf" d="M53.38,-92.5C53.38,-70.18 87.97,-78.98 94.46,-62.49"/>
 <polygon fill="#c4c5bf" stroke="#c4c5bf" points="96.11,-63.22 95.24,-57.99 92.66,-62.62 96.11,-63.22"/>
+</g>
+<!-- n694e29ce&#45;&gt;noise -->
+<g id="edge3" class="edge">
+<title>n694e29ce:s&#45;&gt;noise:n</title>
+<path fill="none" stroke="#c4c5bf" d="M177.25,-92.5C177.25,-70.18 142.65,-78.98 136.17,-62.49"/>
+<polygon fill="#c4c5bf" stroke="#c4c5bf" points="137.96,-62.62 135.38,-57.99 134.52,-63.22 137.96,-62.62"/>
 </g>
 </g>
 </svg>
