@@ -361,7 +361,7 @@ impl GenGraph {
         write!(temp_file, "{}", dot_content)?;
 
         let status = Command::new("dot")
-            .arg("-Tpng") // or "-Tsvg" or another format
+            .arg("-Tsvg")
             .arg(temp_file.path()) // input .dot file
             .arg("-o")
             .arg(fp) // output file path provided as argument

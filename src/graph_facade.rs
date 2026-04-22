@@ -327,9 +327,8 @@ impl GraphFacade {
 
         let name = self.label.clone().unwrap_or_else(|| "graph".to_string());
 
-        // presently hard-coded to produce png; might produce svg
-        let fn_graph = format!("{name}_graph.png");
-        let fn_time_domain = format!("{name}_time-domain.png");
+        let fn_graph = format!("{name}_graph.svg");
+        let fn_time_domain = format!("{name}_time-domain.svg");
 
         let fp_graph = dir.join(&fn_graph);
         let _ = g.to_dot_fp(&fp_graph);
