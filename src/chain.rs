@@ -254,6 +254,19 @@ impl ChainParser {
         }
     }
 
+    fn make_facade_from_map(
+        type_name: &str,
+        obj: serde_json::Map<String, serde_json::Value>,
+    ) -> Result<Facade, String> {
+        let json_val = serde_json::Value::Array(vec![
+            serde_json::Value::String(type_name.to_string()),
+            serde_json::Value::Object(obj),
+        ]);
+        serde_json::from_value(json_val)
+            .map(Facade::Full)
+            .map_err(|e| format!("Failed to parse UGen '{type_name}': {e}"))
+    }
+
     /// Build a `Facade` from a UGen type name and a key→value argument map.
     ///
     /// Values are parsed as numbers where possible; everything else is treated
@@ -267,21 +280,13 @@ impl ChainParser {
         type_name: &str,
         args: &HashMap<String, serde_json::Value>,
     ) -> Result<Facade, String> {
-        let mut obj = serde_json::Map::new();
+        let obj: serde_json::Map<String, serde_json::Value> =
+            args.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        Self::make_facade_from_map(type_name, obj)
+    }
 
-        for (k, v) in args {
-            obj.insert(k.clone(), v.clone());
-        }
-
-        let json_val = serde_json::Value::Array(vec![
-            serde_json::Value::String(type_name.to_string()),
-            serde_json::Value::Object(obj),
-        ]);
-
-        let ug_facade: UGFacade = serde_json::from_value(json_val)
-            .map_err(|e| format!("Failed to parse UGen '{type_name}': {e}"))?;
-
-        Ok(Facade::Full(ug_facade))
+    fn make_facade_no_args(type_name: &str) -> Result<Facade, String> {
+        Self::make_facade_from_map(type_name, serde_json::Map::new())
     }
 
     /// Parse a list literal `[value, value, ...]`.
@@ -476,7 +481,6 @@ impl ChainParser {
     }
 
     /// Parse `atom ("=>" Ident)?`.
-    ///
     /// For pending atoms, registers under the alias if `=>` is present,
     /// otherwise under the generated fallback name.
     /// For already-registered atoms, renames if `=>` is present.
@@ -553,7 +557,7 @@ impl ChainParser {
             };
 
             let op_name = self.gen_name(type_name);
-            let facade = Self::make_facade(type_name, &HashMap::new())?;
+            let facade = Self::make_facade_no_args(type_name)?;
             self.register.insert(op_name.clone(), facade);
 
             let lhs_out = self.default_output(&lhs)?;
