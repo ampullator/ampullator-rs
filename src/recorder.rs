@@ -160,7 +160,7 @@ impl Recorder {
         let mut script = String::new();
 
         script.push_str(&format!(
-            "set terminal pngcairo size {},{} background rgb '#12131E'\n",
+            "set terminal svg size {},{} background rgb '#12131E'\n",
             width, height
         ));
         script.push_str(&format!("set output '{}'\n\n", fp.display()));
@@ -221,7 +221,7 @@ set bmargin screen bottom
 set label textcolor rgb '#c4c5bf'
 set border lc rgb '#c4c5bf'
 set grid lc rgb '#cccccc'
-set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font
+set label {} "{}" at screen label_x, screen (bottom + height / 2) center font label_font noenhanced
 plot ${} using 1 with linespoints linestyle {}
 "#,
                 panel,

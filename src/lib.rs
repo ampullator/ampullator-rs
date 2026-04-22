@@ -1,3 +1,4 @@
+mod chain;
 mod graph;
 mod graph_facade;
 mod recorder;
@@ -31,3 +32,5 @@ pub use ugen_drum::{UGBassDrum, UGSnareDrum};
 pub use util::{Sample, UnitRate};
 
 pub use graph::GenGraph;
+
+pub use graph_facade::build_markdown_index;

@@ -25,6 +25,7 @@ use std::path::Path;
 #[serde(deny_unknown_fields, tag = "0", content = "1")]
 pub enum UGFacade {
     AsHz {
+        #[serde(default = "UGFacade::default_unit_rate_hz")]
         mode: UnitRate,
     },
     Ceil {},
@@ -45,15 +46,19 @@ pub enum UGFacade {
     EnvAR {},
     Floor {},
     HighPass {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     HighPassQ {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     LowPass {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     LowPassQ {
+        #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
     Parametric {},
@@ -63,6 +68,7 @@ pub enum UGFacade {
         freq: f32,
     },
     Mult {
+        #[serde(default = "UGFacade::default_input_count")]
         input_count: usize,
     },
     PulseSelect {
@@ -71,7 +77,9 @@ pub enum UGFacade {
         seed: Option<u64>,
     },
     Round {
+        #[serde(default = "UGFacade::default_round_places")]
         places: i32,
+        #[serde(default = "UGFacade::default_mode_round")]
         mode: ModeRound,
     },
     Select {
@@ -85,6 +93,7 @@ pub enum UGFacade {
         seed: Option<u64>,
     },
     Sum {
+        #[serde(default = "UGFacade::default_input_count")]
         input_count: usize,
     },
     Trigger {},
@@ -148,6 +157,47 @@ impl UGFacade {
             )),
         }
     }
+
+    /// Return `true` if `name` is a recognized UGFacade variant name.
+    ///
+    /// Used by the Chain DSL parser to distinguish UGen type names from
+    /// user-defined node name references. The check is driven by serde:
+    /// `["name", {}]` is attempted; an "unknown variant" error means the
+    /// name is not a valid variant, while any other outcome (success or a
+    /// different deserialization error such as a missing required field)
+    /// confirms the name is a valid variant.
+    pub fn is_variant_name(name: &str) -> bool {
+        let probe = serde_json::Value::Array(vec![
+            serde_json::Value::String(name.to_string()),
+            serde_json::Value::Null,
+        ]);
+        match serde_json::from_value::<UGFacade>(probe) {
+            Ok(_) => true,
+            Err(e) => !e.to_string().contains("unknown variant"),
+        }
+    }
+
+    // Serde default helpers -- used by `#[serde(default = "...")]` on UGFacade fields.
+
+    fn default_roll_off_db() -> f32 {
+        6.0
+    }
+
+    fn default_unit_rate_hz() -> UnitRate {
+        UnitRate::Hz
+    }
+
+    fn default_round_places() -> i32 {
+        0
+    }
+
+    fn default_mode_round() -> ModeRound {
+        ModeRound::Round
+    }
+
+    fn default_input_count() -> usize {
+        2
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -193,22 +243,75 @@ impl Facade {
 
 #[allow(unused)]
 #[derive(Deserialize, Debug)]
-struct GraphFacade {
+pub(crate) struct GraphFacade {
     title: Option<String>,
     label: Option<String>,
+    chain: Option<String>,
+    #[serde(default = "GraphFacade::default_sample_rate")]
+    sample_rate: f32,
+    #[serde(default = "GraphFacade::default_buffer_size")]
+    buffer_size: usize,
+    #[serde(default = "GraphFacade::default_total_samples")]
+    total_samples: usize,
+    #[serde(default)]
     register: HashMap<String, Facade>,
+    #[serde(default)]
     connect: Vec<(String, String)>,
 }
 
 #[allow(unused)]
 impl GraphFacade {
+    fn default_sample_rate() -> f32 {
+        100.0
+    }
+    fn default_buffer_size() -> usize {
+        8
+    }
+    fn default_total_samples() -> usize {
+        100
+    }
+
     pub fn from_json(json: &str) -> Result<Self, String> {
-        serde_json::from_str(json).map_err(|e| format!("Failed to parse JSON: {e}"))
+        let mut facade: Self = serde_json::from_str(json)
+            .map_err(|e| format!("Failed to parse JSON: {e}"))?;
+        if let Some(ref chain) = facade.chain {
+            if !facade.register.is_empty() || !facade.connect.is_empty() {
+                return Err(
+                    "Cannot specify both 'chain' and 'register'/'connect'".to_string()
+                );
+            }
+            let (register, connect) = crate::chain::parse_chain(chain)?;
+            facade.register = register;
+            facade.connect = connect;
+        }
+        Ok(facade)
+    }
+
+    /// Construct a `GraphFacade` by parsing a Chain DSL string.
+    ///
+    /// The resulting `register` and `connect` containers are equivalent to
+    /// those you would get from the JSON form and can be used with
+    /// [`register_and_connect`] to build a [`GenGraph`].
+    pub fn from_chain(chain: &str) -> Result<Self, String> {
+        let (register, connect) = crate::chain::parse_chain(chain)?;
+        Ok(Self {
+            title: None,
+            label: None,
+            chain: Some(chain.to_string()),
+            sample_rate: Self::default_sample_rate(),
+            buffer_size: Self::default_buffer_size(),
+            total_samples: Self::default_total_samples(),
+            register,
+            connect,
+        })
     }
 
     pub fn register_and_connect(&self, graph: &mut GenGraph) -> Result<(), String> {
-        // Register all nodes
-        for (name, facade) in &self.register {
+        // Register all nodes in sorted order for deterministic output
+        let mut keys: Vec<_> = self.register.keys().collect();
+        keys.sort();
+        for name in keys {
+            let facade = &self.register[name];
             println!("register: {:?}", name);
             graph.add_node(name, facade.to_ugen());
         }
@@ -221,27 +324,20 @@ impl GraphFacade {
     }
 
     /// Based on this GraphFacade, create a Graph and render both a graph figure and a time-domain plot figure.
-    fn to_rendered_figures(
-        &self,
-        dir: &Path,
-        sample_rate: f32,
-        buffer_size: usize,
-        total_samples: usize,
-    ) -> Result<(String, String), String> {
-        let mut g = GenGraph::new(sample_rate, buffer_size);
+    fn to_rendered_figures(&self, dir: &Path) -> Result<(String, String), String> {
+        let mut g = GenGraph::new(self.sample_rate, self.buffer_size);
         let _ = self.register_and_connect(&mut g);
 
         let name = self.label.clone().unwrap_or_else(|| "graph".to_string());
 
-        // presently hard-coded to produce png; might produce svg
-        let fn_graph = format!("{name}_graph.png");
-        let fn_time_domain = format!("{name}_time-domain.png");
+        let fn_graph = format!("{name}_graph.svg");
+        let fn_time_domain = format!("{name}_time-domain.svg");
 
         let fp_graph = dir.join(&fn_graph);
         let _ = g.to_dot_fp(&fp_graph);
 
         let fp_time_domain = dir.join(&fn_time_domain);
-        let r1 = Recorder::from_samples(g, None, total_samples);
+        let r1 = Recorder::from_samples(g, None, self.total_samples);
         r1.to_gnuplot_fp(fp_time_domain.to_str().unwrap()).unwrap();
 
         Ok((fn_graph, fn_time_domain))
@@ -249,13 +345,7 @@ impl GraphFacade {
 }
 
 #[allow(unused)]
-pub fn build_markdown_index(
-    input_dir: &Path,
-    output_dir: &Path,
-    sample_rate: f32,
-    buffer_size: usize,
-    total_samples: usize,
-) -> Result<(), String> {
+pub fn build_markdown_index(input_dir: &Path, output_dir: &Path) -> Result<(), String> {
     let mut entries = Vec::new();
     entries.push("# Ampullator\n\n".to_string());
 
@@ -271,23 +361,30 @@ pub fn build_markdown_index(
                 .map_err(|e| e.to_string())?
                 .trim()
                 .to_string();
-            let parsed: GraphFacade =
-                serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+            let parsed = GraphFacade::from_json(&json_str)?;
 
             let title = parsed.title.clone().unwrap_or("title".to_string());
             let label = parsed.label.clone().unwrap_or("label".to_string());
 
-            let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(
-                output_dir,
-                sample_rate,
-                buffer_size,
-                total_samples,
-            )?;
+            let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(output_dir)?;
 
             entries.push(format!("## {title}"));
-            entries.push("```json".to_string());
-            entries.push(json_str.clone()); // clone because used in formatting
-            entries.push("```".to_string());
+            if let Some(ref chain) = parsed.chain {
+                entries.push("```text".to_string());
+                for (i, segment) in chain.split('|').enumerate() {
+                    let segment = segment.trim();
+                    if i == 0 {
+                        entries.push(segment.to_string());
+                    } else {
+                        entries.push(format!("| {segment}"));
+                    }
+                }
+                entries.push("```".to_string());
+            } else {
+                entries.push("```json".to_string());
+                entries.push(json_str.clone());
+                entries.push("```".to_string());
+            }
             entries.push(format!("![{label}]({fn_graph})"));
             entries.push(format!("![{label}]({fn_time_domain})"));
             entries.push("".to_string()); // blank line for spacing
@@ -751,13 +848,6 @@ mod tests {
             ]
         );
     }
-
-    // #[test]
-    // fn test_build_index_a() {
-    //     let fp_src = Path::new("doc/example");
-    //     let fp_dst = Path::new("doc/out");
-    //     let _ = build_markdown_index(&fp_src, &fp_dst, 100.0, 8, 100).unwrap();
-    // }
 
     #[test]
     fn test_ug_facade_bass_drum() {
