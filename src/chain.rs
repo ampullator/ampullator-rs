@@ -189,7 +189,12 @@ impl ChainParser {
 
     fn gen_name(&mut self, prefix: &str) -> String {
         self.counter += 1;
-        format!("_{prefix}_{}", self.counter)
+        let mut h: u64 = 0xcbf29ce484222325;
+        for b in prefix.bytes().chain(self.counter.to_le_bytes()) {
+            h ^= b as u64;
+            h = h.wrapping_mul(0x100000001b3);
+        }
+        format!("n{:08x}", h as u32)
     }
 
     fn expect(&mut self, expected: &Token) -> Result<(), String> {
@@ -710,7 +715,10 @@ mod tests {
         let (reg, conn) =
             parse("White() => noise -> LowPass() => lpf | 4000 ->:cutoff lpf");
         // An implicit Const node is created for the numeric literal
-        let const_key = reg.keys().find(|k| k.starts_with("_const_"));
+        // Auto-generated names are "n" followed by 8 hex chars
+        let const_key = reg.keys().find(|k| {
+            k.len() == 9 && k.starts_with('n') && k[1..].chars().all(|c| c.is_ascii_hexdigit())
+        });
         assert!(
             const_key.is_some(),
             "expected an auto-named Const node, got keys: {:?}",
