@@ -511,8 +511,7 @@ impl ChainParser {
     }
 
     /// Parse a chain of atoms joined by `->` (with optional port specs).
-    ///
-    /// Returns the name of the rightmost node.
+    /// Adds a connection and returns the name of the rightmost node.
     fn parse_arrow_chain(&mut self) -> Result<String, String> {
         let mut current = self.parse_named_atom()?;
 
@@ -538,7 +537,6 @@ impl ChainParser {
     }
 
     /// Parse `arrow_chain (("+" | "*") arrow_chain)*`.
-    ///
     /// `+` creates a `Sum` UGen; `*` creates a `Mult` UGen.
     /// The two operands are connected to `in1` and `in2` of the new node.
     fn parse_addmul_expr(&mut self) -> Result<String, String> {
@@ -595,7 +593,6 @@ impl ChainParser {
 
 // ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 pub type ChainResult = (HashMap<String, Facade>, Vec<(String, String)>);
 
@@ -611,7 +608,6 @@ pub fn parse_chain(input: &str) -> Result<ChainResult, String> {
 
 // ---------------------------------------------------------------------------
 // Tests
-// ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -626,7 +622,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Tokeniser
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_tokenize_basic() {
@@ -658,7 +653,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Register only (no connections)
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_simple_ugens_no_connections() {
@@ -684,7 +678,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Connections
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_simple_arrow_connections() {
@@ -696,6 +689,10 @@ mod tests {
         let (src0, dst0) = &conn[0];
         assert!(src0.ends_with(".out"), "src should be .out port: {src0}");
         assert!(dst0.ends_with(".in"), "dst should be .in port: {dst0}");
+
+        let (src1, dst1) = &conn[1];
+        assert!(src1.ends_with(".out"), "src should be .out port: {src1}");
+        assert!(dst1.ends_with(".in"), "dst should be .in port: {dst1}");
     }
 
     #[test]
@@ -712,7 +709,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Port specifications
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_port_spec_dst_only() {
@@ -740,7 +736,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Numeric literals → implicit Const
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_numeric_literal_creates_const() {
@@ -764,7 +759,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Binary operators (+ and *)
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_sum_operator() {
@@ -798,7 +792,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Complex example from the issue
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_issue_example_with_named_refs() {
@@ -836,7 +829,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Multiline / whitespace tolerance (newlines, tabs, spaces)
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_multiline_whitespace() {
@@ -866,7 +858,6 @@ mod tests {
 
     // ---------------------------------------------------------------------------
     // Integration: from_chain builds a working GenGraph
-    // ---------------------------------------------------------------------------
 
     #[test]
     fn test_chain_from_chain_integration() {

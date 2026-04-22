@@ -158,7 +158,7 @@ impl UGFacade {
         }
     }
 
-    /// Return `true` if `name` is a recognised UGFacade variant name.
+    /// Return `true` if `name` is a recognized UGFacade variant name.
     ///
     /// Used by the Chain DSL parser to distinguish UGen type names from
     /// user-defined node name references. The check is driven by serde:
@@ -169,7 +169,7 @@ impl UGFacade {
     pub fn is_variant_name(name: &str) -> bool {
         let probe = serde_json::Value::Array(vec![
             serde_json::Value::String(name.to_string()),
-            serde_json::Value::Object(serde_json::Map::new()),
+            serde_json::Value::Null,
         ]);
         match serde_json::from_value::<UGFacade>(probe) {
             Ok(_) => true,
