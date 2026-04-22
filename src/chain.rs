@@ -386,7 +386,7 @@ impl ChainParser {
         };
 
         let facade = Self::make_facade(&type_name, &args)?;
-        let fallback = self.gen_name(&type_name.to_lowercase());
+        let fallback = self.gen_name(&type_name);
         Ok((facade, fallback))
     }
 
@@ -548,13 +548,13 @@ impl ChainParser {
             let op = self.consume().unwrap();
             let rhs = self.parse_arrow_chain()?;
 
-            let (type_name, prefix) = match op {
-                Token::Plus => ("Sum", "sum"),
-                Token::Star => ("Mult", "mult"),
+            let type_name = match op {
+                Token::Plus => "Sum",
+                Token::Star => "Mult",
                 _ => unreachable!(),
             };
 
-            let op_name = self.gen_name(prefix);
+            let op_name = self.gen_name(type_name);
             let facade = Self::make_facade(type_name, &HashMap::new())?;
             self.register.insert(op_name.clone(), facade);
 
