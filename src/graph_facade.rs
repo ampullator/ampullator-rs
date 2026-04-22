@@ -321,10 +321,7 @@ impl GraphFacade {
     }
 
     /// Based on this GraphFacade, create a Graph and render both a graph figure and a time-domain plot figure.
-    fn to_rendered_figures(
-        &self,
-        dir: &Path,
-    ) -> Result<(String, String), String> {
+    fn to_rendered_figures(&self, dir: &Path) -> Result<(String, String), String> {
         let mut g = GenGraph::new(self.sample_rate, self.buffer_size);
         let _ = self.register_and_connect(&mut g);
 
@@ -346,10 +343,7 @@ impl GraphFacade {
 }
 
 #[allow(unused)]
-pub fn build_markdown_index(
-    input_dir: &Path,
-    output_dir: &Path,
-) -> Result<(), String> {
+pub fn build_markdown_index(input_dir: &Path, output_dir: &Path) -> Result<(), String> {
     let mut entries = Vec::new();
     entries.push("# Ampullator\n\n".to_string());
 
@@ -370,8 +364,7 @@ pub fn build_markdown_index(
             let title = parsed.title.clone().unwrap_or("title".to_string());
             let label = parsed.label.clone().unwrap_or("label".to_string());
 
-            let (fn_graph, fn_time_domain) =
-                parsed.to_rendered_figures(output_dir)?;
+            let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(output_dir)?;
 
             entries.push(format!("## {title}"));
             if let Some(ref chain) = parsed.chain {
