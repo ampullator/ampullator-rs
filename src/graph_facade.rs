@@ -126,10 +126,9 @@ impl UGFacade {
             UGFacade::ParametricConst { gain, bw, freq } => {
                 Box::new(UGParametricConst::new(*gain, *bw, *freq))
             }
-            UGFacade::Pan { output_count } => match output_count {
-                Some(n) => Box::new(UGPan::new_n(*n)),
-                None => Box::new(UGPan::new()),
-            },
+            UGFacade::Pan { output_count } => {
+                Box::new(UGPan::new(output_count.unwrap_or(2)))
+            }
             UGFacade::EnvBreakPoint {
                 duration_values,
                 duration_mode,

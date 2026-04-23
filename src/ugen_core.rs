@@ -499,11 +499,7 @@ pub struct UGPan {
 }
 
 impl UGPan {
-    pub fn new() -> Self {
-        Self::new_n(2)
-    }
-
-    pub fn new_n(output_count: usize) -> Self {
+    pub fn new(output_count: usize) -> Self {
         if output_count < 2 {
             panic!("Output count should be greater than 1");
         }
@@ -520,7 +516,7 @@ impl UGPan {
 
 impl Default for UGPan {
     fn default() -> Self {
-        Self::new()
+        Self::new(2)
     }
 }
 
@@ -1042,7 +1038,7 @@ mod tests {
         register_many![g,
             "in" => 1,
             "pan_pos" => 0.5,
-            "pan" => UGPan::new(),
+            "pan" => UGPan::new(2),
             "rl" => UGRound::new(3, ModeRound::Round),
             "rr" => UGRound::new(3, ModeRound::Round),
         ];
@@ -1070,7 +1066,7 @@ mod tests {
         register_many![g,
             "in" => 1,
             "pan_pos" => 1.5,
-            "pan" => UGPan::new_n(4),
+            "pan" => UGPan::new(4),
             "r2" => UGRound::new(3, ModeRound::Round),
             "r3" => UGRound::new(3, ModeRound::Round),
         ];
@@ -1107,8 +1103,8 @@ mod tests {
             "in" => 1,
             "pan_pos_2" => 2.0,
             "pan_pos_3" => 3.0,
-            "pan2" => UGPan::new_n(4),
-            "pan3" => UGPan::new_n(4),
+            "pan2" => UGPan::new(4),
+            "pan3" => UGPan::new(4),
         ];
         connect_many![g,
         "in.out" -> "pan2.in",
