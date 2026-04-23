@@ -150,6 +150,67 @@ impl Recorder {
         Ok(())
     }
 
+    /// Write all recorded outputs to a WAV stream without seeking.
+    /// Identical channel layout and sample encoding to `to_wav`, but writes to
+    /// any `Write` (including stdout). Safe because `Recorder` pre-computes all
+    /// samples, so the RIFF/data chunk sizes are known before the first byte is written.
+    pub fn to_wav_write<W: Write>(
+        &self,
+        mut w: W,
+        format: WavFormat,
+    ) -> std::io::Result<()> {
+        let channels = self.output_names.len() as u16;
+        let (bits_per_sample, audio_format): (u16, u16) = match format {
+            WavFormat::Float32 => (32, 3), // IEEE_FLOAT
+            WavFormat::Int16 => (16, 1),   // PCM
+            WavFormat::Int24 => (24, 1),   // PCM
+        };
+        let sample_rate = self.sample_rate as u32;
+        let bytes_per_sample = (bits_per_sample / 8) as u32;
+        let block_align = channels as u32 * bytes_per_sample;
+        let byte_rate = sample_rate * block_align;
+        let (_, length) = self.get_shape();
+        let data_size = length as u32 * channels as u32 * bytes_per_sample;
+        let riff_size = 36u32 + data_size; // total file size minus the 8-byte RIFF preamble
+
+        // RIFF header
+        w.write_all(b"RIFF")?;
+        w.write_all(&riff_size.to_le_bytes())?;
+        w.write_all(b"WAVE")?;
+        // fmt chunk (16 bytes of payload)
+        w.write_all(b"fmt ")?;
+        w.write_all(&16u32.to_le_bytes())?;
+        w.write_all(&audio_format.to_le_bytes())?;
+        w.write_all(&channels.to_le_bytes())?;
+        w.write_all(&sample_rate.to_le_bytes())?;
+        w.write_all(&byte_rate.to_le_bytes())?;
+        w.write_all(&(block_align as u16).to_le_bytes())?;
+        w.write_all(&bits_per_sample.to_le_bytes())?;
+        // data chunk
+        w.write_all(b"data")?;
+        w.write_all(&data_size.to_le_bytes())?;
+
+        for i in 0..length {
+            for name in &self.output_names {
+                let samples = &self.recorded[name];
+                let s: f32 = if i < samples.len() { samples[i] } else { 0.0 };
+                match format {
+                    WavFormat::Float32 => w.write_all(&s.to_le_bytes())?,
+                    WavFormat::Int16 => {
+                        let v = (s * 32768.0).round().clamp(-32768.0, 32767.0) as i16;
+                        w.write_all(&v.to_le_bytes())?;
+                    }
+                    WavFormat::Int24 => {
+                        let v =
+                            (s * 8388608.0).round().clamp(-8388608.0, 8388607.0) as i32;
+                        w.write_all(&v.to_le_bytes()[..3])?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     //--------------------------------------------------------------------------
     pub fn to_gnuplot(&self, fp: &Path) -> String {
         let (d, _samples) = self.get_shape();
@@ -523,6 +584,67 @@ mod tests {
                 *got, want,
                 "Int24 sample mismatch at frame {i}: {got} != {want}"
             );
+        }
+    }
+
+    #[test]
+    fn test_to_wav_write_round_trips() {
+        // Verify that to_wav_write produces valid WAV data that decodes to the
+        // correct samples. hound's WavReader is used to decode the in-memory
+        // stream, confirming the header and sample data are both correct.
+        // (to_wav uses hound's WAVE_FORMAT_EXTENSIBLE header for Float32, which
+        // differs from the plain IEEE_FLOAT header we write — both are valid.)
+        for format in [WavFormat::Float32, WavFormat::Int16, WavFormat::Int24] {
+            let mut g = GenGraph::new(10.0, 8);
+            register_many![g,
+                "fq" => 0.5,
+                "osc" => UGSine::new(),
+                "round" => UGRound::new(4, ModeRound::Round),
+            ];
+            connect_many![g,
+                "fq.out" -> "osc.freq",
+                "osc.wave" -> "round.in"
+            ];
+            let labels = Some(vec!["round.out".to_string()]);
+            let r = Recorder::from_samples(g, labels, 10);
+
+            let mut buf = Vec::new();
+            r.to_wav_write(&mut buf, format).unwrap();
+
+            let cursor = std::io::Cursor::new(buf);
+            let mut reader = hound::WavReader::new(cursor)
+                .unwrap_or_else(|e| panic!("hound rejected {format:?} stream: {e}"));
+            let spec = reader.spec();
+            assert_eq!(spec.channels, 1);
+            assert_eq!(spec.sample_rate, 10);
+
+            let expected = r.get_output_by_label("round.out");
+            let (decoded, tol): (Vec<f32>, f32) = match format {
+                WavFormat::Float32 => {
+                    (reader.samples::<f32>().map(|s| s.unwrap()).collect(), 1e-6)
+                }
+                WavFormat::Int16 => (
+                    reader
+                        .samples::<i16>()
+                        .map(|s| s.unwrap() as f32 / 32768.0)
+                        .collect(),
+                    1.0 / 32768.0,
+                ),
+                WavFormat::Int24 => (
+                    reader
+                        .samples::<i32>()
+                        .map(|s| s.unwrap() as f32 / 8388608.0)
+                        .collect(),
+                    1.0 / 8388608.0,
+                ),
+            };
+            assert_eq!(decoded.len(), expected.len());
+            for (i, (got, src)) in decoded.iter().zip(expected.iter()).enumerate() {
+                assert!(
+                    (got - src).abs() <= tol,
+                    "{format:?} sample {i}: decoded {got} != expected {src}"
+                );
+            }
         }
     }
 

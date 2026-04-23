@@ -321,12 +321,12 @@ impl GraphFacade {
         keys.sort();
         for name in keys {
             let facade = &self.register[name];
-            println!("register: {:?}", name);
+            eprintln!("register: {:?}", name);
             graph.add_node(name, facade.to_ugen());
         }
         // Connect nodes
         for (src, dst) in &self.connect {
-            println!("connect: {:?} -> {:?}", src, dst);
+            eprintln!("connect: {:?} -> {:?}", src, dst);
             graph.connect(src, dst);
         }
         Ok(())

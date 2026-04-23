@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 
 use ampullator::{
@@ -38,8 +39,9 @@ struct Cli {
     #[arg(long)]
     duration: f32,
 
-    /// Output WAV file path
-    output: PathBuf,
+    /// Output WAV file path; omit to stream WAV to stdout
+    #[arg(short = 'o', long)]
+    output: Option<PathBuf>,
 }
 
 fn build_graph_from_input(
@@ -144,9 +146,20 @@ fn run(cli: Cli) -> Result<(), String> {
     let labels = resolve_output_labels(&mut graph, cli.node.as_deref(), &cli.outputs)?;
 
     let recorder = Recorder::from_duration(graph, Some(labels), cli.duration);
-    recorder
-        .to_wav(&cli.output, wav_format_from_bit_depth(cli.bit_depth))
-        .map_err(|e| format!("Failed to write WAV '{}': {e}", cli.output.display()))?;
+    let format = wav_format_from_bit_depth(cli.bit_depth);
+    match cli.output {
+        None => {
+            let stdout = std::io::stdout();
+            recorder
+                .to_wav_write(BufWriter::new(stdout.lock()), format)
+                .map_err(|e| format!("Failed to write WAV to stdout: {e}"))?;
+        }
+        Some(ref path) => {
+            recorder
+                .to_wav(path, format)
+                .map_err(|e| format!("Failed to write WAV '{}': {e}", path.display()))?;
+        }
+    }
     Ok(())
 }
 
