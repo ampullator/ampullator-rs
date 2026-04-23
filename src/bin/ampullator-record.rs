@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::io::BufWriter;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use ampullator::{
     GenGraph, Recorder, WavFormat, graph_from_chain_expression,
@@ -49,15 +49,14 @@ fn build_graph_from_input(
     sample_rate: f32,
     buffer_size: usize,
 ) -> Result<GenGraph, String> {
-    let p = Path::new(input);
-    if p.exists() {
-        let content = std::fs::read_to_string(p)
-            .map_err(|e| format!("Failed to read input file '{}': {e}", p.display()))?;
-        if p.extension().is_some_and(|ext| ext == "json") {
-            graph_from_json_definition(&content, sample_rate, buffer_size)
-        } else {
-            graph_from_chain_expression(content.trim(), sample_rate, buffer_size)
-        }
+    if input.ends_with(".json") {
+        let content = std::fs::read_to_string(input)
+            .map_err(|e| format!("Failed to read input file '{input}': {e}"))?;
+        graph_from_json_definition(&content, sample_rate, buffer_size)
+    } else if input.ends_with(".txt") {
+        let content = std::fs::read_to_string(input)
+            .map_err(|e| format!("Failed to read input file '{input}': {e}"))?;
+        graph_from_chain_expression(content.trim(), sample_rate, buffer_size)
     } else {
         graph_from_chain_expression(input, sample_rate, buffer_size)
     }
