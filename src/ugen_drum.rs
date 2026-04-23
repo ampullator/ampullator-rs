@@ -236,6 +236,194 @@ impl UGen for UGSnareDrum {
 }
 
 //------------------------------------------------------------------------------
+// UGBassDrum
+
+/// An analog-style bass drum inspired by classic 808/909 circuits.
+///
+/// The drum uses a decaying sine body with exponential pitch sweep and a short
+/// click transient. All controls are signal inputs for per-hit modulation.
+///
+/// Inputs:
+///   0 gate         - Trigger input; rising edge (≤0.5 → >0.5) fires the drum.
+///   1 tune         - Base oscillator frequency in Hz. Default: 55.0
+///   2 decay        - Body decay in samples. Default: 9000.0
+///   3 punch        - Start pitch multiplier for sweep [>=1]. Default: 2.8
+///   4 sweep_decay  - Pitch sweep decay in samples. Default: 1200.0
+///   5 click        - Click transient amount [0..1]. Default: 0.2
+///   6 tone         - Body amount [0..1]. Default: 1.0
+///   7 drive        - Output drive before tanh saturation. Default: 1.3
+///
+/// Outputs:
+///   0 out - Bass drum output in approximately [-1..1].
+pub struct UGBassDrum {
+    phase: Sample,
+    click_phase: Sample,
+    amp_env: Sample,
+    pitch_env: Sample,
+    click_env: Sample,
+    prev_gate: Sample,
+    default_tune: Sample,
+    default_decay: Sample,
+    default_punch: Sample,
+    default_sweep_decay: Sample,
+    default_click: Sample,
+    default_tone: Sample,
+    default_drive: Sample,
+}
+
+impl UGBassDrum {
+    pub fn new() -> Self {
+        Self {
+            phase: 0.0,
+            click_phase: 0.0,
+            amp_env: 0.0,
+            pitch_env: 0.0,
+            click_env: 0.0,
+            prev_gate: 0.0,
+            default_tune: 55.0,
+            default_decay: 9000.0,
+            default_punch: 2.8,
+            default_sweep_decay: 1200.0,
+            default_click: 0.2,
+            default_tone: 1.0,
+            default_drive: 1.3,
+        }
+    }
+}
+
+impl Default for UGBassDrum {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UGen for UGBassDrum {
+    fn type_name(&self) -> &'static str {
+        "UGBassDrum"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &[
+            "gate",
+            "tune",
+            "decay",
+            "punch",
+            "sweep_decay",
+            "click",
+            "tone",
+            "drive",
+        ]
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &["out"]
+    }
+
+    fn default_input(&self, name: &str) -> Option<Sample> {
+        match name {
+            "gate" => Some(0.0),
+            "tune" => Some(self.default_tune),
+            "decay" => Some(self.default_decay),
+            "punch" => Some(self.default_punch),
+            "sweep_decay" => Some(self.default_sweep_decay),
+            "click" => Some(self.default_click),
+            "tone" => Some(self.default_tone),
+            "drive" => Some(self.default_drive),
+            _ => None,
+        }
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let gate = inputs.first().copied().unwrap_or(&[]);
+        let tune = inputs.get(1).copied().unwrap_or(&[]);
+        let decay = inputs.get(2).copied().unwrap_or(&[]);
+        let punch = inputs.get(3).copied().unwrap_or(&[]);
+        let sweep_decay = inputs.get(4).copied().unwrap_or(&[]);
+        let click = inputs.get(5).copied().unwrap_or(&[]);
+        let tone = inputs.get(6).copied().unwrap_or(&[]);
+        let drive = inputs.get(7).copied().unwrap_or(&[]);
+
+        let out = &mut outputs[0];
+        let dt = 1.0 / sample_rate;
+        // 1.5 ms click decay: exp(-LN_1000 / tau_samples) reaches ~-60 dB at tau.
+        // Using LN_1000 keeps envelope shapes consistent with other drum decays.
+        let click_decay_coeff = (-LN_1000 / (0.0015 * sample_rate).max(1.0)).exp();
+
+        for (i, o) in out.iter_mut().enumerate() {
+            let gate_v = gate.get(i).copied().unwrap_or(0.0);
+            let tune_v = tune
+                .get(i)
+                .copied()
+                .unwrap_or(self.default_tune)
+                // Keep oscillator well below Nyquist (0.5*sr): 0.45 leaves headroom to
+                // reduce aliasing under modulation/saturation.
+                .clamp(20.0, sample_rate * 0.45);
+            let decay_v = decay.get(i).copied().unwrap_or(self.default_decay).max(1.0);
+            let punch_v = punch.get(i).copied().unwrap_or(self.default_punch).max(1.0);
+            let sweep_decay_v = sweep_decay
+                .get(i)
+                .copied()
+                .unwrap_or(self.default_sweep_decay)
+                .max(1.0);
+            let click_v = click
+                .get(i)
+                .copied()
+                .unwrap_or(self.default_click)
+                .clamp(0.0, 1.0);
+            let tone_v = tone
+                .get(i)
+                .copied()
+                .unwrap_or(self.default_tone)
+                .clamp(0.0, 1.0);
+            let drive_v = drive.get(i).copied().unwrap_or(self.default_drive).max(0.0);
+
+            if gate_v > 0.5 && self.prev_gate <= 0.5 {
+                self.amp_env = 1.0;
+                self.pitch_env = 1.0;
+                self.click_env = 1.0;
+                self.click_phase = 0.0;
+            }
+            self.prev_gate = gate_v;
+
+            let freq = tune_v * (1.0 + (punch_v - 1.0) * self.pitch_env);
+            self.phase += freq * dt;
+            if self.phase >= 1.0 {
+                self.phase -= 1.0;
+            }
+            let sine = (self.phase * std::f32::consts::TAU).sin();
+            // 0.85/0.15 blend adds a small sine^3 term (odd-harmonic warmth) while
+            // keeping the fundamental dominant; no DC shift is introduced.
+            let body = (0.85 * sine + 0.15 * sine.powi(3)) * self.amp_env * tone_v;
+
+            // Click oscillator is intentionally very high: ~45x tune gives a short
+            // beater-like attack burst in the low-kHz range for typical kick tuning.
+            let click_freq = (tune_v * 45.0).min(sample_rate * 0.45);
+            self.click_phase += click_freq * dt;
+            if self.click_phase >= 1.0 {
+                self.click_phase -= 1.0;
+            }
+            let click_out = (self.click_phase * std::f32::consts::TAU).sin()
+                * self.click_env
+                * click_v;
+
+            let amp_coeff = (-LN_1000 / decay_v).exp();
+            let sweep_coeff = (-LN_1000 / sweep_decay_v).exp();
+            self.amp_env *= amp_coeff;
+            self.pitch_env *= sweep_coeff;
+            self.click_env *= click_decay_coeff;
+
+            *o = ((body + click_out * 0.6) * drive_v).tanh();
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,6 +432,85 @@ mod tests {
     use crate::connect_many;
     use crate::register_many;
     use crate::util::UnitRate;
+
+    /// Bass drum should have correct metadata.
+    #[test]
+    fn test_bass_drum_metadata() {
+        let b = UGBassDrum::new();
+        assert_eq!(b.type_name(), "UGBassDrum");
+        assert_eq!(
+            b.input_names(),
+            &[
+                "gate",
+                "tune",
+                "decay",
+                "punch",
+                "sweep_decay",
+                "click",
+                "tone",
+                "drive"
+            ]
+        );
+        assert_eq!(b.output_names(), &["out"]);
+    }
+
+    /// Default input values should be sensible.
+    #[test]
+    fn test_bass_drum_default_inputs() {
+        let b = UGBassDrum::new();
+        assert_eq!(b.default_input("gate"), Some(0.0));
+        assert_eq!(b.default_input("tune"), Some(55.0));
+        assert_eq!(b.default_input("decay"), Some(9000.0));
+        assert_eq!(b.default_input("punch"), Some(2.8));
+        assert_eq!(b.default_input("sweep_decay"), Some(1200.0));
+        assert_eq!(b.default_input("click"), Some(0.2));
+        assert_eq!(b.default_input("tone"), Some(1.0));
+        assert_eq!(b.default_input("drive"), Some(1.3));
+        assert_eq!(b.default_input("unknown"), None);
+    }
+
+    /// Without a trigger, bass drum should remain silent.
+    #[test]
+    fn test_bass_drum_silent_without_trigger() {
+        let mut g = GenGraph::new(44100.0, 64);
+        register_many![g,
+            "kick" => UGBassDrum::new(),
+        ];
+        g.process();
+        let out = g.get_output_by_label("kick.out");
+        for &s in out {
+            assert_eq!(s, 0.0, "bass drum should be silent without a trigger");
+        }
+    }
+
+    /// Triggered bass drum should produce output and decay over time.
+    #[test]
+    fn test_bass_drum_trigger_and_decay() {
+        let mut g = GenGraph::new(100.0, 48);
+        register_many![g,
+            "clock" => UGClock::new(48.0, UnitRate::Samples),
+            "kick" => UGBassDrum::new(),
+            "dec" => 16,
+            "sdec" => 8,
+        ];
+        connect_many![g,
+            "clock.out" -> "kick.gate",
+            "dec.out" -> "kick.decay",
+            "sdec.out" -> "kick.sweep_decay",
+        ];
+
+        g.process();
+
+        let out = g.get_output_by_label("kick.out");
+        let early: f32 = out[0..8].iter().map(|x| x.abs()).sum::<f32>() / 8.0;
+        let late: f32 = out[32..40].iter().map(|x| x.abs()).sum::<f32>() / 8.0;
+
+        assert!(early > 0.0, "bass drum should produce output on trigger");
+        assert!(
+            late < early,
+            "bass drum output should decay: early={early}, late={late}"
+        );
+    }
 
     /// Snare should have correct metadata.
     #[test]

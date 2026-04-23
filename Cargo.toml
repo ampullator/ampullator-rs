@@ -10,6 +10,7 @@ rand = "0.9.1"
 tempfile = "3.11.0"
 hound = "3.5.1"
 wide = "1.2.0"
+clap = { version = "4", features = ["derive"] }
 
 [profile.release]
 debug = false

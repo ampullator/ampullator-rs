@@ -35,6 +35,12 @@ pub trait UGen {
     fn describe_config(&self) -> Option<String> {
         None
     }
+    fn first_input(&self) -> Option<&'static str> {
+        self.input_names().first().copied()
+    }
+    fn first_output(&self) -> Option<&'static str> {
+        self.output_names().first().copied()
+    }
 }
 
 //------------------------------------------------------------------------------

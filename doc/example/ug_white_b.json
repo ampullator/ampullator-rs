@@ -1,0 +1,10 @@
+{
+    "title": "White Noise Filtering",
+    "label": "ug_white-filtering",
+    "chain": "White(seed=42) => noise -> LowPass() => lpf -> HighPass() => hpf | 40 ->:cutoff lpf | 10 ->:cutoff hpf",
+    "sample_rate": 100.0,
+    "buffer_size": 8,
+    "total_samples": 100
+}
+
+

@@ -299,7 +299,7 @@ impl GenGraph {
         dot.push_str("  rankdir=TB;\n");
         dot.push_str("  bgcolor=\"#12131E\";\n");
         dot.push_str("  node [shape=record, fontsize=9, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n");
-        dot.push_str("  edge [color=\"#c4c5bf\"];\n");
+        dot.push_str("  edge [color=\"#c4c5bf\", arrowsize=0.5];\n");
 
         // Define nodes with input and output labels
         for &node_id in self.execution_order.as_ref().unwrap() {
@@ -361,7 +361,7 @@ impl GenGraph {
         write!(temp_file, "{}", dot_content)?;
 
         let status = Command::new("dot")
-            .arg("-Tpng") // or "-Tsvg" or another format
+            .arg("-Tsvg")
             .arg(temp_file.path()) // input .dot file
             .arg("-o")
             .arg(fp) // output file path provided as argument
@@ -594,7 +594,7 @@ mod tests {
 
         assert_eq!(
             graph.to_dot().to_string(),
-            "digraph GenGraph {\n  rankdir=TB;\n  bgcolor=\"#12131E\";\n  node [shape=record, fontsize=9, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n  edge [color=\"#c4c5bf\"];\n  note [label=\"{{}|UGConst: note|{<out0> out}}\"];\n  conv [label=\"{{<in0> in}|UGAsHz: conv|{<out0> out}}\"];\n  osc [label=\"{{<in0> freq|<in1> phase|<in2> min|<in3> max}|UGSine: osc|{<out0> wave|<out1> trigger}}\"];\n  note:out0:s -> conv:in0:n;\n  conv:out0:s -> osc:in0:n;\n}\n"
+            "digraph GenGraph {\n  rankdir=TB;\n  bgcolor=\"#12131E\";\n  node [shape=record, fontsize=9, fontname=\"Arial\", color=\"#c4c5bf\", fontcolor=\"#c4c5bf\"];\n  edge [color=\"#c4c5bf\", arrowsize=0.5];\n  note [label=\"{{}|UGConst: note|{<out0> out}}\"];\n  conv [label=\"{{<in0> in}|UGAsHz: conv|{<out0> out}}\"];\n  osc [label=\"{{<in0> freq|<in1> phase|<in2> min|<in3> max}|UGSine: osc|{<out0> wave|<out1> trigger}}\"];\n  note:out0:s -> conv:in0:n;\n  conv:out0:s -> osc:in0:n;\n}\n"
         );
     }
 }
