@@ -596,21 +596,15 @@ mod tests {
 
     #[test]
     fn test_ug_facade_reverb() {
-        let json = r#"{
-            "register": {
-                "l": ["Const", {"value": 0.25}],
-                "r": ["Const", {"value": -0.5}],
-                "m": ["Const", {"value": 0.0}],
-                "rev": ["Reverb", {}]
-            },
-            "connect": [
-                ["l.out", "rev.in_l"],
-                ["r.out", "rev.in_r"],
-                ["m.out", "rev.mix"]
-            ]
-        }"#;
+        let chain = "Const(value=0.25) => l | \
+                     Const(value=-0.5) => r | \
+                     Const(value=0.0) => m | \
+                     Reverb() => rev | \
+                     l ->:in_l rev | \
+                     r ->:in_r rev | \
+                     m ->:mix rev";
         let mut g = GenGraph::new(8.0, 8);
-        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        let gf = GraphFacade::from_chain(chain).unwrap();
         gf.register_and_connect(&mut g).unwrap();
         g.process();
         assert_eq!(
