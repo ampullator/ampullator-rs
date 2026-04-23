@@ -13,6 +13,7 @@ use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
     UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
 };
+use crate::ugen_reverb::UGReverb;
 use crate::ugen_rhythm::UGPulseSelect;
 use crate::ugen_select::{ModeSelect, UGSelect};
 use crate::util::Sample;
@@ -85,6 +86,7 @@ pub enum UGFacade {
         #[serde(default = "UGFacade::default_mode_round")]
         mode: ModeRound,
     },
+    Reverb {},
     Select {
         values: Vec<f32>,
         mode: ModeSelect,
@@ -115,6 +117,7 @@ impl UGFacade {
                 Box::new(UGSelect::new(values.clone(), *mode, *seed))
             }
             UGFacade::Round { places, mode } => Box::new(UGRound::new(*places, *mode)),
+            UGFacade::Reverb {} => Box::new(UGReverb::new()),
             UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
             UGFacade::White { seed } => Box::new(UGWhite::new(*seed)),
             UGFacade::AsHz { mode } => Box::new(UGAsHz::new(*mode)),
@@ -435,7 +438,7 @@ mod tests {
         "#;
 
         let gf = GraphFacade::from_json(json).unwrap();
-        let mut g = GenGraph::new(8.0, 8);
+        let mut g = GenGraph::new(44_100.0, 8);
         let _ = gf.register_and_connect(&mut g);
         assert_eq!(g.len(), 4);
     }
@@ -594,6 +597,29 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("m1.out"),
             vec![12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0, 12.0]
+        );
+    }
+
+    #[test]
+    fn test_ug_facade_reverb() {
+        let chain = "Const(value=0.25) => l | \
+                     Const(value=-0.5) => r | \
+                     Const(value=0.0) => m | \
+                     Reverb() => rev | \
+                     l ->:in_l rev | \
+                     r ->:in_r rev | \
+                     m ->:mix rev";
+        let mut g = GenGraph::new(8.0, 8);
+        let gf = GraphFacade::from_chain(chain).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("rev.out_l"),
+            vec![0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25]
+        );
+        assert_eq!(
+            g.get_output_by_label("rev.out_r"),
+            vec![-0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5]
         );
     }
 

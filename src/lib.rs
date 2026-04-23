@@ -6,6 +6,7 @@ mod ugen_core;
 mod ugen_drum;
 mod ugen_env;
 mod ugen_filter;
+mod ugen_reverb;
 mod ugen_rhythm;
 mod ugen_select;
 mod util;
@@ -25,6 +26,7 @@ pub use ugen_filter::{
 
 pub use ugen_env::{UGEnvAR, UGEnvBreakPoint};
 
+pub use ugen_reverb::UGReverb;
 pub use ugen_rhythm::UGPulseSelect;
 
 pub use ugen_drum::{UGBassDrum, UGSnareDrum};
