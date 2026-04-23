@@ -5,8 +5,8 @@ use crate::ModeRound;
 use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
-    UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGMult, UGRound, UGSine, UGSum, UGTrigger,
-    UGWhite,
+    UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGMult, UGPan, UGRound, UGSine, UGSum,
+    UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
@@ -67,6 +67,9 @@ pub enum UGFacade {
         gain: f32,
         bw: f32,
         freq: f32,
+    },
+    Pan {
+        output_count: Option<usize>,
     },
     Mult {
         #[serde(default = "UGFacade::default_input_count")]
@@ -134,6 +137,9 @@ impl UGFacade {
             UGFacade::Parametric {} => Box::new(UGParametric::new()),
             UGFacade::ParametricConst { gain, bw, freq } => {
                 Box::new(UGParametricConst::new(*gain, *bw, *freq))
+            }
+            UGFacade::Pan { output_count } => {
+                Box::new(UGPan::new(output_count.unwrap_or(2)))
             }
             UGFacade::EnvBreakPoint {
                 duration_values,
@@ -614,6 +620,37 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("rev.out_r"),
             vec![-0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5]
+        );
+    }
+
+    #[test]
+    fn test_ug_facade_pan() {
+        let json = r#"{
+            "register": {
+                "in": ["Const", {"value": 1.0}],
+                "pan_pos": ["Const", {"value": 0.5}],
+                "pan": ["Pan", {}],
+                "l": ["Round", {"places": 3, "mode": "Round"}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["in.out", "pan.in"],
+                ["pan_pos.out", "pan.pan"],
+                ["pan.out1", "l.in"],
+                ["pan.out2", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(8.0, 8);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("l.out"),
+            vec![0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707]
+        );
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707]
         );
     }
 
