@@ -7,6 +7,8 @@ use ampullator::{
 };
 use clap::Parser;
 
+const DEFAULT_BUFFER_SIZE: usize = 128;
+
 #[derive(Parser, Debug)]
 #[command(
     name = "ampullator-record",
@@ -31,10 +33,6 @@ struct Cli {
     /// Sampling rate in Hz
     #[arg(long, default_value_t = 44_100.0)]
     sample_rate: f32,
-
-    /// Internal graph buffer size (must be a non-zero multiple of 8)
-    #[arg(long, default_value_t = 128)]
-    buffer_size: usize,
 
     /// Duration to record, in seconds
     #[arg(long)]
@@ -141,13 +139,8 @@ fn run(cli: Cli) -> Result<(), String> {
     if cli.sample_rate <= 0.0 {
         return Err("sample-rate must be > 0".to_string());
     }
-    if cli.buffer_size == 0 || !cli.buffer_size.is_multiple_of(8) {
-        return Err(
-            "buffer-size must be a non-zero multiple of 8 (SIMD lane width)".to_string(),
-        );
-    }
-
-    let mut graph = build_graph_from_input(&cli.input, cli.sample_rate, cli.buffer_size)?;
+    let mut graph =
+        build_graph_from_input(&cli.input, cli.sample_rate, DEFAULT_BUFFER_SIZE)?;
     let labels = resolve_output_labels(&mut graph, cli.node.as_deref(), &cli.outputs)?;
 
     let recorder = Recorder::from_duration(graph, Some(labels), cli.duration);
