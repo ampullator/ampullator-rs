@@ -20,6 +20,19 @@ pub enum WavFormat {
     Int24,
 }
 
+impl TryFrom<u16> for WavFormat {
+    type Error = String;
+
+    fn try_from(bits: u16) -> Result<Self, Self::Error> {
+        match bits {
+            16 => Ok(WavFormat::Int16),
+            24 => Ok(WavFormat::Int24),
+            32 => Ok(WavFormat::Float32),
+            _ => Err(format!("Unsupported bit depth: {bits}")),
+        }
+    }
+}
+
 pub struct Recorder {
     sample_rate: f32,
     recorded: HashMap<String, Vec<Sample>>,

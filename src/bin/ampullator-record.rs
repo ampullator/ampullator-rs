@@ -27,8 +27,8 @@ struct Cli {
     #[arg(long, value_delimiter = ',')]
     outputs: Vec<String>,
 
-    /// WAV bit depth (16 or 24)
-    #[arg(long, default_value_t = 16, value_parser = parse_bit_depth)]
+    /// WAV bit depth (16, 24, or 32)
+    #[arg(long, default_value_t = 16)]
     bit_depth: u16,
 
     /// Sampling rate in Hz
@@ -114,24 +114,6 @@ fn resolve_output_labels(
     Ok(selected)
 }
 
-fn wav_format_from_bit_depth(bit_depth: u16) -> WavFormat {
-    match bit_depth {
-        16 => WavFormat::Int16,
-        24 => WavFormat::Int24,
-        _ => unreachable!("bit-depth already validated by clap"),
-    }
-}
-
-fn parse_bit_depth(value: &str) -> Result<u16, String> {
-    let bit_depth: u16 = value
-        .parse()
-        .map_err(|_| "bit-depth must be 16 or 24".to_string())?;
-    if bit_depth == 16 || bit_depth == 24 {
-        Ok(bit_depth)
-    } else {
-        Err("bit-depth must be 16 or 24".to_string())
-    }
-}
 
 fn run(cli: Cli) -> Result<(), String> {
     if cli.duration <= 0.0 {
@@ -145,7 +127,7 @@ fn run(cli: Cli) -> Result<(), String> {
     let labels = resolve_output_labels(&mut graph, cli.node.as_deref(), &cli.outputs)?;
 
     let recorder = Recorder::from_duration(graph, Some(labels), cli.duration);
-    let format = wav_format_from_bit_depth(cli.bit_depth);
+    let format = WavFormat::try_from(cli.bit_depth).expect("invalid bit depth");
     match cli.output {
         None => {
             let stdout = std::io::stdout();
