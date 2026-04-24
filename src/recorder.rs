@@ -20,6 +20,52 @@ pub enum WavFormat {
     Int24,
 }
 
+impl WavFormat {
+    fn bits_per_sample(&self) -> u16 {
+        match self {
+            WavFormat::Float32 => 32,
+            WavFormat::Int16 => 16,
+            WavFormat::Int24 => 24,
+        }
+    }
+
+    /// WAV audio format tag (1 = PCM, 3 = IEEE_FLOAT).
+    fn audio_format_tag(&self) -> u16 {
+        match self {
+            WavFormat::Float32 => 3,
+            WavFormat::Int16 | WavFormat::Int24 => 1,
+        }
+    }
+
+    /// Encode a single f32 sample and write it to `w`.
+    fn write_sample<W: Write>(&self, w: &mut W, s: f32) -> std::io::Result<()> {
+        match self {
+            WavFormat::Float32 => w.write_all(&s.to_le_bytes()),
+            WavFormat::Int16 => {
+                let v = (s * 32768.0).round().clamp(-32768.0, 32767.0) as i16;
+                w.write_all(&v.to_le_bytes())
+            }
+            WavFormat::Int24 => {
+                let v = (s * 8388608.0).round().clamp(-8388608.0, 8388607.0) as i32;
+                w.write_all(&v.to_le_bytes()[..3])
+            }
+        }
+    }
+}
+
+impl TryFrom<u16> for WavFormat {
+    type Error = String;
+
+    fn try_from(bits: u16) -> Result<Self, Self::Error> {
+        match bits {
+            16 => Ok(WavFormat::Int16),
+            24 => Ok(WavFormat::Int24),
+            32 => Ok(WavFormat::Float32),
+            _ => Err(format!("Unsupported bit depth: {bits}")),
+        }
+    }
+}
+
 pub struct Recorder {
     sample_rate: f32,
     recorded: HashMap<String, Vec<Sample>>,
@@ -112,42 +158,67 @@ impl Recorder {
     /// The `format` argument controls the bit depth and sample encoding:
     /// - `WavFormat::Float32` — 32-bit IEEE float (lossless for `f32` samples)
     /// - `WavFormat::Int16`   — 16-bit signed integer (samples scaled to `[-32768, 32767]`)
-    /// - `WavFormat::Int24`   — 24-bit signed integer (samples scaled to `[-8388608, 8388607]`)
-    pub fn to_wav(&self, fp: &Path, format: WavFormat) -> Result<(), hound::Error> {
-        let channels = self.output_names.len() as u16;
-        let (bits_per_sample, sample_format) = match format {
-            WavFormat::Float32 => (32, hound::SampleFormat::Float),
-            WavFormat::Int16 => (16, hound::SampleFormat::Int),
-            WavFormat::Int24 => (24, hound::SampleFormat::Int),
-        };
-        let spec = hound::WavSpec {
-            channels,
-            sample_rate: self.sample_rate as u32,
-            bits_per_sample,
-            sample_format,
-        };
-        let mut writer = hound::WavWriter::create(fp, spec)?;
+    ///   Write interleaved samples to `w`, encoding each with `format`.
+    fn write_samples<W: Write>(
+        &self,
+        w: &mut W,
+        format: WavFormat,
+    ) -> std::io::Result<()> {
         let (_, length) = self.get_shape();
         for i in 0..length {
             for name in &self.output_names {
                 let samples = &self.recorded[name];
                 let s: f32 = if i < samples.len() { samples[i] } else { 0.0 };
-                match format {
-                    WavFormat::Float32 => writer.write_sample(s)?,
-                    WavFormat::Int16 => {
-                        let v = (s * 32768.0).round().clamp(-32768.0, 32767.0) as i16;
-                        writer.write_sample(v)?;
-                    }
-                    WavFormat::Int24 => {
-                        let v =
-                            (s * 8388608.0).round().clamp(-8388608.0, 8388607.0) as i32;
-                        writer.write_sample(v)?;
-                    }
-                }
+                format.write_sample(w, s)?;
             }
         }
-        writer.finalize()?;
         Ok(())
+    }
+
+    /// Write all recorded outputs to a WAV stream without seeking.
+    /// Identical channel layout and sample encoding to `to_wav`, but writes to
+    /// any `Write` (including stdout). Safe because `Recorder` pre-computes all
+    /// samples, so the RIFF/data chunk sizes are known before the first byte is written.
+    pub fn to_wav_write<W: Write>(
+        &self,
+        mut w: W,
+        format: WavFormat,
+    ) -> std::io::Result<()> {
+        let channels = self.output_names.len() as u16;
+        let bits_per_sample = format.bits_per_sample();
+        let audio_format = format.audio_format_tag();
+        let sample_rate = self.sample_rate as u32;
+        let bytes_per_sample = (bits_per_sample / 8) as u32;
+        let block_align = channels as u32 * bytes_per_sample;
+        let byte_rate = sample_rate * block_align;
+        let (_, length) = self.get_shape();
+        let data_size = length as u32 * channels as u32 * bytes_per_sample;
+        let riff_size = 36u32 + data_size;
+
+        // RIFF header
+        w.write_all(b"RIFF")?;
+        w.write_all(&riff_size.to_le_bytes())?;
+        w.write_all(b"WAVE")?;
+        // fmt chunk
+        w.write_all(b"fmt ")?;
+        w.write_all(&16u32.to_le_bytes())?;
+        w.write_all(&audio_format.to_le_bytes())?;
+        w.write_all(&channels.to_le_bytes())?;
+        w.write_all(&sample_rate.to_le_bytes())?;
+        w.write_all(&byte_rate.to_le_bytes())?;
+        w.write_all(&(block_align as u16).to_le_bytes())?;
+        w.write_all(&bits_per_sample.to_le_bytes())?;
+        // data chunk
+        w.write_all(b"data")?;
+        w.write_all(&data_size.to_le_bytes())?;
+
+        self.write_samples(&mut w, format)
+    }
+
+    /// - `WavFormat::Int24`   — 24-bit signed integer (samples scaled to `[-8388608, 8388607]`)
+    pub fn to_wav(&self, fp: &Path, format: WavFormat) -> std::io::Result<()> {
+        let file = std::fs::File::create(fp)?;
+        self.to_wav_write(std::io::BufWriter::new(file), format)
     }
 
     //--------------------------------------------------------------------------
@@ -523,6 +594,67 @@ mod tests {
                 *got, want,
                 "Int24 sample mismatch at frame {i}: {got} != {want}"
             );
+        }
+    }
+
+    #[test]
+    fn test_to_wav_write_round_trips() {
+        // Verify that to_wav_write produces valid WAV data that decodes to the
+        // correct samples. hound's WavReader is used to decode the in-memory
+        // stream, confirming the header and sample data are both correct.
+        // (to_wav uses hound's WAVE_FORMAT_EXTENSIBLE header for Float32, which
+        // differs from the plain IEEE_FLOAT header we write — both are valid.)
+        for format in [WavFormat::Float32, WavFormat::Int16, WavFormat::Int24] {
+            let mut g = GenGraph::new(10.0, 8);
+            register_many![g,
+                "fq" => 0.5,
+                "osc" => UGSine::new(),
+                "round" => UGRound::new(4, ModeRound::Round),
+            ];
+            connect_many![g,
+                "fq.out" -> "osc.freq",
+                "osc.wave" -> "round.in"
+            ];
+            let labels = Some(vec!["round.out".to_string()]);
+            let r = Recorder::from_samples(g, labels, 10);
+
+            let mut buf = Vec::new();
+            r.to_wav_write(&mut buf, format).unwrap();
+
+            let cursor = std::io::Cursor::new(buf);
+            let mut reader = hound::WavReader::new(cursor)
+                .unwrap_or_else(|e| panic!("hound rejected {format:?} stream: {e}"));
+            let spec = reader.spec();
+            assert_eq!(spec.channels, 1);
+            assert_eq!(spec.sample_rate, 10);
+
+            let expected = r.get_output_by_label("round.out");
+            let (decoded, tol): (Vec<f32>, f32) = match format {
+                WavFormat::Float32 => {
+                    (reader.samples::<f32>().map(|s| s.unwrap()).collect(), 1e-6)
+                }
+                WavFormat::Int16 => (
+                    reader
+                        .samples::<i16>()
+                        .map(|s| s.unwrap() as f32 / 32768.0)
+                        .collect(),
+                    1.0 / 32768.0,
+                ),
+                WavFormat::Int24 => (
+                    reader
+                        .samples::<i32>()
+                        .map(|s| s.unwrap() as f32 / 8388608.0)
+                        .collect(),
+                    1.0 / 8388608.0,
+                ),
+            };
+            assert_eq!(decoded.len(), expected.len());
+            for (i, (got, src)) in decoded.iter().zip(expected.iter()).enumerate() {
+                assert!(
+                    (got - src).abs() <= tol,
+                    "{format:?} sample {i}: decoded {got} != expected {src}"
+                );
+            }
         }
     }
 

@@ -274,6 +274,31 @@ impl GenGraph {
     }
 
     // Return all node.output labels
+    pub fn get_output_names_for(&self, node_name: &str) -> Option<Vec<String>> {
+        let node = self.nodes.iter().find(|n| n.name == node_name)?;
+        Some(
+            node.node
+                .output_names()
+                .iter()
+                .map(|out| format!("{node_name}.{out}"))
+                .collect(),
+        )
+    }
+
+    pub fn get_last_node_output_names(&mut self) -> Option<Vec<String>> {
+        self.update_execution_node_ids();
+        let &node_id = self.execution_order.as_ref().unwrap().last()?;
+        let node = &self.nodes[node_id.0];
+        let name = &node.name;
+        Some(
+            node.node
+                .output_names()
+                .iter()
+                .map(|out| format!("{name}.{out}"))
+                .collect(),
+        )
+    }
+
     pub fn get_node_output_names(&mut self) -> Vec<String> {
         self.update_execution_node_ids();
 

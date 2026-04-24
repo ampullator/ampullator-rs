@@ -321,12 +321,12 @@ impl GraphFacade {
         keys.sort();
         for name in keys {
             let facade = &self.register[name];
-            println!("register: {:?}", name);
+            eprintln!("register: {:?}", name);
             graph.add_node(name, facade.to_ugen());
         }
         // Connect nodes
         for (src, dst) in &self.connect {
-            println!("connect: {:?} -> {:?}", src, dst);
+            eprintln!("connect: {:?} -> {:?}", src, dst);
             graph.connect(src, dst);
         }
         Ok(())
@@ -403,6 +403,32 @@ pub fn build_markdown_index(input_dir: &Path, output_dir: &Path) -> Result<(), S
     std::fs::write(output_dir.join("index.md"), entries.join("\n"))
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Build a [`GenGraph`] from a Chain DSL expression, using explicit runtime
+/// graph settings.
+pub fn graph_from_chain_expression(
+    chain: &str,
+    sample_rate: f32,
+    buffer_size: usize,
+) -> Result<GenGraph, String> {
+    let facade = GraphFacade::from_chain(chain)?;
+    let mut graph = GenGraph::new(sample_rate, buffer_size);
+    facade.register_and_connect(&mut graph)?;
+    Ok(graph)
+}
+
+/// Build a [`GenGraph`] from GraphFacade JSON content, using explicit runtime
+/// graph settings.
+pub fn graph_from_json_definition(
+    json: &str,
+    sample_rate: f32,
+    buffer_size: usize,
+) -> Result<GenGraph, String> {
+    let facade = GraphFacade::from_json(json)?;
+    let mut graph = GenGraph::new(sample_rate, buffer_size);
+    facade.register_and_connect(&mut graph)?;
+    Ok(graph)
 }
 
 //------------------------------------------------------------------------------
