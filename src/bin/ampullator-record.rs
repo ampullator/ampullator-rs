@@ -53,7 +53,7 @@ fn build_graph_from_input(
         let content = std::fs::read_to_string(input)
             .map_err(|e| format!("Failed to read input file '{input}': {e}"))?;
         graph_from_json_definition(&content, sample_rate, buffer_size)
-    } else if input.ends_with(".txt") {
+    } else if input.ends_with(".txt") || input.ends_with(".chain") {
         let content = std::fs::read_to_string(input)
             .map_err(|e| format!("Failed to read input file '{input}': {e}"))?;
         graph_from_chain_expression(content.trim(), sample_rate, buffer_size)
@@ -67,34 +67,38 @@ fn resolve_output_labels(
     node: Option<&str>,
     outputs: &[String],
 ) -> Result<Vec<String>, String> {
-    let execution_names = graph.get_execution_names();
-    let Some(default_node) = execution_names.last() else {
-        return Err("Graph has no nodes to record".to_string());
-    };
-    let node_name = node.unwrap_or(default_node);
-    if !execution_names.iter().any(|n| n == node_name) {
-        return Err(format!("Unknown node '{node_name}'"));
+    // Fast path: no node or outputs specified — use last node's outputs.
+    if node.is_none() && outputs.is_empty() {
+        return graph
+            .get_last_node_output_names()
+            .ok_or_else(|| "Graph has no nodes to record".to_string());
     }
 
-    let all_labels = graph.get_node_output_names();
-    let node_prefix = format!("{node_name}.");
-    let node_labels: HashSet<String> = all_labels
-        .iter()
-        .filter(|label| label.starts_with(&node_prefix))
-        .cloned()
-        .collect();
+    // Determine the node to record, either provided or the last
+    let node_name = match node {
+        Some(name) => name.to_string(),
+        None => {
+            let names = graph.get_execution_names();
+            names
+                .last()
+                .cloned()
+                .ok_or_else(|| "Graph has no nodes to record".to_string())?
+        }
+    };
+
+    let node_labels = graph
+        .get_output_names_for(&node_name)
+        .ok_or_else(|| format!("Unknown node '{node_name}'"))?;
     if node_labels.is_empty() {
         return Err(format!("Node '{node_name}' has no outputs"));
     }
 
+    // if none provided, record all
     if outputs.is_empty() {
-        let labels: Vec<String> = all_labels
-            .into_iter()
-            .filter(|label| label.starts_with(&node_prefix))
-            .collect();
-        return Ok(labels);
+        return Ok(node_labels);
     }
 
+    let label_set: HashSet<&str> = node_labels.iter().map(|s| s.as_str()).collect();
     let mut selected = Vec::with_capacity(outputs.len());
     for output in outputs {
         let label = if output.contains('.') {
@@ -102,7 +106,7 @@ fn resolve_output_labels(
         } else {
             format!("{node_name}.{output}")
         };
-        if !node_labels.contains(&label) {
+        if !label_set.contains(label.as_str()) {
             return Err(format!(
                 "Output '{output}' is not available on node '{node_name}'"
             ));
@@ -113,7 +117,6 @@ fn resolve_output_labels(
     }
     Ok(selected)
 }
-
 
 fn run(cli: Cli) -> Result<(), String> {
     if cli.duration <= 0.0 {
