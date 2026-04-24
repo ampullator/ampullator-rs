@@ -8,7 +8,7 @@ use crate::ugen_core::{
     UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGMult, UGPan, UGRound, UGSine, UGSum,
     UGTrigger, UGWhite,
 };
-use crate::ugen_drum::{UGBassDrum, UGSnareDrum};
+use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
     UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
@@ -94,6 +94,9 @@ pub enum UGFacade {
     },
     Sine {},
     BassDrum {},
+    HighHat {
+        seed: Option<u64>,
+    },
     SnareDrum {
         seed: Option<u64>,
     },
@@ -126,6 +129,7 @@ impl UGFacade {
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
+            UGFacade::HighHat { seed } => Box::new(UGHighHat::new_seeded(*seed)),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
             UGFacade::HighPass { roll_off_db } => Box::new(UGHighPass::new(*roll_off_db)),
