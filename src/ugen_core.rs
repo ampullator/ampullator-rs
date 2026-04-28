@@ -849,7 +849,13 @@ impl UGen for UGFade {
         for i in 0..n {
             let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
             for ch in 0..self.channel_count {
-                let x = inputs.get(ch).copied().unwrap_or(&[]).get(i).copied().unwrap_or(0.0);
+                let x = inputs
+                    .get(ch)
+                    .copied()
+                    .unwrap_or(&[])
+                    .get(i)
+                    .copied()
+                    .unwrap_or(0.0);
                 outputs[ch][i] = x * gain;
             }
         }
