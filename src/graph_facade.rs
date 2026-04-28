@@ -402,8 +402,9 @@ pub fn build_markdown_index(
     readme_path: &Path,
     abs_paths: bool,
 ) -> Result<(), String> {
-    let usage = std::fs::read_to_string(usage_path)
-        .map_err(|e| format!("Failed to read usage file '{}': {e}", usage_path.display()))?;
+    let usage = std::fs::read_to_string(usage_path).map_err(|e| {
+        format!("Failed to read usage file '{}': {e}", usage_path.display())
+    })?;
 
     std::fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
