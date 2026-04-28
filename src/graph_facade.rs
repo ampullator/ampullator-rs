@@ -5,8 +5,8 @@ use crate::ModeRound;
 use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
-    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGLfo, UGMult, UGPan, UGRound,
-    UGSine, UGSum, UGTrigger, UGWhite,
+    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGLfo, UGMixLinear, UGMult,
+    UGPan, UGRound, UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
@@ -86,6 +86,12 @@ pub enum UGFacade {
         #[serde(default = "UGFacade::default_input_count")]
         input_count: usize,
     },
+    MixLinear {
+        #[serde(default = "UGFacade::default_mix_input_count")]
+        input_count: usize,
+        #[serde(default = "UGFacade::default_output_count")]
+        output_count: usize,
+    },
     PulseSelect {
         duration_values: Vec<Sample>,
         duration_mode: ModeSelect,
@@ -138,6 +144,10 @@ impl UGFacade {
             UGFacade::Floor {} => Box::new(UGFloor::new()),
             UGFacade::Ceil {} => Box::new(UGCeil::new()),
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
+            UGFacade::MixLinear {
+                input_count,
+                output_count,
+            } => Box::new(UGMixLinear::new(*input_count, *output_count)),
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Lfo {
                 wave,
@@ -227,6 +237,14 @@ impl UGFacade {
     }
 
     fn default_input_count() -> usize {
+        2
+    }
+
+    fn default_mix_input_count() -> usize {
+        2
+    }
+
+    fn default_output_count() -> usize {
         2
     }
 
