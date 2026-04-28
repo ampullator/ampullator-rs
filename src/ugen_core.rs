@@ -507,7 +507,12 @@ impl UGen for UGMult {
 /// index in the range `[0, outputs.len() - 1]`.  Values are clamped to that
 /// range before use.
 #[inline]
-fn pan_linear_accumulate(x: Sample, pair_pos: Sample, outputs: &mut [&mut [Sample]], i: usize) {
+fn pan_linear_accumulate(
+    x: Sample,
+    pair_pos: Sample,
+    outputs: &mut [&mut [Sample]],
+    i: usize,
+) {
     let output_count = outputs.len();
     let pair_pos = pair_pos.clamp(0.0, output_count as Sample - 1.0);
     let left_index = pair_pos.floor() as usize;
@@ -627,7 +632,8 @@ impl UGMixLinear {
             .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
             .collect();
 
-        let output_labels: Vec<String> = (1..=output_count).map(|i| format!("out{i}")).collect();
+        let output_labels: Vec<String> =
+            (1..=output_count).map(|i| format!("out{i}")).collect();
         let output_refs: Vec<&'static str> = output_labels
             .iter()
             .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
