@@ -907,12 +907,8 @@ mod tests {
     /// Without a trigger the hi-hat should remain silent.
     #[test]
     fn test_high_hat_silent_without_trigger() {
-        let mut g = graph_from_chain_expression(
-            "HighHat(seed=1) => hat",
-            44100.0,
-            64,
-        )
-        .unwrap();
+        let mut g =
+            graph_from_chain_expression("HighHat(seed=1) => hat", 44100.0, 64).unwrap();
         g.process();
         let out = g.get_output_by_label("hat.out");
         for &s in out {
