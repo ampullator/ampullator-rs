@@ -392,7 +392,14 @@ impl GraphFacade {
 }
 
 #[allow(unused)]
-pub fn build_markdown_index(input_dir: &Path, output_dir: &Path) -> Result<(), String> {
+const GITHUB_BASE_URL: &str =
+    "https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/";
+
+pub fn build_markdown_index(
+    input_dir: &Path,
+    output_dir: &Path,
+    abs_paths: bool,
+) -> Result<(), String> {
     let mut entries = Vec::new();
     entries.push("# Ampullator\n\n".to_string());
 
@@ -415,6 +422,19 @@ pub fn build_markdown_index(input_dir: &Path, output_dir: &Path) -> Result<(), S
 
             let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(output_dir)?;
 
+            let img_url = |filename: &str| -> String {
+                if abs_paths {
+                    format!(
+                        "{}/{}/{}",
+                        GITHUB_BASE_URL,
+                        output_dir.display(),
+                        filename
+                    )
+                } else {
+                    filename.to_string()
+                }
+            };
+
             entries.push(format!("## {title}"));
             if let Some(ref chain) = parsed.chain {
                 entries.push("```text".to_string());
@@ -432,8 +452,8 @@ pub fn build_markdown_index(input_dir: &Path, output_dir: &Path) -> Result<(), S
                 entries.push(json_str.clone());
                 entries.push("```".to_string());
             }
-            entries.push(format!("![{label}]({fn_graph})"));
-            entries.push(format!("![{label}]({fn_time_domain})"));
+            entries.push(format!("![{label}]({})", img_url(&fn_graph)));
+            entries.push(format!("![{label}]({})", img_url(&fn_time_domain)));
             entries.push("".to_string()); // blank line for spacing
         }
     }
