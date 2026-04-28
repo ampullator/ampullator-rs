@@ -129,7 +129,7 @@ impl UGFacade {
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
-            UGFacade::HighHat { seed } => Box::new(UGHighHat::new_seeded(*seed)),
+            UGFacade::HighHat { seed } => Box::new(UGHighHat::new(*seed)),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
             UGFacade::HighPass { roll_off_db } => Box::new(UGHighPass::new(*roll_off_db)),

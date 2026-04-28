@@ -477,20 +477,10 @@ pub struct UGHighHat {
 }
 
 impl UGHighHat {
-    /// Create a new UGHighHat with a random internal seed.
-    pub fn new() -> Self {
-        let actual_seed: u64 = rand::rng().random();
-        Self::with_seed(actual_seed, None)
-    }
-
-    /// Create a new UGHighHat with an optional reproducible seed.
-    /// When `seed` is `Some(n)`, the noise sequence is deterministic.
-    pub fn new_seeded(seed: Option<u64>) -> Self {
+    /// Create a new UGHighHat. If `seed` is `None`, a random seed is used for the noise
+    /// sequence; `Some(n)` makes the sequence deterministic and reproducible.
+    pub fn new(seed: Option<u64>) -> Self {
         let actual_seed = seed.unwrap_or_else(|| rand::rng().random());
-        Self::with_seed(actual_seed, seed)
-    }
-
-    fn with_seed(actual_seed: u64, seed: Option<u64>) -> Self {
         Self {
             osc_phases: [0.0; 6],
             amp_env: 0.0,
@@ -511,7 +501,7 @@ impl UGHighHat {
 
 impl Default for UGHighHat {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
@@ -646,6 +636,7 @@ mod tests {
     use crate::GenGraph;
     use crate::UGClock;
     use crate::connect_many;
+    use crate::graph_from_chain_expression;
     use crate::register_many;
     use crate::util::UnitRate;
 
@@ -890,7 +881,7 @@ mod tests {
     /// Hi-hat should have correct metadata.
     #[test]
     fn test_high_hat_metadata() {
-        let h = UGHighHat::new();
+        let h = UGHighHat::new(None);
         assert_eq!(h.type_name(), "UGHighHat");
         assert_eq!(
             h.input_names(),
@@ -902,7 +893,7 @@ mod tests {
     /// Default input values should be sensible.
     #[test]
     fn test_high_hat_default_inputs() {
-        let h = UGHighHat::new();
+        let h = UGHighHat::new(None);
         assert_eq!(h.default_input("gate"), Some(0.0));
         assert_eq!(h.default_input("tune"), Some(3969.0));
         assert_eq!(h.default_input("decay"), Some(4000.0));
@@ -916,10 +907,12 @@ mod tests {
     /// Without a trigger the hi-hat should remain silent.
     #[test]
     fn test_high_hat_silent_without_trigger() {
-        let mut g = GenGraph::new(44100.0, 64);
-        register_many![g,
-            "hat" => UGHighHat::new_seeded(Some(1)),
-        ];
+        let mut g = graph_from_chain_expression(
+            "HighHat(seed=1) => hat",
+            44100.0,
+            64,
+        )
+        .unwrap();
         g.process();
         let out = g.get_output_by_label("hat.out");
         for &s in out {
@@ -930,16 +923,16 @@ mod tests {
     /// A gate trigger should produce non-zero output that decays over time.
     #[test]
     fn test_high_hat_trigger_and_decay() {
-        let mut g = GenGraph::new(100.0, 48);
-        register_many![g,
-            "clock" => UGClock::new(48.0, UnitRate::Samples),
-            "hat" => UGHighHat::new_seeded(Some(42)),
-            "dec" => 16,
-        ];
-        connect_many![g,
-            "clock.out" -> "hat.gate",
-            "dec.out" -> "hat.decay",
-        ];
+        let mut g = graph_from_chain_expression(
+            "Clock(value=48.0, mode=Samples) => clock \
+             | HighHat(seed=42) => hat \
+             | 16 => dec \
+             | clock ->:gate hat \
+             | dec ->:decay hat",
+            100.0,
+            48,
+        )
+        .unwrap();
 
         g.process();
 
@@ -957,27 +950,17 @@ mod tests {
     /// Seeded constructor should produce identical results when called twice.
     #[test]
     fn test_high_hat_seeded_reproducible() {
-        let mut g1 = GenGraph::new(44100.0, 32);
-        register_many![g1,
-            "clock" => UGClock::new(32.0, UnitRate::Samples),
-            "hat" => UGHighHat::new_seeded(Some(99)),
-        ];
-        connect_many![g1,
-            "clock.out" -> "hat.gate",
-        ];
-        g1.process();
-        let out1 = g1.get_output_by_label("hat.out");
+        let chain = "Clock(value=32.0, mode=Samples) => clock \
+                     | HighHat(seed=99) => hat \
+                     | clock ->:gate hat";
 
-        let mut g2 = GenGraph::new(44100.0, 32);
-        register_many![g2,
-            "clock" => UGClock::new(32.0, UnitRate::Samples),
-            "hat" => UGHighHat::new_seeded(Some(99)),
-        ];
-        connect_many![g2,
-            "clock.out" -> "hat.gate",
-        ];
+        let mut g1 = graph_from_chain_expression(chain, 44100.0, 32).unwrap();
+        g1.process();
+        let out1 = g1.get_output_by_label("hat.out").to_vec();
+
+        let mut g2 = graph_from_chain_expression(chain, 44100.0, 32).unwrap();
         g2.process();
-        let out2 = g2.get_output_by_label("hat.out");
+        let out2 = g2.get_output_by_label("hat.out").to_vec();
 
         assert_eq!(out1, out2, "seeded hi-hat should be reproducible");
     }
@@ -985,27 +968,20 @@ mod tests {
     /// Different seeds should produce different noise-blended outputs.
     #[test]
     fn test_high_hat_different_seeds_differ() {
-        let mut g1 = GenGraph::new(44100.0, 32);
-        register_many![g1,
-            "clock" => UGClock::new(32.0, UnitRate::Samples),
-            "hat" => UGHighHat::new_seeded(Some(1)),
-        ];
-        connect_many![g1,
-            "clock.out" -> "hat.gate",
-        ];
-        g1.process();
-        let out1 = g1.get_output_by_label("hat.out");
+        let chain1 = "Clock(value=32.0, mode=Samples) => clock \
+                      | HighHat(seed=1) => hat \
+                      | clock ->:gate hat";
+        let chain2 = "Clock(value=32.0, mode=Samples) => clock \
+                      | HighHat(seed=2) => hat \
+                      | clock ->:gate hat";
 
-        let mut g2 = GenGraph::new(44100.0, 32);
-        register_many![g2,
-            "clock" => UGClock::new(32.0, UnitRate::Samples),
-            "hat" => UGHighHat::new_seeded(Some(2)),
-        ];
-        connect_many![g2,
-            "clock.out" -> "hat.gate",
-        ];
+        let mut g1 = graph_from_chain_expression(chain1, 44100.0, 32).unwrap();
+        g1.process();
+        let out1 = g1.get_output_by_label("hat.out").to_vec();
+
+        let mut g2 = graph_from_chain_expression(chain2, 44100.0, 32).unwrap();
         g2.process();
-        let out2 = g2.get_output_by_label("hat.out");
+        let out2 = g2.get_output_by_label("hat.out").to_vec();
 
         assert_ne!(
             out1, out2,
@@ -1016,10 +992,10 @@ mod tests {
     /// describe_config should return the seed string when a seed is provided.
     #[test]
     fn test_high_hat_describe_config() {
-        let seeded = UGHighHat::new_seeded(Some(7));
+        let seeded = UGHighHat::new(Some(7));
         assert_eq!(seeded.describe_config(), Some("seed = 7".to_string()));
 
-        let unseeded = UGHighHat::new();
+        let unseeded = UGHighHat::new(None);
         assert_eq!(unseeded.describe_config(), None);
     }
 }
