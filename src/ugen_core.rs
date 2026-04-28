@@ -849,21 +849,15 @@ pub struct UGLfo {
 }
 
 impl UGLfo {
-    pub fn new(wave: LfoWave, freq: Sample) -> Self {
+    pub fn new(wave: LfoWave, freq: Sample, duty: Sample, min: Sample, max: Sample) -> Self {
         Self {
             wave,
             phase: 0.0,
             default_freq: freq,
-            default_duty: 0.5,
-            default_min: 0.0,
-            default_max: 1.0,
+            default_duty: duty,
+            default_min: min,
+            default_max: max,
         }
-    }
-
-    pub fn set_defaults(&mut self, duty: Sample, min: Sample, max: Sample) {
-        self.default_duty = duty;
-        self.default_min = min;
-        self.default_max = max;
     }
 }
 
@@ -1458,16 +1452,12 @@ mod tests {
     fn test_lfo_sine_a() {
         // LFO at freq=1 Hz, sample_rate=8, buffer=8 → one full cycle
         // Phase advances by 1/8 per sample; min=0, max=1
-        let mut g = GenGraph::new(8.0, 8);
-        register_many![g,
-            "c1" => 1.0,
-            "lfo1" => UGLfo::new(LfoWave::Sine, 1.0),
-            "r1" => UGRound::new(2, ModeRound::Round),
-        ];
-        connect_many![g,
-        "c1.out" -> "lfo1.freq",
-        "lfo1.wave" -> "r1.in",
-        ];
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => c1 | Lfo(wave=Sine, freq=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:freq lfo1 | lfo1 ->wave:in r1",
+            8.0,
+            8,
+        )
+        .unwrap();
         g.process();
         assert_eq!(
             g.get_output_by_label("r1.out"),
@@ -1479,16 +1469,12 @@ mod tests {
     #[test]
     fn test_lfo_triangle_a() {
         // Triangle at freq=1, duty=0.5 → symmetric triangle, min=0, max=1
-        let mut g = GenGraph::new(8.0, 8);
-        register_many![g,
-            "c1" => 1.0,
-            "lfo1" => UGLfo::new(LfoWave::Triangle, 1.0),
-            "r1" => UGRound::new(2, ModeRound::Round),
-        ];
-        connect_many![g,
-        "c1.out" -> "lfo1.freq",
-        "lfo1.wave" -> "r1.in",
-        ];
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => c1 | Lfo(wave=Triangle, freq=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:freq lfo1 | lfo1 ->wave:in r1",
+            8.0,
+            8,
+        )
+        .unwrap();
         g.process();
         assert_eq!(
             g.get_output_by_label("r1.out"),
@@ -1500,18 +1486,12 @@ mod tests {
     #[test]
     fn test_lfo_triangle_sawtooth() {
         // Triangle with duty=1.0 → rising sawtooth, min=0, max=1
-        let mut g = GenGraph::new(8.0, 8);
-        register_many![g,
-            "c1" => 1.0,
-            "duty" => 1.0,
-            "lfo1" => UGLfo::new(LfoWave::Triangle, 1.0),
-            "r1" => UGRound::new(2, ModeRound::Round),
-        ];
-        connect_many![g,
-        "c1.out" -> "lfo1.freq",
-        "duty.out" -> "lfo1.duty",
-        "lfo1.wave" -> "r1.in",
-        ];
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => c1 | Const(value=1) => duty | Lfo(wave=Triangle, freq=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:freq lfo1 | duty ->:duty lfo1 | lfo1 ->wave:in r1",
+            8.0,
+            8,
+        )
+        .unwrap();
         g.process();
         assert_eq!(
             g.get_output_by_label("r1.out"),
@@ -1525,14 +1505,12 @@ mod tests {
         // Square at freq=1, duty=0.5 → phase < 0.5 is high, else low; min=0, max=1
         // Phase increments first: phases are [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 0.0]
         // → 3 high, 4 low, then wraps and 1 high
-        let mut g = GenGraph::new(8.0, 8);
-        register_many![g,
-            "c1" => 1.0,
-            "lfo1" => UGLfo::new(LfoWave::Square, 1.0),
-        ];
-        connect_many![g,
-        "c1.out" -> "lfo1.freq",
-        ];
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => c1 | Lfo(wave=Square, freq=1) => lfo1 | c1 ->:freq lfo1",
+            8.0,
+            8,
+        )
+        .unwrap();
         g.process();
         assert_eq!(
             g.get_output_by_label("lfo1.wave"),

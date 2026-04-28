@@ -142,11 +142,7 @@ impl UGFacade {
                 duty,
                 min,
                 max,
-            } => {
-                let mut lfo = UGLfo::new(*wave, *freq);
-                lfo.set_defaults(*duty, *min, *max);
-                Box::new(lfo)
-            }
+            } => Box::new(UGLfo::new(*wave, *freq, *duty, *min, *max)),
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
