@@ -5,7 +5,7 @@ use crate::ModeRound;
 use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
-    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGLfo, UGMixLinear, UGMult,
+    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFade, UGFloor, UGLfo, UGMixLinear, UGMult,
     UGPan, UGRound, UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
@@ -45,6 +45,10 @@ pub enum UGFacade {
         seed: Option<u64>,
     },
     EnvAR {},
+    Fade {
+        #[serde(default = "UGFacade::default_channel_count")]
+        channel_count: usize,
+    },
     Floor {},
     Lfo {
         wave: LfoWave,
@@ -187,6 +191,7 @@ impl UGFacade {
                 *seed,
             )),
             UGFacade::EnvAR {} => Box::new(UGEnvAR::new()),
+            UGFacade::Fade { channel_count } => Box::new(UGFade::new(*channel_count)),
             UGFacade::PulseSelect {
                 duration_values,
                 duration_mode,
@@ -238,6 +243,10 @@ impl UGFacade {
 
     fn default_input_count() -> usize {
         2
+    }
+
+    fn default_channel_count() -> usize {
+        1
     }
 
     fn default_mix_input_count() -> usize {
