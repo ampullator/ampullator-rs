@@ -821,40 +821,36 @@ impl UGen for UGFade {
         let level_input_index = self.channel_count;
         let in_level = inputs.get(level_input_index).copied().unwrap_or(&[]);
 
-        // Fast paths for the most common configurations avoid outer-loop overhead
-        // and, for 2-channel, compute gain once per sample instead of once per channel.
+        // Fast paths for the most common configurations avoid outer-loop overhead.
+        // In all paths gain is computed once per sample, then applied across channels.
         if self.channel_count == 1 {
             let in_sig = inputs.first().copied().unwrap_or(&[]);
             let out = &mut outputs[0];
             for i in 0..n {
-                let x = in_sig.get(i).copied().unwrap_or(0.0);
                 let level = in_level.get(i).copied().unwrap_or(1.0);
-                out[i] = x * amplitude_to_gain(level);
+                let gain = amplitude_to_gain(level);
+                out[i] = in_sig.get(i).copied().unwrap_or(0.0) * gain;
             }
             return;
         }
 
         if self.channel_count == 2 {
             let (out01, _) = outputs.split_at_mut(2);
-            let (out0, out1_slice) = out01.split_at_mut(1);
             let in0 = inputs.first().copied().unwrap_or(&[]);
             let in1 = inputs.get(1).copied().unwrap_or(&[]);
             for i in 0..n {
-                let level = in_level.get(i).copied().unwrap_or(1.0);
-                let gain = amplitude_to_gain(level);
-                out0[0][i] = in0.get(i).copied().unwrap_or(0.0) * gain;
-                out1_slice[0][i] = in1.get(i).copied().unwrap_or(0.0) * gain;
+                let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
+                out01[0][i] = in0.get(i).copied().unwrap_or(0.0) * gain;
+                out01[1][i] = in1.get(i).copied().unwrap_or(0.0) * gain;
             }
             return;
         }
 
-        for ch in 0..self.channel_count {
-            let in_sig = inputs.get(ch).copied().unwrap_or(&[]);
-            let out = &mut outputs[ch];
-            for i in 0..n {
-                let x = in_sig.get(i).copied().unwrap_or(0.0);
-                let level = in_level.get(i).copied().unwrap_or(1.0);
-                out[i] = x * amplitude_to_gain(level);
+        for i in 0..n {
+            let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
+            for ch in 0..self.channel_count {
+                let x = inputs.get(ch).copied().unwrap_or(&[]).get(i).copied().unwrap_or(0.0);
+                outputs[ch][i] = x * gain;
             }
         }
     }
