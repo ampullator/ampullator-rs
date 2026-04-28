@@ -506,10 +506,17 @@ impl UGen for UGMult {
 /// Equal linear steps in the control produce equal perceived (dB) changes in
 /// the output: `gain = 1000^(level - 1)`.  At `level = 0` the gain is
 /// exactly `0.0` (silence); at `level = 1` the gain is `1.0` (unity).
+/// Common values are short-circuited to avoid the cost of `powf`.
 #[inline]
 fn amplitude_to_gain(level: f32) -> f32 {
     if level <= 0.0 {
         0.0
+    } else if level == 1.0 {
+        1.0
+    } else if level == 0.5 {
+        // 1000^(0.5 - 1) = 1000^(-0.5) = 1/sqrt(1000)
+        const GAIN_HALF: f32 = 0.031_622_776;
+        GAIN_HALF
     } else {
         1000.0_f32.powf(level - 1.0)
     }
@@ -813,6 +820,33 @@ impl UGen for UGFade {
         // Input layout: in1…inN occupy indices 0..channel_count, level is at channel_count.
         let level_input_index = self.channel_count;
         let in_level = inputs.get(level_input_index).copied().unwrap_or(&[]);
+
+        // Fast paths for the most common configurations avoid outer-loop overhead
+        // and, for 2-channel, compute gain once per sample instead of once per channel.
+        if self.channel_count == 1 {
+            let in_sig = inputs.first().copied().unwrap_or(&[]);
+            let out = &mut outputs[0];
+            for i in 0..n {
+                let x = in_sig.get(i).copied().unwrap_or(0.0);
+                let level = in_level.get(i).copied().unwrap_or(1.0);
+                out[i] = x * amplitude_to_gain(level);
+            }
+            return;
+        }
+
+        if self.channel_count == 2 {
+            let (out01, _) = outputs.split_at_mut(2);
+            let (out0, out1_slice) = out01.split_at_mut(1);
+            let in0 = inputs.first().copied().unwrap_or(&[]);
+            let in1 = inputs.get(1).copied().unwrap_or(&[]);
+            for i in 0..n {
+                let level = in_level.get(i).copied().unwrap_or(1.0);
+                let gain = amplitude_to_gain(level);
+                out0[0][i] = in0.get(i).copied().unwrap_or(0.0) * gain;
+                out1_slice[0][i] = in1.get(i).copied().unwrap_or(0.0) * gain;
+            }
+            return;
+        }
 
         for ch in 0..self.channel_count {
             let in_sig = inputs.get(ch).copied().unwrap_or(&[]);
