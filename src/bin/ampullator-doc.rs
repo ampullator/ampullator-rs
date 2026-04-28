@@ -12,9 +12,17 @@ struct Cli {
     #[arg(short, long, default_value = "doc/example")]
     input: PathBuf,
 
-    /// Output directory for generated documentation
+    /// Output directory for generated figures
     #[arg(short, long, default_value = "doc/out")]
     output: PathBuf,
+
+    /// Path to usage.md source file
+    #[arg(short, long, default_value = "doc/usage.md")]
+    usage: PathBuf,
+
+    /// Path to write the combined README.md
+    #[arg(short, long, default_value = "README.md")]
+    readme: PathBuf,
 
     /// Prefix image paths with the GitHub repository base URL
     #[arg(long, default_value_t = true)]
@@ -23,7 +31,13 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
-    if let Err(e) = ampullator::build_markdown_index(&cli.input, &cli.output, cli.abs_paths) {
+    if let Err(e) = ampullator::build_markdown_index(
+        &cli.input,
+        &cli.output,
+        &cli.usage,
+        &cli.readme,
+        cli.abs_paths,
+    ) {
         eprintln!("Error: {e}");
         std::process::exit(1);
     }

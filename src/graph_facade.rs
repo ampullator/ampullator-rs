@@ -398,68 +398,74 @@ const GITHUB_BASE_URL: &str =
 pub fn build_markdown_index(
     input_dir: &Path,
     output_dir: &Path,
+    usage_path: &Path,
+    readme_path: &Path,
     abs_paths: bool,
 ) -> Result<(), String> {
-    let mut entries = Vec::new();
-    entries.push("# Ampullator\n\n".to_string());
+    let usage = std::fs::read_to_string(usage_path)
+        .map_err(|e| format!("Failed to read usage file '{}': {e}", usage_path.display()))?;
 
     std::fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
-    for entry in std::fs::read_dir(input_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        if path.extension().is_some_and(|ext| ext == "json") {
-            println!("build_markdown_index: parsing: {:?}", path);
+    let mut entries = Vec::new();
+    entries.push("## Examples".to_string());
+    entries.push("".to_string());
 
-            let json_str = std::fs::read_to_string(&path)
-                .map_err(|e| e.to_string())?
-                .trim()
-                .to_string();
-            let parsed = GraphFacade::from_json(&json_str)?;
+    // Collect and sort JSON example files for deterministic output order.
+    let mut paths: Vec<_> = std::fs::read_dir(input_dir)
+        .map_err(|e| e.to_string())?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
+        .collect();
+    paths.sort();
 
-            let title = parsed.title.clone().unwrap_or("title".to_string());
-            let label = parsed.label.clone().unwrap_or("label".to_string());
+    for path in paths {
+        println!("build_markdown_index: parsing: {:?}", path);
 
-            let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(output_dir)?;
+        let json_str = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())?
+            .trim()
+            .to_string();
+        let parsed = GraphFacade::from_json(&json_str)?;
 
-            let img_url = |filename: &str| -> String {
-                if abs_paths {
-                    format!(
-                        "{}/{}/{}",
-                        GITHUB_BASE_URL,
-                        output_dir.display(),
-                        filename
-                    )
-                } else {
-                    filename.to_string()
-                }
-            };
+        let title = parsed.title.clone().unwrap_or("title".to_string());
+        let label = parsed.label.clone().unwrap_or("label".to_string());
 
-            entries.push(format!("## {title}"));
-            if let Some(ref chain) = parsed.chain {
-                entries.push("```text".to_string());
-                for (i, segment) in chain.split('|').enumerate() {
-                    let segment = segment.trim();
-                    if i == 0 {
-                        entries.push(segment.to_string());
-                    } else {
-                        entries.push(format!("| {segment}"));
-                    }
-                }
-                entries.push("```".to_string());
+        let (fn_graph, fn_time_domain) = parsed.to_rendered_figures(output_dir)?;
+
+        let img_url = |filename: &str| -> String {
+            if abs_paths {
+                format!("{}{}/{}", GITHUB_BASE_URL, output_dir.display(), filename)
             } else {
-                entries.push("```json".to_string());
-                entries.push(json_str.clone());
-                entries.push("```".to_string());
+                filename.to_string()
             }
-            entries.push(format!("![{label}]({})", img_url(&fn_graph)));
-            entries.push(format!("![{label}]({})", img_url(&fn_time_domain)));
-            entries.push("".to_string()); // blank line for spacing
+        };
+
+        entries.push(format!("### {title}"));
+        if let Some(ref chain) = parsed.chain {
+            entries.push("```text".to_string());
+            for (i, segment) in chain.split('|').enumerate() {
+                let segment = segment.trim();
+                if i == 0 {
+                    entries.push(segment.to_string());
+                } else {
+                    entries.push(format!("| {segment}"));
+                }
+            }
+            entries.push("```".to_string());
+        } else {
+            entries.push("```json".to_string());
+            entries.push(json_str.clone());
+            entries.push("```".to_string());
         }
+        entries.push(format!("![{label}]({})", img_url(&fn_graph)));
+        entries.push(format!("![{label}]({})", img_url(&fn_time_domain)));
+        entries.push("".to_string()); // blank line for spacing
     }
 
-    std::fs::write(output_dir.join("index.md"), entries.join("\n"))
-        .map_err(|e| e.to_string())?;
+    let readme = format!("{}\n\n{}", usage.trim_end(), entries.join("\n"));
+    std::fs::write(readme_path, readme).map_err(|e| e.to_string())?;
     Ok(())
 }
 
