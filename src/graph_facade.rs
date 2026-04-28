@@ -5,8 +5,8 @@ use crate::ModeRound;
 use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
-    UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGMult, UGPan, UGRound, UGSine, UGSum,
-    UGTrigger, UGWhite,
+    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGLfo, UGMult, UGPan, UGRound,
+    UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
@@ -46,6 +46,17 @@ pub enum UGFacade {
     },
     EnvAR {},
     Floor {},
+    Lfo {
+        wave: LfoWave,
+        #[serde(default = "UGFacade::default_lfo_freq")]
+        freq: Sample,
+        #[serde(default = "UGFacade::default_duty")]
+        duty: Sample,
+        #[serde(default = "UGFacade::default_lfo_min")]
+        min: Sample,
+        #[serde(default = "UGFacade::default_lfo_max")]
+        max: Sample,
+    },
     HighPass {
         #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
@@ -125,6 +136,13 @@ impl UGFacade {
             UGFacade::Ceil {} => Box::new(UGCeil::new()),
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
             UGFacade::Sine {} => Box::new(UGSine::new()),
+            UGFacade::Lfo {
+                wave,
+                freq,
+                duty,
+                min,
+                max,
+            } => Box::new(UGLfo::new(*wave, *freq, *duty, *min, *max)),
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
@@ -206,6 +224,22 @@ impl UGFacade {
 
     fn default_input_count() -> usize {
         2
+    }
+
+    fn default_lfo_freq() -> Sample {
+        1.0
+    }
+
+    fn default_duty() -> Sample {
+        0.5
+    }
+
+    fn default_lfo_min() -> Sample {
+        0.0
+    }
+
+    fn default_lfo_max() -> Sample {
+        1.0
     }
 }
 
