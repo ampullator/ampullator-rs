@@ -849,7 +849,13 @@ pub struct UGLfo {
 }
 
 impl UGLfo {
-    pub fn new(wave: LfoWave, freq: Sample, duty: Sample, min: Sample, max: Sample) -> Self {
+    pub fn new(
+        wave: LfoWave,
+        freq: Sample,
+        duty: Sample,
+        min: Sample,
+        max: Sample,
+    ) -> Self {
         Self {
             wave,
             phase: 0.0,
@@ -887,7 +893,11 @@ impl UGen for UGLfo {
     fn describe_config(&self) -> Option<String> {
         Some(format!(
             "wave = {:?}, freq = {}, duty = {}, min = {}, max = {}",
-            self.wave, self.default_freq, self.default_duty, self.default_min, self.default_max
+            self.wave,
+            self.default_freq,
+            self.default_duty,
+            self.default_min,
+            self.default_max
         ))
     }
 
@@ -942,9 +952,7 @@ impl UGen for UGLfo {
 
             // Compute normalised value in [0, 1]
             let norm: f32 = match self.wave {
-                LfoWave::Sine => {
-                    (self.phase * std::f32::consts::TAU).sin() * 0.5 + 0.5
-                }
+                LfoWave::Sine => (self.phase * std::f32::consts::TAU).sin() * 0.5 + 0.5,
                 LfoWave::Triangle => {
                     if duty <= 0.0 {
                         // pure falling sawtooth

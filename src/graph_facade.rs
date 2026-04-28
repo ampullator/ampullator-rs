@@ -5,8 +5,8 @@ use crate::ModeRound;
 use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
-    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGLfo, UGMult, UGPan, UGRound, UGSine,
-    UGSum, UGTrigger, UGWhite,
+    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFloor, UGLfo, UGMult, UGPan, UGRound,
+    UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
