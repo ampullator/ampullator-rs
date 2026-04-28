@@ -500,6 +500,32 @@ impl UGen for UGMult {
 
 //------------------------------------------------------------------------------
 
+/// Distribute a single sample `x` across adjacent output channels using linear
+/// (equal-power) panning and **accumulate** into the output buffers at index `i`.
+///
+/// `pair_pos` is the desired pan position expressed as a continuous channel
+/// index in the range `[0, outputs.len() - 1]`.  Values are clamped to that
+/// range before use.
+#[inline]
+fn pan_linear_accumulate(x: Sample, pair_pos: Sample, outputs: &mut [&mut [Sample]], i: usize) {
+    let output_count = outputs.len();
+    let pair_pos = pair_pos.clamp(0.0, output_count as Sample - 1.0);
+    let left_index = pair_pos.floor() as usize;
+
+    if left_index >= output_count - 1 {
+        outputs[output_count - 1][i] += x;
+        return;
+    }
+
+    let pair_pan = pair_pos - left_index as f32;
+    let angle = pair_pan * std::f32::consts::FRAC_PI_2;
+    let (left, right) = outputs.split_at_mut(left_index + 1);
+    left[left_index][i] += x * angle.cos();
+    right[0][i] += x * angle.sin();
+}
+
+//------------------------------------------------------------------------------
+
 pub struct UGPan {
     output_refs: Vec<&'static str>,
 }
@@ -563,26 +589,125 @@ impl UGen for UGPan {
             out.fill(0.0);
         }
         let n = outputs[0].len();
+        let default_pan = (output_count as Sample - 1.0) * 0.5;
 
         for i in 0..n {
             let x = input.get(i).copied().unwrap_or(0.0);
-            let pair_pos = pan
-                .get(i)
-                .copied()
-                .unwrap_or((output_count as Sample - 1.0) * 0.5)
-                .clamp(0.0, output_count as Sample - 1.0);
-            let left_index = pair_pos.floor() as usize;
+            let pair_pos = pan.get(i).copied().unwrap_or(default_pan);
+            pan_linear_accumulate(x, pair_pos, outputs, i);
+        }
+    }
+}
 
-            if left_index >= output_count - 1 {
-                outputs[output_count - 1][i] = x;
-                continue;
+//------------------------------------------------------------------------------
+
+pub struct UGMixLinear {
+    input_count: usize,
+    output_count: usize,
+    input_refs: Vec<&'static str>,
+    output_refs: Vec<&'static str>,
+}
+
+impl UGMixLinear {
+    pub fn new(input_count: usize, output_count: usize) -> Self {
+        if input_count < 1 {
+            panic!("Input count should be at least 1");
+        }
+        if output_count < 2 {
+            panic!("Output count should be at least 2");
+        }
+        let mut input_labels: Vec<String> = Vec::with_capacity(input_count * 3);
+        for i in 1..=input_count {
+            input_labels.push(format!("in{i}"));
+            input_labels.push(format!("pan{i}"));
+            input_labels.push(format!("level{i}"));
+        }
+        let input_refs: Vec<&'static str> = input_labels
+            .iter()
+            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
+            .collect();
+
+        let output_labels: Vec<String> = (1..=output_count).map(|i| format!("out{i}")).collect();
+        let output_refs: Vec<&'static str> = output_labels
+            .iter()
+            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
+            .collect();
+
+        Self {
+            input_count,
+            output_count,
+            input_refs,
+            output_refs,
+        }
+    }
+}
+
+impl Default for UGMixLinear {
+    fn default() -> Self {
+        Self::new(2, 2)
+    }
+}
+
+impl UGen for UGMixLinear {
+    fn type_name(&self) -> &'static str {
+        "UGMixLinear"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &self.input_refs
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &self.output_refs
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        if input_name.starts_with("level") {
+            Some(1.0)
+        } else if input_name.starts_with("pan") {
+            Some((self.output_count as Sample - 1.0) * 0.5)
+        } else {
+            None
+        }
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let output_count = outputs.len();
+        if output_count == 0 {
+            return;
+        }
+        for out in outputs.iter_mut() {
+            out.fill(0.0);
+        }
+        let n = outputs[0].len();
+        let default_pan = (output_count as Sample - 1.0) * 0.5;
+
+        for ch in 0..self.input_count {
+            let base = ch * 3;
+            let in_sig = inputs.get(base).copied().unwrap_or(&[]);
+            let in_pan = inputs.get(base + 1).copied().unwrap_or(&[]);
+            let in_level = inputs.get(base + 2).copied().unwrap_or(&[]);
+
+            for i in 0..n {
+                let x = in_sig.get(i).copied().unwrap_or(0.0);
+                let pan = in_pan.get(i).copied().unwrap_or(default_pan);
+                let level = in_level.get(i).copied().unwrap_or(1.0);
+                // Logarithmic level scaling: equal linear steps in the control
+                // produce equal perceived (dB) changes in the output.
+                // gain = 1000^(level - 1), with gain = 0 at level = 0 (silence).
+                let gain = if level <= 0.0 {
+                    0.0
+                } else {
+                    1000.0_f32.powf(level - 1.0)
+                };
+                pan_linear_accumulate(x * gain, pan, outputs, i);
             }
-
-            let pair_pan = pair_pos - left_index as f32;
-            let angle = pair_pan * std::f32::consts::FRAC_PI_2;
-            let (left, right) = outputs.split_at_mut(left_index + 1);
-            left[left_index][i] = x * angle.cos();
-            right[0][i] = x * angle.sin();
         }
     }
 }
@@ -1523,6 +1648,143 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("lfo1.wave"),
             vec![1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mix_linear_center_pan() {
+        // Single input at center pan (0.5) with level=1 → equal power in both outputs
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => sig | Const(value=0.5) => p | Const(value=1) => lv \
+             | MixLinear(input_count=1, output_count=2) => mix \
+             | Round(places=3, mode=Round) => r1 | Round(places=3, mode=Round) => r2 \
+             | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix \
+             | mix ->out1:in r1 | mix ->out2:in r2",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r1.out"),
+            vec![0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707]
+        );
+        assert_eq!(
+            g.get_output_by_label("r2.out"),
+            vec![0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707, 0.707]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mix_linear_hard_left() {
+        // Single input panned fully left → all signal in out1, none in out2
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => sig | Const(value=0) => p | Const(value=1) => lv \
+             | MixLinear(input_count=1, output_count=2) => mix \
+             | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("mix.out1"),
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("mix.out2"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mix_linear_hard_right() {
+        // Single input panned fully right → all signal in out2, none in out1
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => sig | Const(value=1) => p | Const(value=1) => lv \
+             | MixLinear(input_count=1, output_count=2) => mix \
+             | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("mix.out1"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("mix.out2"),
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mix_linear_two_inputs_summed() {
+        // Two inputs panned to opposite extremes; outputs should each receive one signal
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=0.5) => s1 | Const(value=0.5) => s2 \
+             | Const(value=0) => pl | Const(value=1) => pr | Const(value=1) => lv \
+             | MixLinear(input_count=2, output_count=2) => mix \
+             | s1 ->:in1 mix | pl ->:pan1 mix | lv ->:level1 mix \
+             | s2 ->:in2 mix | pr ->:pan2 mix | lv ->:level2 mix",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("mix.out1"),
+            vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        );
+        assert_eq!(
+            g.get_output_by_label("mix.out2"),
+            vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mix_linear_level_log_scaling() {
+        // level=0.5 → gain = 1000^(0.5-1) = 1000^(-0.5) ≈ 0.03162; panned hard left
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => sig | Const(value=0) => p | Const(value=0.5) => lv \
+             | MixLinear(input_count=1, output_count=2) => mix \
+             | Round(places=3, mode=Round) => r1 \
+             | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix \
+             | mix ->out1:in r1",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        // 1000^(-0.5) = 10^(-1.5) ≈ 0.03162 → rounds to 0.032
+        assert_eq!(
+            g.get_output_by_label("r1.out"),
+            vec![0.032, 0.032, 0.032, 0.032, 0.032, 0.032, 0.032, 0.032]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_mix_linear_level_zero_is_silence() {
+        // level=0 → gain = 0 → silence regardless of signal
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => sig | Const(value=0) => p | Const(value=0) => lv \
+             | MixLinear(input_count=1, output_count=2) => mix \
+             | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("mix.out1"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
 }
