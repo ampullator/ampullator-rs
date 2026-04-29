@@ -85,11 +85,12 @@ A bare number creates an implicit constant node. This is shorthand for `Const(va
 
 ### Binary operators
 
-`+` and `*` wire two nodes into an implicit `Sum` or `Mult` node respectively. Parentheses control grouping.
+`+` and `*` wire two nodes into an implicit `Sum` or `Mult` node respectively. `^` wires two nodes into an implicit `Fade` node, connecting the left operand to `in1` and the right operand to `level`. Parentheses control grouping.
 
 ```
 (a + b)             # sum of a and b
 (a * b)             # product of a and b
+(a ^ b)             # fade: a scaled by level b
 (a + b) => mix      # name the result
 ```
 
