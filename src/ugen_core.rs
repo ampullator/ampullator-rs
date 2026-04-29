@@ -971,7 +971,14 @@ impl UGen for UGSine {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["freq".to_string(), "phase".to_string(), "min".to_string(), "max".to_string()])
+        NAMES.get_or_init(|| {
+            vec![
+                "freq".to_string(),
+                "phase".to_string(),
+                "min".to_string(),
+                "max".to_string(),
+            ]
+        })
     }
 
     fn output_names(&self) -> &[String] {
@@ -1137,7 +1144,14 @@ impl UGen for UGLfo {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["freq".to_string(), "duty".to_string(), "min".to_string(), "max".to_string()])
+        NAMES.get_or_init(|| {
+            vec![
+                "freq".to_string(),
+                "duty".to_string(),
+                "min".to_string(),
+                "max".to_string(),
+            ]
+        })
     }
 
     fn output_names(&self) -> &[String] {

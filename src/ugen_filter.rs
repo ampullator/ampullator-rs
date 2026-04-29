@@ -93,7 +93,13 @@ impl UGen for UGLowPassQ {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["in".to_string(), "cutoff".to_string(), "resonance".to_string()])
+        NAMES.get_or_init(|| {
+            vec![
+                "in".to_string(),
+                "cutoff".to_string(),
+                "resonance".to_string(),
+            ]
+        })
     }
 
     fn output_names(&self) -> &[String] {
@@ -223,7 +229,13 @@ impl UGen for UGHighPassQ {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["in".to_string(), "cutoff".to_string(), "resonance".to_string()])
+        NAMES.get_or_init(|| {
+            vec![
+                "in".to_string(),
+                "cutoff".to_string(),
+                "resonance".to_string(),
+            ]
+        })
     }
 
     fn output_names(&self) -> &[String] {
@@ -324,7 +336,14 @@ impl UGen for UGParametric {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["in".to_string(), "gain".to_string(), "bw".to_string(), "freq".to_string()])
+        NAMES.get_or_init(|| {
+            vec![
+                "in".to_string(),
+                "gain".to_string(),
+                "bw".to_string(),
+                "freq".to_string(),
+            ]
+        })
     }
 
     fn output_names(&self) -> &[String] {

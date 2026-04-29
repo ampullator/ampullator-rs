@@ -149,13 +149,15 @@ impl UGen for UGEnvAR {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec![
-            "trigger".to_string(),
-            "attack_dur".to_string(),
-            "release_dur".to_string(),
-            "attack_curve".to_string(),
-            "release_curve".to_string(),
-        ])
+        NAMES.get_or_init(|| {
+            vec![
+                "trigger".to_string(),
+                "attack_dur".to_string(),
+                "release_dur".to_string(),
+                "attack_curve".to_string(),
+                "release_curve".to_string(),
+            ]
+        })
     }
 
     fn output_names(&self) -> &[String] {
