@@ -838,6 +838,7 @@ impl UGen for UGFade {
             let (out01, _) = outputs.split_at_mut(2);
             let in0 = inputs.first().copied().unwrap_or(&[]);
             let in1 = inputs.get(1).copied().unwrap_or(&[]);
+            #[allow(clippy::needless_range_loop)]
             for i in 0..n {
                 let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
                 out01[0][i] = in0.get(i).copied().unwrap_or(0.0) * gain;
@@ -848,7 +849,7 @@ impl UGen for UGFade {
 
         for i in 0..n {
             let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
-            for ch in 0..self.channel_count {
+            for (ch, out) in outputs.iter_mut().enumerate().take(self.channel_count) {
                 let x = inputs
                     .get(ch)
                     .copied()
@@ -856,7 +857,7 @@ impl UGen for UGFade {
                     .get(i)
                     .copied()
                     .unwrap_or(0.0);
-                outputs[ch][i] = x * gain;
+                out[i] = x * gain;
             }
         }
     }
