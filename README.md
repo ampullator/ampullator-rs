@@ -199,6 +199,15 @@ Clock(value=1, mode=Samples)=> metro
 ![ug_pulse-select](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_pulse-select_graph.svg)
 ![ug_pulse-select](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_pulse-select_time-domain.svg)
 
+### Sine with LFO Control
+```text
+((Sine() => s) ^ Lfo(freq=0.666, wave=Triangle)) => o
+| Lfo(wave=Triangle, min=22, max=44) ->:freq s
+| o
+```
+![ug_sine-lfo](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_sine-lfo_graph.svg)
+![ug_sine-lfo](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_sine-lfo_time-domain.svg)
+
 ### White Noise Masking
 ```text
 White(seed=42) => noise
