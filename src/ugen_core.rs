@@ -27,19 +27,19 @@ pub trait UGen {
         time_sample: usize,
     );
     fn type_name(&self) -> &'static str;
-    fn input_names(&self) -> &[&'static str];
-    fn output_names(&self) -> &[&'static str];
+    fn input_names(&self) -> &[String];
+    fn output_names(&self) -> &[String];
     fn default_input(&self, _input_name: &str) -> Option<Sample> {
         None
     }
     fn describe_config(&self) -> Option<String> {
         None
     }
-    fn first_input(&self) -> Option<&'static str> {
-        self.input_names().first().copied()
+    fn first_input(&self) -> Option<&str> {
+        self.input_names().first().map(|s| s.as_str())
     }
-    fn first_output(&self) -> Option<&'static str> {
-        self.output_names().first().copied()
+    fn first_output(&self) -> Option<&str> {
+        self.output_names().first().map(|s| s.as_str())
     }
 }
 
@@ -64,12 +64,13 @@ impl UGen for UGConst {
         Some(format!("value = {:.3}", self.value))
     }
 
-    fn input_names(&self) -> &[&'static str] {
+    fn input_names(&self) -> &[String] {
         &[]
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -110,12 +111,14 @@ impl UGen for UGAsHz {
         Some(format!("mode = {:?}", self.mode).to_lowercase())
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -216,12 +219,14 @@ impl UGen for UGRound {
         Some(format!("places = {}, mode = {:?}", self.places, self.mode))
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -282,12 +287,14 @@ impl UGen for UGFloor {
         "UGFloor"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -329,12 +336,14 @@ impl UGen for UGCeil {
         "UGCeil"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -358,7 +367,7 @@ impl UGen for UGCeil {
 //------------------------------------------------------------------------------
 
 pub struct UGSum {
-    input_refs: Vec<&'static str>,
+    input_refs: Vec<String>,
 }
 
 impl UGSum {
@@ -366,15 +375,8 @@ impl UGSum {
         if input_count <= 1 {
             panic!("Input count should be greater than 1");
         }
-        // input labels wil start with in1, ..., inN
-        let input_labels: Vec<String> =
+        let input_refs: Vec<String> =
             (1..input_count + 1).map(|i| format!("in{i}")).collect();
-        // println!("{:?}", input_labels);
-        // Promote to 'static using Box::leak safely
-        let input_refs: Vec<&'static str> = input_labels
-            .iter()
-            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
-            .collect();
 
         Self { input_refs }
     }
@@ -385,12 +387,13 @@ impl UGen for UGSum {
         "UGSum"
     }
 
-    fn input_names(&self) -> &[&'static str] {
+    fn input_names(&self) -> &[String] {
         &self.input_refs
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -431,7 +434,7 @@ impl UGen for UGSum {
 //------------------------------------------------------------------------------
 
 pub struct UGMult {
-    input_refs: Vec<&'static str>,
+    input_refs: Vec<String>,
 }
 
 impl UGMult {
@@ -439,12 +442,8 @@ impl UGMult {
         if input_count <= 1 {
             panic!("Input count should be greater than 1");
         }
-        let input_labels: Vec<String> =
+        let input_refs: Vec<String> =
             (1..input_count + 1).map(|i| format!("in{i}")).collect();
-        let input_refs: Vec<&'static str> = input_labels
-            .iter()
-            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
-            .collect();
 
         Self { input_refs }
     }
@@ -455,12 +454,13 @@ impl UGen for UGMult {
         "UGMult"
     }
 
-    fn input_names(&self) -> &[&'static str] {
+    fn input_names(&self) -> &[String] {
         &self.input_refs
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -554,7 +554,7 @@ fn pan_linear_accumulate(
 //------------------------------------------------------------------------------
 
 pub struct UGPan {
-    output_refs: Vec<&'static str>,
+    output_refs: Vec<String>,
 }
 
 impl UGPan {
@@ -562,12 +562,8 @@ impl UGPan {
         if output_count < 2 {
             panic!("Output count should be greater than 1");
         }
-        let output_labels: Vec<String> =
+        let output_refs: Vec<String> =
             (1..output_count + 1).map(|i| format!("out{i}")).collect();
-        let output_refs: Vec<&'static str> = output_labels
-            .iter()
-            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
-            .collect();
 
         Self { output_refs }
     }
@@ -584,11 +580,12 @@ impl UGen for UGPan {
         "UGPan"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in", "pan"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string(), "pan".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
+    fn output_names(&self) -> &[String] {
         &self.output_refs
     }
 
@@ -631,8 +628,8 @@ impl UGen for UGPan {
 pub struct UGMixLinear {
     input_count: usize,
     output_count: usize,
-    input_refs: Vec<&'static str>,
-    output_refs: Vec<&'static str>,
+    input_refs: Vec<String>,
+    output_refs: Vec<String>,
 }
 
 impl UGMixLinear {
@@ -649,17 +646,10 @@ impl UGMixLinear {
             input_labels.push(format!("pan{i}"));
             input_labels.push(format!("level{i}"));
         }
-        let input_refs: Vec<&'static str> = input_labels
-            .iter()
-            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
-            .collect();
+        let input_refs = input_labels;
 
-        let output_labels: Vec<String> =
+        let output_refs: Vec<String> =
             (1..=output_count).map(|i| format!("out{i}")).collect();
-        let output_refs: Vec<&'static str> = output_labels
-            .iter()
-            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
-            .collect();
 
         Self {
             input_count,
@@ -681,11 +671,11 @@ impl UGen for UGMixLinear {
         "UGMixLinear"
     }
 
-    fn input_names(&self) -> &[&'static str] {
+    fn input_names(&self) -> &[String] {
         &self.input_refs
     }
 
-    fn output_names(&self) -> &[&'static str] {
+    fn output_names(&self) -> &[String] {
         &self.output_refs
     }
 
@@ -745,8 +735,8 @@ impl UGen for UGMixLinear {
 /// `gain = 1000^(level - 1)`, clamped to `0` when `level ≤ 0`.
 pub struct UGFade {
     channel_count: usize,
-    input_refs: Vec<&'static str>,
-    output_refs: Vec<&'static str>,
+    input_refs: Vec<String>,
+    output_refs: Vec<String>,
 }
 
 impl UGFade {
@@ -759,17 +749,10 @@ impl UGFade {
             input_labels.push(format!("in{i}"));
         }
         input_labels.push("level".to_string());
-        let input_refs: Vec<&'static str> = input_labels
-            .iter()
-            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
-            .collect();
+        let input_refs = input_labels;
 
-        let output_labels: Vec<String> =
+        let output_refs: Vec<String> =
             (1..=channel_count).map(|i| format!("out{i}")).collect();
-        let output_refs: Vec<&'static str> = output_labels
-            .iter()
-            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
-            .collect();
 
         Self {
             channel_count,
@@ -790,11 +773,11 @@ impl UGen for UGFade {
         "UGFade"
     }
 
-    fn input_names(&self) -> &[&'static str] {
+    fn input_names(&self) -> &[String] {
         &self.input_refs
     }
 
-    fn output_names(&self) -> &[&'static str] {
+    fn output_names(&self) -> &[String] {
         &self.output_refs
     }
 
@@ -890,12 +873,14 @@ impl UGen for UGWhite {
         "UGWhite"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["min", "max"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["min".to_string(), "max".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
@@ -984,12 +969,21 @@ impl UGen for UGSine {
         "UGSine"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["freq", "phase", "min", "max"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "freq".to_string(),
+                "phase".to_string(),
+                "min".to_string(),
+                "max".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["wave", "trigger"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["wave".to_string(), "trigger".to_string()])
     }
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
@@ -1148,12 +1142,21 @@ impl UGen for UGLfo {
         "UGLfo"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["freq", "duty", "min", "max"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "freq".to_string(),
+                "duty".to_string(),
+                "min".to_string(),
+                "max".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["wave"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["wave".to_string()])
     }
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
@@ -1279,11 +1282,13 @@ impl UGen for UGTrigger {
     fn type_name(&self) -> &'static str {
         "UGTrigger"
     }
-    fn input_names(&self) -> &[&'static str] {
-        &["freq"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["freq".to_string()])
     }
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         if input_name == "freq" {
@@ -1341,12 +1346,14 @@ impl UGen for UGClock {
         "UGClock"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn default_input(&self, name: &str) -> Option<Sample> {

@@ -26,12 +26,14 @@ impl UGen for UGLowPass {
         "UGLowPass"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in", "cutoff"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string(), "cutoff".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -89,12 +91,20 @@ impl UGen for UGLowPassQ {
         "UGLowPassQ"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in", "cutoff", "resonance"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "in".to_string(),
+                "cutoff".to_string(),
+                "resonance".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -153,12 +163,14 @@ impl UGen for UGHighPass {
         "UGHighPass"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in", "cutoff"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string(), "cutoff".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -215,12 +227,20 @@ impl UGen for UGHighPassQ {
         "UGHighPassQ"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in", "cutoff", "resonance"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "in".to_string(),
+                "cutoff".to_string(),
+                "resonance".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -314,12 +334,21 @@ impl UGen for UGParametric {
         "UGParametric"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in", "gain", "bw", "freq"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "in".to_string(),
+                "gain".to_string(),
+                "bw".to_string(),
+                "freq".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(
@@ -391,12 +420,14 @@ impl UGen for UGParametricConst {
         "UGParametricConst"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["in"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn process(

@@ -202,21 +202,25 @@ impl UGen for UGReverb {
         "UGReverb"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &[
-            "in_l",
-            "in_r",
-            "decay",
-            "pre_delay",
-            "mix",
-            "size",
-            "diffusion",
-            "damping",
-        ]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "in_l".to_string(),
+                "in_r".to_string(),
+                "decay".to_string(),
+                "pre_delay".to_string(),
+                "mix".to_string(),
+                "size".to_string(),
+                "diffusion".to_string(),
+                "damping".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out_l", "out_r"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out_l".to_string(), "out_r".to_string()])
     }
 
     fn default_input(&self, name: &str) -> Option<Sample> {

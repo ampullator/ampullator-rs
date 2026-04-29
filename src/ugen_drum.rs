@@ -105,21 +105,25 @@ impl UGen for UGSnareDrum {
         "UGSnareDrum"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &[
-            "gate",
-            "tune",
-            "tone",
-            "snappy",
-            "tone_decay",
-            "snappy_decay",
-            "noise_filter",
-            "pitch_sweep",
-        ]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "gate".to_string(),
+                "tune".to_string(),
+                "tone".to_string(),
+                "snappy".to_string(),
+                "tone_decay".to_string(),
+                "snappy_decay".to_string(),
+                "noise_filter".to_string(),
+                "pitch_sweep".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn default_input(&self, name: &str) -> Option<Sample> {
@@ -302,21 +306,25 @@ impl UGen for UGBassDrum {
         "UGBassDrum"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &[
-            "gate",
-            "tune",
-            "decay",
-            "punch",
-            "sweep_decay",
-            "click",
-            "tone",
-            "drive",
-        ]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "gate".to_string(),
+                "tune".to_string(),
+                "decay".to_string(),
+                "punch".to_string(),
+                "sweep_decay".to_string(),
+                "click".to_string(),
+                "tone".to_string(),
+                "drive".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn default_input(&self, name: &str) -> Option<Sample> {
@@ -510,12 +518,24 @@ impl UGen for UGHighHat {
         "UGHighHat"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["gate", "tune", "decay", "tone", "accent", "noise", "drive"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "gate".to_string(),
+                "tune".to_string(),
+                "decay".to_string(),
+                "tone".to_string(),
+                "accent".to_string(),
+                "noise".to_string(),
+                "drive".to_string(),
+            ]
+        })
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn default_input(&self, name: &str) -> Option<Sample> {
