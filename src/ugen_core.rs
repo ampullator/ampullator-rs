@@ -500,6 +500,28 @@ impl UGen for UGMult {
 
 //------------------------------------------------------------------------------
 
+/// Convert a linear amplitude control value in `[0, 1]` to a gain factor using
+/// logarithmic (perceptual) scaling.
+///
+/// Equal linear steps in the control produce equal perceived (dB) changes in
+/// the output: `gain = 1000^(level - 1)`.  At `level = 0` the gain is
+/// exactly `0.0` (silence); at `level = 1` the gain is `1.0` (unity).
+/// Common values are short-circuited to avoid the cost of `powf`.
+#[inline]
+fn amplitude_to_gain(level: f32) -> f32 {
+    if level <= 0.0 {
+        0.0
+    } else if level == 1.0 {
+        1.0
+    } else if level == 0.5 {
+        // 1000^(0.5 - 1) = 1000^(-0.5) = 1/sqrt(1000)
+        const GAIN_HALF: f32 = 0.031_622_776;
+        GAIN_HALF
+    } else {
+        1000.0_f32.powf(level - 1.0)
+    }
+}
+
 /// Distribute a single sample `x` across adjacent output channels using linear
 /// (equal-power) panning and **accumulate** into the output buffers at index `i`.
 ///
@@ -704,15 +726,138 @@ impl UGen for UGMixLinear {
                 let x = in_sig.get(i).copied().unwrap_or(0.0);
                 let pan = in_pan.get(i).copied().unwrap_or(default_pan);
                 let level = in_level.get(i).copied().unwrap_or(1.0);
-                // Logarithmic level scaling: equal linear steps in the control
-                // produce equal perceived (dB) changes in the output.
-                // gain = 1000^(level - 1), with gain = 0 at level = 0 (silence).
-                let gain = if level <= 0.0 {
-                    0.0
-                } else {
-                    1000.0_f32.powf(level - 1.0)
-                };
+                let gain = amplitude_to_gain(level);
                 pan_linear_accumulate(x * gain, pan, outputs, i);
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
+/// Scale one or more audio channels by a shared amplitude control using
+/// perceptual (logarithmic) gain mapping.
+///
+/// Inputs: `in1` … `inN` (one per channel), `level` (amplitude control 0–1).
+/// Outputs: `out1` … `outN` (each channel scaled independently by the same gain).
+///
+/// The gain formula is identical to the one used by `UGMixLinear`:
+/// `gain = 1000^(level - 1)`, clamped to `0` when `level ≤ 0`.
+pub struct UGFade {
+    channel_count: usize,
+    input_refs: Vec<&'static str>,
+    output_refs: Vec<&'static str>,
+}
+
+impl UGFade {
+    pub fn new(channel_count: usize) -> Self {
+        if channel_count < 1 {
+            panic!("Channel count should be at least 1");
+        }
+        let mut input_labels: Vec<String> = Vec::with_capacity(channel_count + 1);
+        for i in 1..=channel_count {
+            input_labels.push(format!("in{i}"));
+        }
+        input_labels.push("level".to_string());
+        let input_refs: Vec<&'static str> = input_labels
+            .iter()
+            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
+            .collect();
+
+        let output_labels: Vec<String> =
+            (1..=channel_count).map(|i| format!("out{i}")).collect();
+        let output_refs: Vec<&'static str> = output_labels
+            .iter()
+            .map(|s| Box::leak(s.clone().into_boxed_str()) as &'static str)
+            .collect();
+
+        Self {
+            channel_count,
+            input_refs,
+            output_refs,
+        }
+    }
+}
+
+impl Default for UGFade {
+    fn default() -> Self {
+        Self::new(1)
+    }
+}
+
+impl UGen for UGFade {
+    fn type_name(&self) -> &'static str {
+        "UGFade"
+    }
+
+    fn input_names(&self) -> &[&'static str] {
+        &self.input_refs
+    }
+
+    fn output_names(&self) -> &[&'static str] {
+        &self.output_refs
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        if input_name == "level" {
+            Some(1.0)
+        } else {
+            None
+        }
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let n = match outputs.first() {
+            Some(out) => out.len(),
+            None => return,
+        };
+        // Input layout: in1…inN occupy indices 0..channel_count, level is at channel_count.
+        let level_input_index = self.channel_count;
+        let in_level = inputs.get(level_input_index).copied().unwrap_or(&[]);
+
+        // Fast paths for the most common configurations avoid outer-loop overhead.
+        // In all paths gain is computed once per sample, then applied across channels.
+        if self.channel_count == 1 {
+            let in_sig = inputs.first().copied().unwrap_or(&[]);
+            let out = &mut outputs[0];
+            for i in 0..n {
+                let level = in_level.get(i).copied().unwrap_or(1.0);
+                let gain = amplitude_to_gain(level);
+                out[i] = in_sig.get(i).copied().unwrap_or(0.0) * gain;
+            }
+            return;
+        }
+
+        if self.channel_count == 2 {
+            let (out01, _) = outputs.split_at_mut(2);
+            let in0 = inputs.first().copied().unwrap_or(&[]);
+            let in1 = inputs.get(1).copied().unwrap_or(&[]);
+            #[allow(clippy::needless_range_loop)]
+            for i in 0..n {
+                let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
+                out01[0][i] = in0.get(i).copied().unwrap_or(0.0) * gain;
+                out01[1][i] = in1.get(i).copied().unwrap_or(0.0) * gain;
+            }
+            return;
+        }
+
+        for i in 0..n {
+            let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
+            for (ch, out) in outputs.iter_mut().enumerate().take(self.channel_count) {
+                let x = inputs
+                    .get(ch)
+                    .copied()
+                    .unwrap_or(&[])
+                    .get(i)
+                    .copied()
+                    .unwrap_or(0.0);
+                out[i] = x * gain;
             }
         }
     }
@@ -1791,6 +1936,89 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("mix.out1"),
             vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_fade_unity_gain() {
+        // level=1 → gain = 1000^0 = 1.0 → signal unchanged
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=0.5) => sig | Const(value=1) => lv \
+             | Fade(channel_count=1) => fd \
+             | sig ->:in1 fd | lv ->:level fd",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("fd.out1"),
+            vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_fade_zero_is_silence() {
+        // level=0 → gain = 0 → silence
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => sig | Const(value=0) => lv \
+             | Fade(channel_count=1) => fd \
+             | sig ->:in1 fd | lv ->:level fd",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("fd.out1"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_fade_log_scaling() {
+        // level=0.5 → gain = 1000^(-0.5) ≈ 0.03162
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => sig | Const(value=0.5) => lv \
+             | Fade(channel_count=1) => fd \
+             | Round(places=3, mode=Round) => r \
+             | sig ->:in1 fd | lv ->:level fd \
+             | fd ->out1:in r",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        // 1000^(-0.5) = 10^(-1.5) ≈ 0.03162 → rounds to 0.032
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![0.032, 0.032, 0.032, 0.032, 0.032, 0.032, 0.032, 0.032]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_fade_two_channels_same_gain() {
+        // Two channels scaled by the same level; channels remain independent
+        let mut g = crate::graph_from_chain_expression(
+            "Const(value=1) => s1 | Const(value=0.5) => s2 | Const(value=1) => lv \
+             | Fade(channel_count=2) => fd \
+             | s1 ->:in1 fd | s2 ->:in2 fd | lv ->:level fd",
+            120.0,
+            8,
+        )
+        .unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("fd.out1"),
+            vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        );
+        assert_eq!(
+            g.get_output_by_label("fd.out2"),
+            vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
         );
     }
 }
