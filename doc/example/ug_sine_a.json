@@ -1,0 +1,10 @@
+{
+    "title": "Sine with LFO Control",
+    "label": "ug_sine-lfo",
+    "chain": "((Sine() => s) ^ Lfo(freq=0.666, wave=Triangle)) => o | Lfo(wave=Triangle, min=22, max=44) ->:freq s | o",
+    "sample_rate": 100.0,
+    "buffer_size": 8,
+    "total_samples": 100
+}
+
+
