@@ -107,7 +107,16 @@ impl UGen for UGSnareDrum {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["gate".to_string(), "tune".to_string(), "tone".to_string(), "snappy".to_string(), "tone_decay".to_string(), "snappy_decay".to_string(), "noise_filter".to_string(), "pitch_sweep".to_string()])
+        NAMES.get_or_init(|| vec![
+            "gate".to_string(),
+            "tune".to_string(),
+            "tone".to_string(),
+            "snappy".to_string(),
+            "tone_decay".to_string(),
+            "snappy_decay".to_string(),
+            "noise_filter".to_string(),
+            "pitch_sweep".to_string(),
+        ])
     }
 
     fn output_names(&self) -> &[String] {
@@ -297,7 +306,16 @@ impl UGen for UGBassDrum {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["gate".to_string(), "tune".to_string(), "decay".to_string(), "punch".to_string(), "sweep_decay".to_string(), "click".to_string(), "tone".to_string(), "drive".to_string()])
+        NAMES.get_or_init(|| vec![
+            "gate".to_string(),
+            "tune".to_string(),
+            "decay".to_string(),
+            "punch".to_string(),
+            "sweep_decay".to_string(),
+            "click".to_string(),
+            "tone".to_string(),
+            "drive".to_string(),
+        ])
     }
 
     fn output_names(&self) -> &[String] {
@@ -498,7 +516,15 @@ impl UGen for UGHighHat {
 
     fn input_names(&self) -> &[String] {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-        NAMES.get_or_init(|| vec!["gate".to_string(), "tune".to_string(), "decay".to_string(), "tone".to_string(), "accent".to_string(), "noise".to_string(), "drive".to_string()])
+        NAMES.get_or_init(|| vec![
+            "gate".to_string(),
+            "tune".to_string(),
+            "decay".to_string(),
+            "tone".to_string(),
+            "accent".to_string(),
+            "noise".to_string(),
+            "drive".to_string(),
+        ])
     }
 
     fn output_names(&self) -> &[String] {
