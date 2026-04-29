@@ -134,7 +134,7 @@ impl GenGraph {
             .node
             .input_names()
             .iter()
-            .position(|&name| name == input_name)
+            .position(|name| name == input_name)
             .unwrap_or_else(|| {
                 panic!("For {dst_name}, invalid input name: {input_name}")
             });
@@ -437,7 +437,7 @@ impl GenGraph {
                                 .node
                                 .output_names()
                                 .get(edge.output_index)
-                                .copied()
+                                .map(|s| s.as_str())
                                 .unwrap_or("???");
 
                             json!({

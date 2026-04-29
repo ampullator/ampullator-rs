@@ -38,12 +38,14 @@ impl UGen for UGEnvBreakPoint {
         "UGEnvBreakPoint"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &["clock", "step"]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["clock".to_string(), "step".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
@@ -145,18 +147,14 @@ impl UGen for UGEnvAR {
         "UGEnvAR"
     }
 
-    fn input_names(&self) -> &[&'static str] {
-        &[
-            "trigger",
-            "attack_dur",
-            "release_dur",
-            "attack_curve",
-            "release_curve",
-        ]
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["trigger".to_string(), "attack_dur".to_string(), "release_dur".to_string(), "attack_curve".to_string(), "release_curve".to_string()])
     }
 
-    fn output_names(&self) -> &[&'static str] {
-        &["out"]
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
     }
 
     fn default_input(&self, name: &str) -> Option<Sample> {
