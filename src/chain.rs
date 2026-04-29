@@ -9,7 +9,7 @@
 /// ```text
 /// chain        = segment ("|" segment)*
 /// segment      = addmul_expr
-/// addmul_expr  = arrow_chain (("+" | "*") arrow_chain)*
+/// addmul_expr  = arrow_chain (("+" | "*" | "^") arrow_chain)*
 /// arrow_chain  = named_atom ("->" port_spec? named_atom)*
 /// named_atom   = atom ("=>" Ident)?
 /// atom         = ugen_call | Ident | Number | "(" addmul_expr ")"
@@ -38,6 +38,7 @@ enum Token {
     Assign,        // =
     Plus,          // +
     Star,          // *
+    Caret,         // ^
     LBracket,      // [
     RBracket,      // ]
     Ident(String), // identifier
@@ -80,6 +81,10 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
             }
             '*' => {
                 tokens.push(Token::Star);
+                i += 1;
+            }
+            '^' => {
+                tokens.push(Token::Caret);
                 i += 1;
             }
             '[' => {
@@ -540,19 +545,24 @@ impl ChainParser {
         Ok(current)
     }
 
-    /// Parse `arrow_chain (("+" | "*") arrow_chain)*`.
-    /// `+` creates a `Sum` UGen; `*` creates a `Mult` UGen.
-    /// The two operands are connected to `in1` and `in2` of the new node.
+    /// Parse `arrow_chain (("+" | "*" | "^") arrow_chain)*`.
+    /// `+` creates a `Sum` UGen; `*` creates a `Mult` UGen; `^` creates a `Fade` UGen.
+    /// For `+` and `*` the two operands are connected to `in1` and `in2` of the new node.
+    /// For `^` the left operand is connected to `in1` and the right operand to `level`.
     fn parse_addmul_expr(&mut self) -> Result<String, String> {
         let mut lhs = self.parse_arrow_chain()?;
 
-        while matches!(self.peek(), Some(Token::Plus) | Some(Token::Star)) {
+        while matches!(
+            self.peek(),
+            Some(Token::Plus) | Some(Token::Star) | Some(Token::Caret)
+        ) {
             let op = self.consume().unwrap();
             let rhs = self.parse_arrow_chain()?;
 
             let type_name = match op {
                 Token::Plus => "Sum",
                 Token::Star => "Mult",
+                Token::Caret => "Fade",
                 _ => unreachable!(),
             };
 
@@ -562,8 +572,13 @@ impl ChainParser {
 
             let lhs_out = self.default_output(&lhs)?;
             let rhs_out = self.default_output(&rhs)?;
-            self.connect.push((lhs_out, format!("{op_name}.in1")));
-            self.connect.push((rhs_out, format!("{op_name}.in2")));
+            if matches!(op, Token::Caret) {
+                self.connect.push((lhs_out, format!("{op_name}.in1")));
+                self.connect.push((rhs_out, format!("{op_name}.level")));
+            } else {
+                self.connect.push((lhs_out, format!("{op_name}.in1")));
+                self.connect.push((rhs_out, format!("{op_name}.in2")));
+            }
 
             lhs = op_name;
         }
@@ -792,6 +807,29 @@ mod tests {
         assert!(reg.contains_key("product"));
         assert!(conn.contains(&("a.out".to_string(), "product.in1".to_string())));
         assert!(conn.contains(&("b.out".to_string(), "product.in2".to_string())));
+    }
+
+    #[test]
+    fn test_chain_fade_operator() {
+        let (reg, conn) =
+            parse("Const(value=2.0) => a | Const(value=0.6) => b | (a ^ b) => faded");
+        assert!(reg.contains_key("a"));
+        assert!(reg.contains_key("b"));
+        assert!(reg.contains_key("faded"));
+        assert!(conn.contains(&("a.out".to_string(), "faded.in1".to_string())));
+        assert!(conn.contains(&("b.out".to_string(), "faded.level".to_string())));
+    }
+
+    #[test]
+    fn test_chain_fade_operator_numeric_literal() {
+        // Sine() ^ 0.6 should create a Fade node with in1←Sine and level←0.6
+        let (reg, conn) = parse("Sine() => s | (s ^ 0.6) => faded");
+        assert!(reg.contains_key("s"));
+        assert!(reg.contains_key("faded"));
+        let to_in1 = conn.iter().find(|(_, dst)| dst == "faded.in1");
+        let to_level = conn.iter().find(|(_, dst)| dst == "faded.level");
+        assert!(to_in1.is_some(), "expected connection to faded.in1");
+        assert!(to_level.is_some(), "expected connection to faded.level");
     }
 
     // ---------------------------------------------------------------------------
