@@ -187,7 +187,7 @@ cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metr
 On MacOS with `sox` `play`:
 
 ```bash
-cargo run --bin ampullator-record -- "Sine() => s -> Pan() => p &> Fade(channels=2, level=0.7) | 220 ->:freq s | Lfo(freq=0.4, wave=Triangle) ->:pan p" --duration 4 | play -
+cargo run --bin ampullator-record -- "Sine() => s -> Pan() => p &> Fade(channels=2, level=0.7) | 220 ->:freq s | Lfo(rate=0.4, wave=Triangle) ->:pan p" --duration 4 | play -
 
 cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | play -
 ```
@@ -230,8 +230,8 @@ Clock(value=1, mode=Samples)=> metro
 
 ### Sine with LFO Control
 ```text
-((Sine() => s) ^ Lfo(freq=0.666, wave=Triangle)) => o
-| Lfo(wave=Triangle, min=22, max=44) ->:freq s
+((Sine() => s) ^ Lfo(rate=0.666, wave=Triangle)) => o
+| Lfo(wave=Triangle, min=22, max=44) ->:rate s
 | o
 ```
 ![ug_sine-lfo](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_sine-lfo_graph.svg)

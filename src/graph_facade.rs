@@ -54,8 +54,10 @@ pub enum UGFacade {
     Floor {},
     Lfo {
         wave: LfoWave,
-        #[serde(default = "UGFacade::default_lfo_freq")]
-        freq: Sample,
+        #[serde(default = "UGFacade::default_lfo_rate")]
+        rate: Sample,
+        #[serde(default = "UGFacade::default_unit_rate_hz")]
+        mode: UnitRate,
         #[serde(default = "UGFacade::default_duty")]
         duty: Sample,
         #[serde(default = "UGFacade::default_lfo_min")]
@@ -157,11 +159,12 @@ impl UGFacade {
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Lfo {
                 wave,
-                freq,
+                rate,
+                mode,
                 duty,
                 min,
                 max,
-            } => Box::new(UGLfo::new(*wave, *freq, *duty, *min, *max)),
+            } => Box::new(UGLfo::new(*wave, *rate, *mode, *duty, *min, *max)),
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::HighHat { seed } => Box::new(UGHighHat::new(*seed)),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
@@ -265,7 +268,7 @@ impl UGFacade {
         2
     }
 
-    fn default_lfo_freq() -> Sample {
+    fn default_lfo_rate() -> Sample {
         1.0
     }
 

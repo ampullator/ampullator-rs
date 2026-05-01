@@ -1126,8 +1126,9 @@ pub enum LfoWave {
 /// inputs at audio or control rate.
 pub struct UGLfo {
     wave: LfoWave,
+    mode: UnitRate,
     phase: Sample,
-    default_freq: Sample,
+    default_rate: Sample,
     default_duty: Sample,
     default_min: Sample,
     default_max: Sample,
@@ -1136,15 +1137,17 @@ pub struct UGLfo {
 impl UGLfo {
     pub fn new(
         wave: LfoWave,
-        freq: Sample,
+        rate: Sample,
+        mode: UnitRate,
         duty: Sample,
         min: Sample,
         max: Sample,
     ) -> Self {
         Self {
             wave,
+            mode,
             phase: 0.0,
-            default_freq: freq,
+            default_rate: rate,
             default_duty: duty,
             default_min: min,
             default_max: max,
@@ -1161,7 +1164,7 @@ impl UGen for UGLfo {
         static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
         NAMES.get_or_init(|| {
             vec![
-                "freq".to_string(),
+                "rate".to_string(),
                 "duty".to_string(),
                 "min".to_string(),
                 "max".to_string(),
@@ -1176,7 +1179,7 @@ impl UGen for UGLfo {
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         match input_name {
-            "freq" => Some(self.default_freq),
+            "rate" => Some(self.default_rate),
             "duty" => Some(self.default_duty),
             "min" => Some(self.default_min),
             "max" => Some(self.default_max),
@@ -1186,9 +1189,10 @@ impl UGen for UGLfo {
 
     fn describe_config(&self) -> Option<String> {
         Some(format!(
-            "wave = {:?}, freq = {}, duty = {}, min = {}, max = {}",
+            "wave = {:?}, rate = {}, mode = {:?}, duty = {}, min = {}, max = {}",
             self.wave,
-            self.default_freq,
+            self.default_rate,
+            self.mode,
             self.default_duty,
             self.default_min,
             self.default_max
@@ -1202,7 +1206,7 @@ impl UGen for UGLfo {
         sample_rate: f32,
         _time_sample: usize,
     ) {
-        let freq_in = inputs.first().copied().unwrap_or(&[]);
+        let rate_in = inputs.first().copied().unwrap_or(&[]);
         let duty_in = inputs.get(1).copied().unwrap_or(&[]);
         let min_in = inputs.get(2).copied().unwrap_or(&[]);
         let max_in = inputs.get(3).copied().unwrap_or(&[]);
@@ -1211,17 +1215,18 @@ impl UGen for UGLfo {
         let n = wave_out.len();
         let dt = 1.0 / sample_rate;
 
-        let freq_connected = freq_in.len() >= n;
+        let rate_connected = rate_in.len() >= n;
         let duty_connected = duty_in.len() >= n;
         let min_connected = min_in.len() >= n;
         let max_connected = max_in.len() >= n;
 
         for i in 0..n {
-            let freq = if freq_connected {
-                freq_in[i]
+            let rate = if rate_connected {
+                rate_in[i]
             } else {
-                self.default_freq
+                self.default_rate
             };
+            let freq = unit_rate_to_hz(rate, self.mode, sample_rate);
             let duty = if duty_connected {
                 duty_in[i]
             } else {
@@ -1756,10 +1761,10 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_lfo_sine_a() {
-        // LFO at freq=1 Hz, sample_rate=8, buffer=8 → one full cycle
+        // LFO at rate=1 Hz, sample_rate=8, buffer=8 → one full cycle
         // Phase advances by 1/8 per sample; min=0, max=1
         let mut g = crate::graph_from_chain_expression(
-            "Const(value=1) => c1 | Lfo(wave=Sine, freq=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:freq lfo1 | lfo1 ->wave:in r1",
+            "Const(value=1) => c1 | Lfo(wave=Sine, rate=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:rate lfo1 | lfo1 ->wave:in r1",
             8.0,
             8,
         )
@@ -1774,9 +1779,9 @@ mod tests {
     //--------------------------------------------------------------------------
     #[test]
     fn test_lfo_triangle_a() {
-        // Triangle at freq=1, duty=0.5 → symmetric triangle, min=0, max=1
+        // Triangle at rate=1, duty=0.5 → symmetric triangle, min=0, max=1
         let mut g = crate::graph_from_chain_expression(
-            "Const(value=1) => c1 | Lfo(wave=Triangle, freq=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:freq lfo1 | lfo1 ->wave:in r1",
+            "Const(value=1) => c1 | Lfo(wave=Triangle, rate=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:rate lfo1 | lfo1 ->wave:in r1",
             8.0,
             8,
         )
@@ -1793,7 +1798,7 @@ mod tests {
     fn test_lfo_triangle_sawtooth() {
         // Triangle with duty=1.0 → rising sawtooth, min=0, max=1
         let mut g = crate::graph_from_chain_expression(
-            "Const(value=1) => c1 | Const(value=1) => duty | Lfo(wave=Triangle, freq=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:freq lfo1 | duty ->:duty lfo1 | lfo1 ->wave:in r1",
+            "Const(value=1) => c1 | Const(value=1) => duty | Lfo(wave=Triangle, rate=1) => lfo1 | Round(places=2, mode=Round) => r1 | c1 ->:rate lfo1 | duty ->:duty lfo1 | lfo1 ->wave:in r1",
             8.0,
             8,
         )
@@ -1812,7 +1817,7 @@ mod tests {
         // Phase increments first: phases are [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 0.0]
         // → 3 high, 4 low, then wraps and 1 high
         let mut g = crate::graph_from_chain_expression(
-            "Const(value=1) => c1 | Lfo(wave=Square, freq=1) => lfo1 | c1 ->:freq lfo1",
+            "Const(value=1) => c1 | Lfo(wave=Square, rate=1) => lfo1 | c1 ->:rate lfo1",
             8.0,
             8,
         )
