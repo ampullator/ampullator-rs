@@ -193,7 +193,9 @@ impl UGFacade {
                 *seed,
             )),
             UGFacade::EnvAR {} => Box::new(UGEnvAR::new()),
-            UGFacade::Fade { channels, level } => Box::new(UGFade::new(*channels, *level as f32)),
+            UGFacade::Fade { channels, level } => {
+                Box::new(UGFade::new(*channels, *level as f32))
+            }
             UGFacade::PulseSelect {
                 duration_values,
                 duration_mode,
