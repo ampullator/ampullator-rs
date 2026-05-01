@@ -621,15 +621,15 @@ impl ChainParser {
                                 format!("Unknown node: '{current}'")
                             })?;
                             let ugen = facade.to_ugen();
-                            ugen.get_n_outputs(2)
-                                .ok_or_else(|| format!(
+                            let outputs = ugen.output_names();
+                            if outputs.len() <= 1 {
+                                return Err(format!(
                                     "'&>' requires source '{current}' to have more than \
                                      one output, but it has {} output(s); use '->' instead",
-                                    ugen.output_names().len()
-                                ))?
-                                .into_iter()
-                                .map(|s| s.to_string())
-                                .collect()
+                                    outputs.len()
+                                ));
+                            }
+                            outputs.iter().cloned().collect()
                         };
                         let dst_inputs: Vec<String> = {
                             let facade =
@@ -637,16 +637,16 @@ impl ChainParser {
                                     format!("Unknown node: '{next}'")
                                 })?;
                             let ugen = facade.to_ugen();
-                            let inputs = ugen.input_names();
-                            if inputs.len() < src_outputs.len() {
-                                return Err(format!(
+                            ugen.get_n_inputs(src_outputs.len())
+                                .ok_or_else(|| format!(
                                     "'&>' destination '{next}' has {} input(s), but \
                                      source '{current}' has {} outputs",
-                                    inputs.len(),
+                                    ugen.input_names().len(),
                                     src_outputs.len()
-                                ));
-                            }
-                            inputs.iter().cloned().collect()
+                                ))?
+                                .into_iter()
+                                .map(|s| s.to_string())
+                                .collect()
                         };
                         for (i, src_port) in src_outputs.iter().enumerate() {
                             self.connect.push((

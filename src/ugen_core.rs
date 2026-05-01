@@ -41,13 +41,14 @@ pub trait UGen {
     fn first_output(&self) -> Option<&str> {
         self.output_names().first().map(|s| s.as_str())
     }
-    /// Return all output names if this UGen has at least `n` outputs, or `None`
-    /// if it has fewer than `n`.  Used by the `&>` multi-signal operator to
-    /// validate that the source has enough outputs before wiring them in bulk.
-    fn get_n_outputs(&self, n: usize) -> Option<Vec<&str>> {
-        let outputs = self.output_names();
-        if outputs.len() >= n {
-            Some(outputs.iter().map(|s| s.as_str()).collect())
+    /// Return the first `n` input names if this UGen has at least `n` inputs,
+    /// or `None` if it has fewer than `n`.  Used by the `&>` multi-signal
+    /// operator to validate that the destination has enough inputs before
+    /// wiring source outputs in bulk.
+    fn get_n_inputs(&self, n: usize) -> Option<Vec<&str>> {
+        let inputs = self.input_names();
+        if inputs.len() >= n {
+            Some(inputs[..n].iter().map(|s| s.as_str()).collect())
         } else {
             None
         }
