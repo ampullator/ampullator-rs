@@ -7,17 +7,27 @@
 /// # Grammar (informal)
 ///
 /// ```text
-/// chain        = segment ("|" segment)*
-/// segment      = addmul_expr
-/// addmul_expr  = arrow_chain (("+" | "*" | "^") arrow_chain)*
-/// arrow_chain  = named_atom ("->" port_spec? named_atom)*
-/// named_atom   = atom ("=>" Ident)?
-/// atom         = ugen_call | Ident | Number | "(" addmul_expr ")"
-/// ugen_call    = Ident ("(" args ")")?
-/// args         = (arg_pair ("," arg_pair)*)?
-/// arg_pair     = Ident "=" (Number | Ident)
-/// port_spec    = (Ident)? ":" (Ident)?
+/// chain            = segment ("|" segment)*
+/// segment          = addmul_expr
+/// addmul_expr      = arrow_chain (("+" | "*" | "^") arrow_chain)*
+/// arrow_chain      = named_atom (("->" port_spec? | "&>" multi_port_spec?) named_atom)*
+/// named_atom       = atom ("=>" Ident)?
+/// atom             = ugen_call | Ident | Number | "(" addmul_expr ")"
+/// ugen_call        = Ident ("(" args ")")?
+/// args             = (arg_pair ("," arg_pair)*)?
+/// arg_pair         = Ident "=" (Number | Ident)
+/// port_spec        = (Ident)? ":" (Ident)?
+/// multi_port_spec  = portpair ("," portpair)*
+/// portpair         = (Ident)? ":" (Ident)?
 /// ```
+///
+/// The `&>` operator connects multiple outputs of the source to multiple inputs
+/// of the destination in contiguous order.  Without a port spec all outputs of
+/// the source (which must have more than one) are connected to the first N
+/// inputs of the destination.  With an explicit `multi_port_spec` each pair
+/// `src_out:dst_in` is connected individually; omitting the output name in a
+/// pair defaults to the n-th contiguous output of the source, and omitting the
+/// input name defaults to the n-th contiguous input of the destination.
 use std::collections::HashMap;
 
 use crate::graph_facade::Facade;
@@ -28,21 +38,22 @@ use crate::graph_facade::UGFacade;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Pipe,          // |
-    Arrow,         // ->
-    FatArrow,      // =>
-    Colon,         // :
-    LParen,        // (
-    RParen,        // )
-    Comma,         // ,
-    Assign,        // =
-    Plus,          // +
-    Star,          // *
-    Caret,         // ^
-    LBracket,      // [
-    RBracket,      // ]
-    Ident(String), // identifier
-    Number(f32),   // numeric literal
+    Pipe,             // |
+    Arrow,            // ->
+    FatArrow,         // =>
+    AmpersandArrow,   // &>
+    Colon,            // :
+    LParen,           // (
+    RParen,           // )
+    Comma,            // ,
+    Assign,           // =
+    Plus,             // +
+    Star,             // *
+    Caret,            // ^
+    LBracket,         // [
+    RBracket,         // ]
+    Ident(String),    // identifier
+    Number(f32),      // numeric literal
 }
 
 fn tokenize(input: &str) -> Result<Vec<Token>, String> {
@@ -97,6 +108,10 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
             }
             '-' if i + 1 < chars.len() && chars[i + 1] == '>' => {
                 tokens.push(Token::Arrow);
+                i += 2;
+            }
+            '&' if i + 1 < chars.len() && chars[i + 1] == '>' => {
+                tokens.push(Token::AmpersandArrow);
                 i += 2;
             }
             '=' if i + 1 < chars.len() && chars[i + 1] == '>' => {
@@ -443,6 +458,53 @@ impl ChainParser {
         }
     }
 
+    /// Returns `true` if the token stream at the current position starts with a
+    /// port-pair `(Ident)? ":"`.  Used to detect whether a `multi_port_spec`
+    /// follows `&>` (or a comma within one).
+    fn peek_is_port_pair(&self) -> bool {
+        matches!(
+            (self.peek(), self.peek_at(1)),
+            (Some(Token::Colon), _) | (Some(Token::Ident(_)), Some(Token::Colon))
+        )
+    }
+
+    /// Parse an optional sequence of port-pair specs that follows `&>`.
+    ///
+    /// Grammar: `portpair ("," portpair)*`
+    /// portpair: `(Ident)? ":" (Ident)?`
+    ///
+    /// Returns an empty `Vec` when no port spec is present (i.e. the token
+    /// stream does not start with a port-pair pattern).
+    fn parse_multi_port_spec_opt(
+        &mut self,
+    ) -> Result<Vec<(Option<String>, Option<String>)>, String> {
+        if !self.peek_is_port_pair() {
+            return Ok(Vec::new());
+        }
+        let mut pairs = Vec::new();
+        loop {
+            let pair = self.parse_port_spec_opt()?;
+            pairs.push(pair);
+            // Continue only if the next token is ',' followed by another port pair.
+            if self.peek() == Some(&Token::Comma) && self.peek_is_port_pair_at(1) {
+                self.consume(); // consume ','
+            } else {
+                break;
+            }
+        }
+        Ok(pairs)
+    }
+
+    /// Like `peek_is_port_pair` but starting `ahead` tokens beyond the current
+    /// position.  Used to look past a comma when deciding whether to continue
+    /// parsing a `multi_port_spec`.
+    fn peek_is_port_pair_at(&self, ahead: usize) -> bool {
+        matches!(
+            (self.tokens.get(self.pos + ahead), self.tokens.get(self.pos + ahead + 1)),
+            (Some(Token::Colon), _) | (Some(Token::Ident(_)), Some(Token::Colon))
+        )
+    }
+
     /// Parse an atom.
     ///
     /// UGen calls and numeric literals return `Pending` (not yet registered).
@@ -519,27 +581,136 @@ impl ChainParser {
         }
     }
 
-    /// Parse a chain of atoms joined by `->` (with optional port specs).
-    /// Adds a connection and returns the name of the rightmost node.
+    /// Parse a chain of atoms joined by `->` or `&>` (with optional port specs).
+    /// Adds connections and returns the name of the rightmost node.
+    ///
+    /// `->` creates a single connection with an optional `port_spec`.
+    /// `&>` creates multiple connections (one per output of the source) with an
+    /// optional `multi_port_spec`.  When no port spec follows `&>` the source
+    /// must have more than one output; all source outputs are connected to the
+    /// first N inputs of the destination in order.
     fn parse_arrow_chain(&mut self) -> Result<String, String> {
         let mut current = self.parse_named_atom()?;
 
-        while self.peek() == Some(&Token::Arrow) {
-            self.consume(); // consume '->'
-            let (src_port, dst_port) = self.parse_port_spec_opt()?;
-            let next = self.parse_named_atom()?;
+        loop {
+            match self.peek() {
+                Some(Token::Arrow) => {
+                    self.consume(); // consume '->'
+                    let (src_port, dst_port) = self.parse_port_spec_opt()?;
+                    let next = self.parse_named_atom()?;
 
-            let src_str = match src_port {
-                Some(port) => format!("{current}.{port}"),
-                None => self.default_output(&current)?,
-            };
-            let dst_str = match dst_port {
-                Some(port) => format!("{next}.{port}"),
-                None => self.default_input(&next)?,
-            };
+                    let src_str = match src_port {
+                        Some(port) => format!("{current}.{port}"),
+                        None => self.default_output(&current)?,
+                    };
+                    let dst_str = match dst_port {
+                        Some(port) => format!("{next}.{port}"),
+                        None => self.default_input(&next)?,
+                    };
 
-            self.connect.push((src_str, dst_str));
-            current = next;
+                    self.connect.push((src_str, dst_str));
+                    current = next;
+                }
+                Some(Token::AmpersandArrow) => {
+                    self.consume(); // consume '&>'
+                    let port_pairs = self.parse_multi_port_spec_opt()?;
+                    let next = self.parse_named_atom()?;
+
+                    if port_pairs.is_empty() {
+                        // Automatic: connect all outputs of `current` to the
+                        // first N inputs of `next` in contiguous order.
+                        let src_outputs: Vec<String> = {
+                            let facade = self.register.get(&current).ok_or_else(|| {
+                                format!("Unknown node: '{current}'")
+                            })?;
+                            let ugen = facade.to_ugen();
+                            let outputs = ugen.output_names();
+                            if outputs.len() <= 1 {
+                                return Err(format!(
+                                    "'&>' requires source '{current}' to have more than \
+                                     one output, but it has {} output(s); use '->' instead",
+                                    outputs.len()
+                                ));
+                            }
+                            outputs.iter().cloned().collect()
+                        };
+                        let dst_inputs: Vec<String> = {
+                            let facade =
+                                self.register.get(&next).ok_or_else(|| {
+                                    format!("Unknown node: '{next}'")
+                                })?;
+                            let ugen = facade.to_ugen();
+                            let inputs = ugen.input_names();
+                            if inputs.len() < src_outputs.len() {
+                                return Err(format!(
+                                    "'&>' destination '{next}' has {} input(s), but \
+                                     source '{current}' has {} outputs",
+                                    inputs.len(),
+                                    src_outputs.len()
+                                ));
+                            }
+                            inputs.iter().cloned().collect()
+                        };
+                        for (i, src_port) in src_outputs.iter().enumerate() {
+                            self.connect.push((
+                                format!("{current}.{src_port}"),
+                                format!("{next}.{}", dst_inputs[i]),
+                            ));
+                        }
+                    } else {
+                        // Explicit port pairs: resolve omitted names from the
+                        // n-th contiguous output / input respectively.
+                        let src_outputs: Vec<String> = {
+                            let facade = self.register.get(&current).ok_or_else(|| {
+                                format!("Unknown node: '{current}'")
+                            })?;
+                            let ugen = facade.to_ugen();
+                            ugen.output_names().iter().cloned().collect()
+                        };
+                        let dst_inputs: Vec<String> = {
+                            let facade =
+                                self.register.get(&next).ok_or_else(|| {
+                                    format!("Unknown node: '{next}'")
+                                })?;
+                            let ugen = facade.to_ugen();
+                            ugen.input_names().iter().cloned().collect()
+                        };
+                        for (idx, (src_port, dst_port)) in
+                            port_pairs.iter().enumerate()
+                        {
+                            let src_str = match src_port {
+                                Some(port) => format!("{current}.{port}"),
+                                None => {
+                                    let port =
+                                        src_outputs.get(idx).ok_or_else(|| {
+                                            format!(
+                                                "'&>' source '{current}' does not have \
+                                                 an output at position {idx}"
+                                            )
+                                        })?;
+                                    format!("{current}.{port}")
+                                }
+                            };
+                            let dst_str = match dst_port {
+                                Some(port) => format!("{next}.{port}"),
+                                None => {
+                                    let port =
+                                        dst_inputs.get(idx).ok_or_else(|| {
+                                            format!(
+                                                "'&>' destination '{next}' does not have \
+                                                 an input at position {idx}"
+                                            )
+                                        })?;
+                                    format!("{next}.{port}")
+                                }
+                            };
+                            self.connect.push((src_str, dst_str));
+                        }
+                    }
+                    current = next;
+                }
+                _ => break,
+            }
         }
 
         Ok(current)
@@ -936,5 +1107,145 @@ mod tests {
         let r = Recorder::from_samples(g, None, 8);
         let out = r.get_output_by_label("total.out");
         assert_eq!(out, vec![7.0; 8]);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Multi-signal connections (&> operator)
+
+    #[test]
+    fn test_chain_ampersand_arrow_auto_no_port_spec() {
+        // Pan() has outputs out1, out2.
+        // Reverb() has inputs in_l, in_r, decay, …
+        // &> without port spec connects out1→in_l and out2→in_r.
+        let chain =
+            "Sine() -> Pan() => pan | pan &> Reverb() => rev";
+        let (reg, conn) = parse(chain);
+        assert!(reg.contains_key("pan"));
+        assert!(reg.contains_key("rev"));
+        assert!(
+            conn.contains(&("pan.out1".to_string(), "rev.in_l".to_string())),
+            "expected pan.out1 -> rev.in_l, got: {conn:?}"
+        );
+        assert!(
+            conn.contains(&("pan.out2".to_string(), "rev.in_r".to_string())),
+            "expected pan.out2 -> rev.in_r, got: {conn:?}"
+        );
+    }
+
+    #[test]
+    fn test_chain_ampersand_arrow_explicit_port_spec() {
+        // Explicit port spec: &>out1:in_l,out2:in_r
+        let chain =
+            "Sine() -> Pan() => pan | pan &>out1:in_l,out2:in_r Reverb() => rev";
+        let (reg, conn) = parse(chain);
+        assert!(reg.contains_key("pan"));
+        assert!(reg.contains_key("rev"));
+        assert!(
+            conn.contains(&("pan.out1".to_string(), "rev.in_l".to_string())),
+            "expected pan.out1 -> rev.in_l"
+        );
+        assert!(
+            conn.contains(&("pan.out2".to_string(), "rev.in_r".to_string())),
+            "expected pan.out2 -> rev.in_r"
+        );
+    }
+
+    #[test]
+    fn test_chain_ampersand_arrow_omit_src_port_spec() {
+        // Shorthand: omit src output names; they default to first N contiguous outputs.
+        // &>:in_l,:in_r is equivalent to &>out1:in_l,out2:in_r for Pan().
+        let chain =
+            "Sine() -> Pan() => pan | pan &>:in_l,:in_r Reverb() => rev";
+        let (reg, conn) = parse(chain);
+        assert!(reg.contains_key("pan"));
+        assert!(reg.contains_key("rev"));
+        assert!(
+            conn.contains(&("pan.out1".to_string(), "rev.in_l".to_string())),
+            "expected pan.out1 -> rev.in_l, got: {conn:?}"
+        );
+        assert!(
+            conn.contains(&("pan.out2".to_string(), "rev.in_r".to_string())),
+            "expected pan.out2 -> rev.in_r, got: {conn:?}"
+        );
+    }
+
+    #[test]
+    fn test_chain_ampersand_arrow_omit_dst_port_spec() {
+        // Omit destination input names; they default to first N contiguous inputs.
+        // Pan() outputs: out1, out2.  Reverb() inputs: in_l, in_r, …
+        // &>out1:,out2: connects out1→in_l and out2→in_r.
+        let chain =
+            "Sine() -> Pan() => pan | pan &>out1:,out2: Reverb() => rev";
+        let (reg, conn) = parse(chain);
+        assert!(reg.contains_key("pan"));
+        assert!(reg.contains_key("rev"));
+        assert!(
+            conn.contains(&("pan.out1".to_string(), "rev.in_l".to_string())),
+            "expected pan.out1 -> rev.in_l, got: {conn:?}"
+        );
+        assert!(
+            conn.contains(&("pan.out2".to_string(), "rev.in_r".to_string())),
+            "expected pan.out2 -> rev.in_r, got: {conn:?}"
+        );
+    }
+
+    #[test]
+    fn test_chain_ampersand_arrow_chained() {
+        // Chain multiple &> in sequence.
+        // Pan(out1,out2) &> Reverb(in_l,in_r) &> Fade(channel_count=2, in1,in2)
+        let chain = "Sine() -> Pan() => pan \
+                     | pan &> Reverb() => rev \
+                     | rev &> Fade(channel_count=2) => fd";
+        let (reg, conn) = parse(chain);
+        assert!(reg.contains_key("pan"));
+        assert!(reg.contains_key("rev"));
+        assert!(reg.contains_key("fd"));
+        // pan -> rev
+        assert!(conn.contains(&("pan.out1".to_string(), "rev.in_l".to_string())));
+        assert!(conn.contains(&("pan.out2".to_string(), "rev.in_r".to_string())));
+        // rev outputs: out_l, out_r; Fade(channel_count=2) inputs: in1, in2, level
+        assert!(conn.contains(&("rev.out_l".to_string(), "fd.in1".to_string())));
+        assert!(conn.contains(&("rev.out_r".to_string(), "fd.in2".to_string())));
+    }
+
+    #[test]
+    fn test_chain_ampersand_arrow_error_single_output() {
+        // Const() has only one output ('out'); &> should be rejected.
+        let result = parse_chain("Const(value=1.0) => c | c &> Reverb()");
+        assert!(
+            result.is_err(),
+            "expected error for single-output source with &>"
+        );
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("more than one output"),
+            "error message should mention 'more than one output', got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_chain_ampersand_arrow_error_not_enough_inputs() {
+        // Pan() has 2 outputs; Sine() has 0 inputs → too few inputs for &>.
+        // Const has 0 inputs.
+        let result = parse_chain("Sine() -> Pan() => pan | pan &> Const(value=1.0)");
+        assert!(
+            result.is_err(),
+            "expected error when destination has fewer inputs than source has outputs"
+        );
+        let msg = result.unwrap_err();
+        assert!(
+            msg.contains("input"),
+            "error message should mention inputs, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_chain_ampersand_arrow_tokenizer() {
+        // Ensure '&>' is tokenized correctly.
+        let tokens = tokenize("a &> b").unwrap();
+        assert!(
+            tokens.contains(&Token::AmpersandArrow),
+            "expected AmpersandArrow token"
+        );
     }
 }

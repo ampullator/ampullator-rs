@@ -74,6 +74,37 @@ noise ->out:in lpf
 ```
 
 
+### Multi-signal connections (`&>`)
+
+`&>` connects **all outputs** of the left node to the **first N inputs** of the right node in contiguous order.  The source must have more than one output (otherwise use `->` instead).
+
+```
+Sine() -> Pan() => pan | pan &> Reverb() => rev
+# Connects pan.out1 -> rev.in_l and pan.out2 -> rev.in_r
+```
+
+An optional **multi-port spec** controls which ports are wired. It is a comma-separated list of `src_out:dst_in` pairs placed between `&>` and the destination node. Either side of `:` may be omitted; an omitted output defaults to the n-th contiguous output and an omitted input defaults to the n-th contiguous input.
+
+```
+# fully explicit
+pan &>out1:in_l,out2:in_r Reverb()
+
+# omit source outputs (default to first N outputs of pan)
+pan &>:in_l,:in_r Reverb()
+
+# omit destination inputs (default to first N inputs of Reverb)
+pan &>out1:,out2: Reverb()
+```
+
+Multiple `&>` operators can be chained:
+
+```
+Sine() -> Pan() => pan
+    | pan &> Reverb() => rev
+    | rev &> Fade(channel_count=2) => fd
+```
+
+
 ### Numeric literals
 
 A bare number creates an implicit constant node. This is shorthand for `Const(value=…)`.
