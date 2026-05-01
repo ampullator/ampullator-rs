@@ -46,14 +46,18 @@ pub enum UGFacade {
     },
     EnvAR {},
     Fade {
-        #[serde(default = "UGFacade::default_channel_count")]
-        channel_count: usize,
+        #[serde(default = "UGFacade::default_channels")]
+        channels: usize,
+        #[serde(default = "UGFacade::default_level")]
+        level: f64,
     },
     Floor {},
     Lfo {
         wave: LfoWave,
-        #[serde(default = "UGFacade::default_lfo_freq")]
-        freq: Sample,
+        #[serde(default = "UGFacade::default_lfo_rate")]
+        rate: Sample,
+        #[serde(default = "UGFacade::default_unit_rate_hz")]
+        mode: UnitRate,
         #[serde(default = "UGFacade::default_duty")]
         duty: Sample,
         #[serde(default = "UGFacade::default_lfo_min")]
@@ -155,11 +159,12 @@ impl UGFacade {
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Lfo {
                 wave,
-                freq,
+                rate,
+                mode,
                 duty,
                 min,
                 max,
-            } => Box::new(UGLfo::new(*wave, *freq, *duty, *min, *max)),
+            } => Box::new(UGLfo::new(*wave, *rate, *mode, *duty, *min, *max)),
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::HighHat { seed } => Box::new(UGHighHat::new(*seed)),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
@@ -191,7 +196,9 @@ impl UGFacade {
                 *seed,
             )),
             UGFacade::EnvAR {} => Box::new(UGEnvAR::new()),
-            UGFacade::Fade { channel_count } => Box::new(UGFade::new(*channel_count)),
+            UGFacade::Fade { channels, level } => {
+                Box::new(UGFade::new(*channels, *level as f32))
+            }
             UGFacade::PulseSelect {
                 duration_values,
                 duration_mode,
@@ -245,8 +252,12 @@ impl UGFacade {
         2
     }
 
-    fn default_channel_count() -> usize {
+    fn default_channels() -> usize {
         1
+    }
+
+    fn default_level() -> f64 {
+        1.0
     }
 
     fn default_mix_input_count() -> usize {
@@ -257,7 +268,7 @@ impl UGFacade {
         2
     }
 
-    fn default_lfo_freq() -> Sample {
+    fn default_lfo_rate() -> Sample {
         1.0
     }
 
