@@ -38,22 +38,22 @@ use crate::graph_facade::UGFacade;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Pipe,             // |
-    Arrow,            // ->
-    FatArrow,         // =>
-    SnakeArrow,       // &>
-    Colon,            // :
-    LParen,           // (
-    RParen,           // )
-    Comma,            // ,
-    Assign,           // =
-    Plus,             // +
-    Star,             // *
-    Caret,            // ^
-    LBracket,         // [
-    RBracket,         // ]
-    Ident(String),    // identifier
-    Number(f32),      // numeric literal
+    Pipe,          // |
+    Arrow,         // ->
+    FatArrow,      // =>
+    SnakeArrow,    // &>
+    Colon,         // :
+    LParen,        // (
+    RParen,        // )
+    Comma,         // ,
+    Assign,        // =
+    Plus,          // +
+    Star,          // *
+    Caret,         // ^
+    LBracket,      // [
+    RBracket,      // ]
+    Ident(String), // identifier
+    Number(f32),   // numeric literal
 }
 
 fn tokenize(input: &str) -> Result<Vec<Token>, String> {
@@ -472,9 +472,7 @@ impl ChainParser {
     ///
     /// Returns an empty `Vec` when no port spec is present (i.e. the token
     /// stream does not start with a port-pair pattern).
-    fn parse_multi_port_spec_opt(
-        &mut self,
-    ) -> Result<Vec<(Option<String>, Option<String>)>, String> {
+    fn parse_multi_port_spec_opt(&mut self) -> Result<PortPairs, String> {
         if !self.peek_is_port_pair() {
             return Ok(Vec::new());
         }
@@ -497,7 +495,10 @@ impl ChainParser {
     /// parsing a `multi_port_spec`.
     fn peek_is_port_pair_at(&self, ahead: usize) -> bool {
         matches!(
-            (self.tokens.get(self.pos + ahead), self.tokens.get(self.pos + ahead + 1)),
+            (
+                self.tokens.get(self.pos + ahead),
+                self.tokens.get(self.pos + ahead + 1)
+            ),
             (Some(Token::Colon), _) | (Some(Token::Ident(_)), Some(Token::Colon))
         )
     }
@@ -617,9 +618,10 @@ impl ChainParser {
                         // Automatic: connect all outputs of `current` to the
                         // first N inputs of `next` in contiguous order.
                         let src_outputs: Vec<String> = {
-                            let facade = self.register.get(&current).ok_or_else(|| {
-                                format!("Unknown node: '{current}'")
-                            })?;
+                            let facade = self
+                                .register
+                                .get(&current)
+                                .ok_or_else(|| format!("Unknown node: '{current}'"))?;
                             let ugen = facade.to_ugen();
                             let outputs = ugen.output_names();
                             if outputs.len() <= 1 {
@@ -629,15 +631,16 @@ impl ChainParser {
                                     outputs.len()
                                 ));
                             }
-                            outputs.iter().cloned().collect()
+                            outputs.to_vec()
                         };
-                        let dst_inputs: Vec<String> = {
-                            let facade =
-                                self.register.get(&next).ok_or_else(|| {
-                                    format!("Unknown node: '{next}'")
-                                })?;
-                            let ugen = facade.to_ugen();
-                            ugen.get_n_inputs(src_outputs.len())
+                        let dst_inputs: Vec<String> =
+                            {
+                                let facade = self
+                                    .register
+                                    .get(&next)
+                                    .ok_or_else(|| format!("Unknown node: '{next}'"))?;
+                                let ugen = facade.to_ugen();
+                                ugen.get_n_inputs(src_outputs.len())
                                 .ok_or_else(|| format!(
                                     "'&>' destination '{next}' has {} input(s), but \
                                      source '{current}' has {} outputs",
@@ -647,7 +650,7 @@ impl ChainParser {
                                 .into_iter()
                                 .map(|s| s.to_string())
                                 .collect()
-                        };
+                            };
                         for (i, src_port) in src_outputs.iter().enumerate() {
                             self.connect.push((
                                 format!("{current}.{src_port}"),
@@ -658,46 +661,43 @@ impl ChainParser {
                         // Explicit port pairs: resolve omitted names from the
                         // n-th contiguous output / input respectively.
                         let src_outputs: Vec<String> = {
-                            let facade = self.register.get(&current).ok_or_else(|| {
-                                format!("Unknown node: '{current}'")
-                            })?;
+                            let facade = self
+                                .register
+                                .get(&current)
+                                .ok_or_else(|| format!("Unknown node: '{current}'"))?;
                             let ugen = facade.to_ugen();
-                            ugen.output_names().iter().cloned().collect()
+                            ugen.output_names().to_vec()
                         };
                         let dst_inputs: Vec<String> = {
-                            let facade =
-                                self.register.get(&next).ok_or_else(|| {
-                                    format!("Unknown node: '{next}'")
-                                })?;
+                            let facade = self
+                                .register
+                                .get(&next)
+                                .ok_or_else(|| format!("Unknown node: '{next}'"))?;
                             let ugen = facade.to_ugen();
-                            ugen.input_names().iter().cloned().collect()
+                            ugen.input_names().to_vec()
                         };
-                        for (idx, (src_port, dst_port)) in
-                            port_pairs.iter().enumerate()
-                        {
+                        for (idx, (src_port, dst_port)) in port_pairs.iter().enumerate() {
                             let src_str = match src_port {
                                 Some(port) => format!("{current}.{port}"),
                                 None => {
-                                    let port =
-                                        src_outputs.get(idx).ok_or_else(|| {
-                                            format!(
-                                                "'&>' source '{current}' does not have \
+                                    let port = src_outputs.get(idx).ok_or_else(|| {
+                                        format!(
+                                            "'&>' source '{current}' does not have \
                                                  an output at position {idx}"
-                                            )
-                                        })?;
+                                        )
+                                    })?;
                                     format!("{current}.{port}")
                                 }
                             };
                             let dst_str = match dst_port {
                                 Some(port) => format!("{next}.{port}"),
                                 None => {
-                                    let port =
-                                        dst_inputs.get(idx).ok_or_else(|| {
-                                            format!(
-                                                "'&>' destination '{next}' does not have \
+                                    let port = dst_inputs.get(idx).ok_or_else(|| {
+                                        format!(
+                                            "'&>' destination '{next}' does not have \
                                                  an input at position {idx}"
-                                            )
-                                        })?;
+                                        )
+                                    })?;
                                     format!("{next}.{port}")
                                 }
                             };
@@ -780,6 +780,8 @@ impl ChainParser {
 
 // ---------------------------------------------------------------------------
 // Public API
+
+type PortPairs = Vec<(Option<String>, Option<String>)>;
 
 pub type ChainResult = (HashMap<String, Facade>, Vec<(String, String)>);
 
@@ -1114,8 +1116,7 @@ mod tests {
         // Pan() has outputs out1, out2.
         // Reverb() has inputs in_l, in_r, decay, …
         // &> without port spec connects out1→in_l and out2→in_r.
-        let chain =
-            "Sine() -> Pan() => pan | pan &> Reverb() => rev";
+        let chain = "Sine() -> Pan() => pan | pan &> Reverb() => rev";
         let (reg, conn) = parse(chain);
         assert!(reg.contains_key("pan"));
         assert!(reg.contains_key("rev"));
@@ -1132,8 +1133,7 @@ mod tests {
     #[test]
     fn test_chain_ampersand_arrow_explicit_port_spec() {
         // Explicit port spec: &>out1:in_l,out2:in_r
-        let chain =
-            "Sine() -> Pan() => pan | pan &>out1:in_l,out2:in_r Reverb() => rev";
+        let chain = "Sine() -> Pan() => pan | pan &>out1:in_l,out2:in_r Reverb() => rev";
         let (reg, conn) = parse(chain);
         assert!(reg.contains_key("pan"));
         assert!(reg.contains_key("rev"));
@@ -1151,8 +1151,7 @@ mod tests {
     fn test_chain_ampersand_arrow_omit_src_port_spec() {
         // Shorthand: omit src output names; they default to first N contiguous outputs.
         // &>:in_l,:in_r is equivalent to &>out1:in_l,out2:in_r for Pan().
-        let chain =
-            "Sine() -> Pan() => pan | pan &>:in_l,:in_r Reverb() => rev";
+        let chain = "Sine() -> Pan() => pan | pan &>:in_l,:in_r Reverb() => rev";
         let (reg, conn) = parse(chain);
         assert!(reg.contains_key("pan"));
         assert!(reg.contains_key("rev"));
@@ -1171,8 +1170,7 @@ mod tests {
         // Omit destination input names; they default to first N contiguous inputs.
         // Pan() outputs: out1, out2.  Reverb() inputs: in_l, in_r, …
         // &>out1:,out2: connects out1→in_l and out2→in_r.
-        let chain =
-            "Sine() -> Pan() => pan | pan &>out1:,out2: Reverb() => rev";
+        let chain = "Sine() -> Pan() => pan | pan &>out1:,out2: Reverb() => rev";
         let (reg, conn) = parse(chain);
         assert!(reg.contains_key("pan"));
         assert!(reg.contains_key("rev"));
