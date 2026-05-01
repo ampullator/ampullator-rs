@@ -462,10 +462,7 @@ impl ChainParser {
     /// port-pair `(Ident)? ":"`.  Used to detect whether a `multi_port_spec`
     /// follows `&>` (or a comma within one).
     fn peek_is_port_pair(&self) -> bool {
-        matches!(
-            (self.peek(), self.peek_at(1)),
-            (Some(Token::Colon), _) | (Some(Token::Ident(_)), Some(Token::Colon))
-        )
+        self.peek_is_port_pair_at(0)
     }
 
     /// Parse an optional sequence of port-pair specs that follows `&>`.
