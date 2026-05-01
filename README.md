@@ -99,7 +99,7 @@ pan &>out1:,out2: Reverb()
 Multiple `&>` operators can be chained:
 
 ```
-Sine() -> Pan() &> Reverb() &> Fade(channel_count=2) => fd
+Sine() -> Pan() &> Reverb() &> Fade(channels=2) => fd
 ```
 
 
@@ -187,7 +187,7 @@ cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metr
 On MacOS with `sox` `play`:
 
 ```bash
-cargo run --bin ampullator-record -- "Sine() => s -> Pan() => p &> Fade(channel_count=2) | 220 ->:freq s | Lfo(freq=0.5, wave=Triangle) ->:pan p" --duration 4 | play -
+cargo run --bin ampullator-record -- "Sine() => s -> Pan() => p &> Fade(channels=2) | 220 ->:freq s | Lfo(freq=0.5, wave=Triangle) ->:pan p" --duration 4 | play -
 
 cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | play -
 ```

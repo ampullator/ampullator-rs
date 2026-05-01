@@ -746,28 +746,30 @@ impl UGen for UGMixLinear {
 /// The gain formula is identical to the one used by `UGMixLinear`:
 /// `gain = 1000^(level - 1)`, clamped to `0` when `level ≤ 0`.
 pub struct UGFade {
-    channel_count: usize,
+    channels: usize,
+    level: Sample,
     input_refs: Vec<String>,
     output_refs: Vec<String>,
 }
 
 impl UGFade {
-    pub fn new(channel_count: usize) -> Self {
-        if channel_count < 1 {
+    pub fn new(channels: usize, level: Sample) -> Self {
+        if channels < 1 {
             panic!("Channel count should be at least 1");
         }
-        let mut input_labels: Vec<String> = Vec::with_capacity(channel_count + 1);
-        for i in 1..=channel_count {
+        let mut input_labels: Vec<String> = Vec::with_capacity(channels + 1);
+        for i in 1..=channels {
             input_labels.push(format!("in{i}"));
         }
         input_labels.push("level".to_string());
         let input_refs = input_labels;
 
         let output_refs: Vec<String> =
-            (1..=channel_count).map(|i| format!("out{i}")).collect();
+            (1..=channels).map(|i| format!("out{i}")).collect();
 
         Self {
-            channel_count,
+            channels,
+            level,
             input_refs,
             output_refs,
         }
@@ -776,7 +778,7 @@ impl UGFade {
 
 impl Default for UGFade {
     fn default() -> Self {
-        Self::new(1)
+        Self::new(1, 1.0)
     }
 }
 
@@ -795,7 +797,7 @@ impl UGen for UGFade {
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         if input_name == "level" {
-            Some(1.0)
+            Some(self.level)
         } else {
             None
         }
@@ -812,13 +814,13 @@ impl UGen for UGFade {
             Some(out) => out.len(),
             None => return,
         };
-        // Input layout: in1…inN occupy indices 0..channel_count, level is at channel_count.
-        let level_input_index = self.channel_count;
+        // Input layout: in1…inN occupy indices 0..channels, level is at channels.
+        let level_input_index = self.channels;
         let in_level = inputs.get(level_input_index).copied().unwrap_or(&[]);
 
         // Fast paths for the most common configurations avoid outer-loop overhead.
         // In all paths gain is computed once per sample, then applied across channels.
-        if self.channel_count == 1 {
+        if self.channels == 1 {
             let in_sig = inputs.first().copied().unwrap_or(&[]);
             let out = &mut outputs[0];
             for i in 0..n {
@@ -829,13 +831,13 @@ impl UGen for UGFade {
             return;
         }
 
-        if self.channel_count == 2 {
+        if self.channels == 2 {
             let (out01, _) = outputs.split_at_mut(2);
             let in0 = inputs.first().copied().unwrap_or(&[]);
             let in1 = inputs.get(1).copied().unwrap_or(&[]);
             #[allow(clippy::needless_range_loop)]
             for i in 0..n {
-                let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
+                let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(self.level));
                 out01[0][i] = in0.get(i).copied().unwrap_or(0.0) * gain;
                 out01[1][i] = in1.get(i).copied().unwrap_or(0.0) * gain;
             }
@@ -843,8 +845,8 @@ impl UGen for UGFade {
         }
 
         for i in 0..n {
-            let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(1.0));
-            for (ch, out) in outputs.iter_mut().enumerate().take(self.channel_count) {
+            let gain = amplitude_to_gain(in_level.get(i).copied().unwrap_or(self.level));
+            for (ch, out) in outputs.iter_mut().enumerate().take(self.channels) {
                 let x = inputs
                     .get(ch)
                     .copied()
@@ -1964,7 +1966,7 @@ mod tests {
         // level=1 → gain = 1000^0 = 1.0 → signal unchanged
         let mut g = crate::graph_from_chain_expression(
             "Const(value=0.5) => sig | Const(value=1) => lv \
-             | Fade(channel_count=1) => fd \
+             | Fade(channels=1) => fd \
              | sig ->:in1 fd | lv ->:level fd",
             120.0,
             8,
@@ -1983,7 +1985,7 @@ mod tests {
         // level=0 → gain = 0 → silence
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => sig | Const(value=0) => lv \
-             | Fade(channel_count=1) => fd \
+             | Fade(channels=1) => fd \
              | sig ->:in1 fd | lv ->:level fd",
             120.0,
             8,
@@ -2002,7 +2004,7 @@ mod tests {
         // level=0.5 → gain = 1000^(-0.5) ≈ 0.03162
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => sig | Const(value=0.5) => lv \
-             | Fade(channel_count=1) => fd \
+             | Fade(channels=1) => fd \
              | Round(places=3, mode=Round) => r \
              | sig ->:in1 fd | lv ->:level fd \
              | fd ->out1:in r",
@@ -2024,7 +2026,7 @@ mod tests {
         // Two channels scaled by the same level; channels remain independent
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => s1 | Const(value=0.5) => s2 | Const(value=1) => lv \
-             | Fade(channel_count=2) => fd \
+             | Fade(channels=2) => fd \
              | s1 ->:in1 fd | s2 ->:in2 fd | lv ->:level fd",
             120.0,
             8,

@@ -1187,10 +1187,10 @@ mod tests {
     #[test]
     fn test_chain_ampersand_arrow_chained() {
         // Chain multiple &> in sequence.
-        // Pan(out1,out2) &> Reverb(in_l,in_r) &> Fade(channel_count=2, in1,in2)
+        // Pan(out1,out2) &> Reverb(in_l,in_r) &> Fade(channels=2, in1,in2)
         let chain = "Sine() -> Pan() => pan \
                      | pan &> Reverb() => rev \
-                     | rev &> Fade(channel_count=2) => fd";
+                     | rev &> Fade(channels=2) => fd";
         let (reg, conn) = parse(chain);
         assert!(reg.contains_key("pan"));
         assert!(reg.contains_key("rev"));
@@ -1198,7 +1198,7 @@ mod tests {
         // pan -> rev
         assert!(conn.contains(&("pan.out1".to_string(), "rev.in_l".to_string())));
         assert!(conn.contains(&("pan.out2".to_string(), "rev.in_r".to_string())));
-        // rev outputs: out_l, out_r; Fade(channel_count=2) inputs: in1, in2, level
+        // rev outputs: out_l, out_r; Fade(channels=2) inputs: in1, in2, level
         assert!(conn.contains(&("rev.out_l".to_string(), "fd.in1".to_string())));
         assert!(conn.contains(&("rev.out_r".to_string(), "fd.in2".to_string())));
     }

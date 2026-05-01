@@ -99,7 +99,7 @@ pan &>out1:,out2: Reverb()
 Multiple `&>` operators can be chained:
 
 ```
-Sine() -> Pan() &> Reverb() &> Fade(channel_count=2) => fd
+Sine() -> Pan() &> Reverb() &> Fade(channels=2) => fd
 ```
 
 

@@ -46,8 +46,10 @@ pub enum UGFacade {
     },
     EnvAR {},
     Fade {
-        #[serde(default = "UGFacade::default_channel_count")]
-        channel_count: usize,
+        #[serde(default = "UGFacade::default_channels")]
+        channels: usize,
+        #[serde(default = "UGFacade::default_level")]
+        level: f64,
     },
     Floor {},
     Lfo {
@@ -191,7 +193,7 @@ impl UGFacade {
                 *seed,
             )),
             UGFacade::EnvAR {} => Box::new(UGEnvAR::new()),
-            UGFacade::Fade { channel_count } => Box::new(UGFade::new(*channel_count)),
+            UGFacade::Fade { channels, level } => Box::new(UGFade::new(*channels, *level as f32)),
             UGFacade::PulseSelect {
                 duration_values,
                 duration_mode,
@@ -245,8 +247,12 @@ impl UGFacade {
         2
     }
 
-    fn default_channel_count() -> usize {
+    fn default_channels() -> usize {
         1
+    }
+
+    fn default_level() -> f64 {
+        1.0
     }
 
     fn default_mix_input_count() -> usize {
