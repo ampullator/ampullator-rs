@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use ampullator::{GenGraph, UGLowPass, UGSine, UGSum, UGWhite};
+use ampullator::{GenGraph, UGLowPass, UGSine, UGWhite};
 use clap::{Parser, ValueEnum};
 
 const DEFAULT_BUFFER_SIZE: usize = 128;
@@ -19,8 +19,6 @@ enum GraphType {
     SineChain,
     /// White-noise source passed through a series of low-pass filters
     FilteredNoise,
-    /// Sine chain and filtered-noise branch summed together
-    Mixed,
     /// Run all three graph types in sequence
     All,
 }
@@ -47,6 +45,10 @@ struct Cli {
     /// Graph topology to benchmark; defaults to running all topologies
     #[arg(long, value_enum, default_value_t = GraphType::All)]
     graph_type: GraphType,
+
+    /// Disable parallel execution (run graph types sequentially)
+    #[arg(long, default_value_t = false)]
+    no_parallel: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -83,41 +85,6 @@ fn build_filtered_noise(n: usize, sample_rate: f32, buffer_size: usize) -> GenGr
         };
         graph.connect(&src, &format!("lpf{i}.in"));
     }
-    graph
-}
-
-/// Build a graph that combines a sine chain of `n` sines with a
-/// filtered-noise branch of `n` LPFs, mixed via a two-input sum.
-/// Total node count = n + (n + 1) + 1 = 2n + 2.
-fn build_mixed(n: usize, sample_rate: f32, buffer_size: usize) -> GenGraph {
-    assert!(n >= 1);
-    let mut graph = GenGraph::new(sample_rate, buffer_size);
-
-    // Sine chain
-    for i in 0..n {
-        graph.add_node(format!("osc{i}"), Box::new(UGSine::new()));
-        if i > 0 {
-            graph.connect(&format!("osc{}.wave", i - 1), &format!("osc{i}.freq"));
-        }
-    }
-
-    // Filtered-noise chain
-    graph.add_node("noise", Box::new(UGWhite::new(None)));
-    for i in 0..n {
-        graph.add_node(format!("lpf{i}"), Box::new(UGLowPass::new(12.0)));
-        let src = if i == 0 {
-            "noise.out".to_string()
-        } else {
-            format!("lpf{}.out", i - 1)
-        };
-        graph.connect(&src, &format!("lpf{i}.in"));
-    }
-
-    // Sum
-    graph.add_node("mix", Box::new(UGSum::new(2)));
-    graph.connect(&format!("osc{}.wave", n - 1), "mix.in1");
-    graph.connect(&format!("lpf{}.out", n - 1), "mix.in2");
-
     graph
 }
 
@@ -168,33 +135,82 @@ fn level_sequence() -> impl Iterator<Item = usize> {
         .take_while(|&n| n <= MAX_NODES)
 }
 
-/// Run the benchmark for a graph type, printing rows until performed > target.
-/// Returns the rows collected.
-fn run_benchmark<F>(
+/// Bench a single level, returning a `BenchRow`.
+fn bench_level(
     label: &'static str,
-    builder: F,
+    builder: fn(usize, f32, usize) -> GenGraph,
+    level: usize,
     sample_rate: f32,
     buffer_size: usize,
     duration: f64,
-) -> Vec<BenchRow>
-where
-    F: Fn(usize, f32, usize) -> GenGraph,
-{
+) -> BenchRow {
+    let graph = builder(level, sample_rate, buffer_size);
+    let node_count = graph.len();
+    let performed = bench_graph(graph, sample_rate, buffer_size, duration);
+    BenchRow {
+        graph_type: label,
+        node_count,
+        sample_rate,
+        buffer_size,
+        target_duration: duration,
+        performed_duration: performed,
+    }
+}
+
+/// Run the benchmark for a graph type sequentially.
+fn run_benchmark_sequential(
+    label: &'static str,
+    builder: fn(usize, f32, usize) -> GenGraph,
+    sample_rate: f32,
+    buffer_size: usize,
+    duration: f64,
+) -> Vec<BenchRow> {
     let mut rows = Vec::new();
     for level in level_sequence() {
-        let graph = builder(level, sample_rate, buffer_size);
-        let node_count = graph.len();
-        let performed = bench_graph(graph, sample_rate, buffer_size, duration);
-        rows.push(BenchRow {
-            graph_type: label,
-            node_count,
-            sample_rate,
-            buffer_size,
-            target_duration: duration,
-            performed_duration: performed,
+        let row = bench_level(label, builder, level, sample_rate, buffer_size, duration);
+        let exceeded = row.performed_duration > duration;
+        rows.push(row);
+        if exceeded {
+            break;
+        }
+    }
+    rows
+}
+
+/// Run the benchmark for a graph type with levels processed in parallel
+/// chunks of `max_threads` size.
+fn run_benchmark_parallel(
+    label: &'static str,
+    builder: fn(usize, f32, usize) -> GenGraph,
+    sample_rate: f32,
+    buffer_size: usize,
+    duration: f64,
+    max_threads: usize,
+) -> Vec<BenchRow> {
+    let levels: Vec<usize> = level_sequence().collect();
+    let mut rows = Vec::new();
+    for chunk in levels.chunks(max_threads) {
+        let chunk_rows: Vec<BenchRow> = std::thread::scope(|s| {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|&level| {
+                    s.spawn(move || {
+                        bench_level(
+                            label,
+                            builder,
+                            level,
+                            sample_rate,
+                            buffer_size,
+                            duration,
+                        )
+                    })
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
         });
-        // Stop once we have exceeded real-time for this graph type
-        if performed > duration {
+        let exceeded = chunk_rows.iter().any(|r| r.performed_duration > duration);
+        rows.extend(chunk_rows);
+        if exceeded {
             break;
         }
     }
@@ -208,15 +224,15 @@ where
 fn print_header() {
     println!(
         "   {:<18} {:<6} {:<11} {:<8} {:<12} {:<14} {:<7}",
-        "Graph", "Nodes", "SampleRate", "Buffer", "Target (s)", "Performed (s)", "Ratio"
+        "Graph", "Nodes", "SampleRate", "Buffer", "Target", "Performed", "Ratio"
     );
 }
 
 fn print_row(row: &BenchRow) {
     let ratio = row.performed_duration / row.target_duration;
-    let status = if ratio >= 1.0 { "⚠️  " } else { "   " };
+    let status = if ratio >= 1.0 { "⚠️  " } else { "✅ " };
     println!(
-        "{status}{:<18} {:<6} {:<11} {:<8} {:<12.1} {:<14.4} {:<7.2}",
+        "{status}{:<18} {:<6} {:<11} {:<7} {:<7.1} {:<14.4} {:<7.2}",
         row.graph_type,
         row.node_count,
         row.sample_rate,
@@ -246,21 +262,26 @@ fn run(cli: Cli) -> Result<(), String> {
     let buf = cli.buffer_size;
     let dur = cli.duration;
 
-    type GraphBuilder = (&'static str, Box<dyn Fn(usize, f32, usize) -> GenGraph>);
-    let mut types_to_run: Vec<GraphBuilder> = Vec::new();
+    type BuildFn = fn(usize, f32, usize) -> GenGraph;
+    let mut types_to_run: Vec<(&'static str, BuildFn)> = Vec::new();
     if matches!(cli.graph_type, GraphType::SineChain | GraphType::All) {
-        types_to_run.push(("sine-chain", Box::new(build_sine_chain)));
+        types_to_run.push(("sine-chain", build_sine_chain));
     }
     if matches!(cli.graph_type, GraphType::FilteredNoise | GraphType::All) {
-        types_to_run.push(("filtered-noise", Box::new(build_filtered_noise)));
+        types_to_run.push(("filtered-noise", build_filtered_noise));
     }
-    if matches!(cli.graph_type, GraphType::Mixed | GraphType::All) {
-        types_to_run.push(("mixed", Box::new(build_mixed)));
-    }
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get() / 2)
+        .unwrap_or(1)
+        .max(1);
 
     print_header();
     for (label, builder) in &types_to_run {
-        let rows = run_benchmark(label, builder, sr, buf, dur);
+        let rows = if cli.no_parallel {
+            run_benchmark_sequential(label, *builder, sr, buf, dur)
+        } else {
+            run_benchmark_parallel(label, *builder, sr, buf, dur, max_threads)
+        };
         for row in &rows {
             print_row(row);
         }
@@ -298,15 +319,6 @@ mod tests {
             let g = build_filtered_noise(n, 44_100.0, 128);
             // 1 noise + n LPFs
             assert_eq!(g.len(), n + 1, "filtered-noise level {n}");
-        }
-    }
-
-    #[test]
-    fn test_mixed_node_count() {
-        for n in [1, 2, 4, 8] {
-            let g = build_mixed(n, 44_100.0, 128);
-            // n sines + 1 noise + n LPFs + 1 mix = 2n+2
-            assert_eq!(g.len(), 2 * n + 2, "mixed level {n}");
         }
     }
 
