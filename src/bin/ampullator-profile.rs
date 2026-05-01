@@ -158,9 +158,14 @@ fn bench_graph(
     total / BENCH_RUNS as f64
 }
 
-/// Levels to benchmark: 16, 32, 64, … doubling until exceeding MAX_NODES.
+const LEVEL_START: usize = 128;
+const LEVEL_INCREMENT: usize = 128;
+
+/// Levels to benchmark: 128, 256, 384, … incrementing until exceeding MAX_NODES.
 fn level_sequence() -> impl Iterator<Item = usize> {
-    (4..).map(|k: u32| 1usize << k).take_while(|&n| n <= MAX_NODES)
+    (0..)
+        .map(|k| LEVEL_START + k * LEVEL_INCREMENT)
+        .take_while(|&n| n <= MAX_NODES)
 }
 
 /// Run the benchmark for a graph type, printing rows until performed > target.
@@ -202,14 +207,14 @@ where
 
 fn print_header() {
     println!(
-        " {:<18} {:<6} {:<11} {:<8} {:<12} {:<14} {:<7}",
+        "   {:<18} {:<6} {:<11} {:<8} {:<12} {:<14} {:<7}",
         "Graph", "Nodes", "SampleRate", "Buffer", "Target (s)", "Performed (s)", "Ratio"
     );
 }
 
 fn print_row(row: &BenchRow) {
     let ratio = row.performed_duration / row.target_duration;
-    let status = if ratio >= 1.0 { "⚠️" } else { " " };
+    let status = if ratio >= 1.0 { "⚠️  " } else { "   " };
     println!(
         "{status}{:<18} {:<6} {:<11} {:<8} {:<12.1} {:<14.4} {:<7.2}",
         row.graph_type,
@@ -241,8 +246,10 @@ fn run(cli: Cli) -> Result<(), String> {
     let buf = cli.buffer_size;
     let dur = cli.duration;
 
-    let mut types_to_run: Vec<(&'static str, Box<dyn Fn(usize, f32, usize) -> GenGraph>)> =
-        Vec::new();
+    let mut types_to_run: Vec<(
+        &'static str,
+        Box<dyn Fn(usize, f32, usize) -> GenGraph>,
+    )> = Vec::new();
     if matches!(cli.graph_type, GraphType::SineChain | GraphType::All) {
         types_to_run.push((
             "sine-chain",
@@ -256,10 +263,7 @@ fn run(cli: Cli) -> Result<(), String> {
         ));
     }
     if matches!(cli.graph_type, GraphType::Mixed | GraphType::All) {
-        types_to_run.push((
-            "mixed",
-            Box::new(|n, sr, buf| build_mixed(n, sr, buf)),
-        ));
+        types_to_run.push(("mixed", Box::new(|n, sr, buf| build_mixed(n, sr, buf))));
     }
 
     print_header();
@@ -323,8 +327,8 @@ mod tests {
     }
 
     #[test]
-    fn test_level_sequence_starts_at_16() {
+    fn test_level_sequence() {
         let levels: Vec<usize> = level_sequence().take(5).collect();
-        assert_eq!(levels, vec![16, 32, 64, 128, 256]);
+        assert_eq!(levels, vec![128, 256, 384, 512, 640]);
     }
 }
