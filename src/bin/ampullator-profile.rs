@@ -238,7 +238,7 @@ fn run(cli: Cli) -> Result<(), String> {
     if cli.sample_rate <= 0.0 {
         return Err("--sample-rate must be > 0".to_string());
     }
-    if cli.buffer_size == 0 || cli.buffer_size % 8 != 0 {
+    if !cli.buffer_size.is_multiple_of(8) {
         return Err("--buffer-size must be a non-zero multiple of 8".to_string());
     }
 
@@ -246,29 +246,21 @@ fn run(cli: Cli) -> Result<(), String> {
     let buf = cli.buffer_size;
     let dur = cli.duration;
 
-    let mut types_to_run: Vec<(
-        &'static str,
-        Box<dyn Fn(usize, f32, usize) -> GenGraph>,
-    )> = Vec::new();
+    type GraphBuilder = (&'static str, Box<dyn Fn(usize, f32, usize) -> GenGraph>);
+    let mut types_to_run: Vec<GraphBuilder> = Vec::new();
     if matches!(cli.graph_type, GraphType::SineChain | GraphType::All) {
-        types_to_run.push((
-            "sine-chain",
-            Box::new(|n, sr, buf| build_sine_chain(n, sr, buf)),
-        ));
+        types_to_run.push(("sine-chain", Box::new(build_sine_chain)));
     }
     if matches!(cli.graph_type, GraphType::FilteredNoise | GraphType::All) {
-        types_to_run.push((
-            "filtered-noise",
-            Box::new(|n, sr, buf| build_filtered_noise(n, sr, buf)),
-        ));
+        types_to_run.push(("filtered-noise", Box::new(build_filtered_noise)));
     }
     if matches!(cli.graph_type, GraphType::Mixed | GraphType::All) {
-        types_to_run.push(("mixed", Box::new(|n, sr, buf| build_mixed(n, sr, buf))));
+        types_to_run.push(("mixed", Box::new(build_mixed)));
     }
 
     print_header();
     for (label, builder) in &types_to_run {
-        let rows = run_benchmark(label, |n, sr, buf| builder(n, sr, buf), sr, buf, dur);
+        let rows = run_benchmark(label, builder, sr, buf, dur);
         for row in &rows {
             print_row(row);
         }
