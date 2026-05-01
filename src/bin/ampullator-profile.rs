@@ -4,8 +4,8 @@ use ampullator::{GenGraph, UGLowPass, UGSine, UGSum, UGWhite};
 use clap::{Parser, ValueEnum};
 
 const DEFAULT_BUFFER_SIZE: usize = 128;
-const DEFAULT_SAMPLE_RATE: f32 = 44_100.0;
-const DEFAULT_DURATION: f64 = 1.0;
+const DEFAULT_SAMPLE_RATE: f32 = 44_800.0;
+const DEFAULT_DURATION: f64 = 4.0;
 /// Stop doubling when node count would exceed this
 const MAX_NODES: usize = 4096;
 
@@ -134,8 +134,10 @@ struct BenchRow {
     performed_duration: f64,
 }
 
-/// Process enough buffers to cover `target_secs` worth of audio and return
-/// the wall-clock time taken.
+const BENCH_RUNS: usize = 2;
+
+/// Process enough buffers to cover `target_secs` worth of audio, repeated
+/// `BENCH_RUNS` times, and return the average wall-clock time.
 fn bench_graph(
     mut graph: GenGraph,
     sample_rate: f32,
@@ -145,16 +147,20 @@ fn bench_graph(
     let total_samples = (sample_rate as f64 * target_secs).ceil() as usize;
     let num_buffers = total_samples.div_ceil(buffer_size);
 
-    let start = Instant::now();
-    for _ in 0..num_buffers {
-        graph.process();
+    let mut total = 0.0;
+    for _ in 0..BENCH_RUNS {
+        let start = Instant::now();
+        for _ in 0..num_buffers {
+            graph.process();
+        }
+        total += start.elapsed().as_secs_f64();
     }
-    start.elapsed().as_secs_f64()
+    total / BENCH_RUNS as f64
 }
 
-/// Levels to benchmark: 1, 2, 4, 8, 16 … up to MAX_NODES.
+/// Levels to benchmark: 16, 32, 64, … doubling until exceeding MAX_NODES.
 fn level_sequence() -> impl Iterator<Item = usize> {
-    (0..).map(|k: u32| 1usize << k).take_while(|&n| n <= MAX_NODES)
+    (4..).map(|k: u32| 1usize << k).take_while(|&n| n <= MAX_NODES)
 }
 
 /// Run the benchmark for a graph type, printing rows until performed > target.
@@ -196,17 +202,16 @@ where
 
 fn print_header() {
     println!(
-        "{:<18} {:>6}  {:>11}  {:>11}  {:>12}  {:>14}  {:>7}",
-        "GRAPH TYPE", "NODES", "SAMPLE RATE", "BUFFER SIZE", "TARGET (s)", "PERFORMED (s)", "RATIO"
+        " {:<18} {:<6} {:<11} {:<8} {:<12} {:<14} {:<7}",
+        "Graph", "Nodes", "SampleRate", "Buffer", "Target (s)", "Performed (s)", "Ratio"
     );
-    println!("{}", "-".repeat(88));
 }
 
 fn print_row(row: &BenchRow) {
     let ratio = row.performed_duration / row.target_duration;
-    let status = if ratio >= 1.0 { " ← EXCEEDED" } else { "" };
+    let status = if ratio >= 1.0 { "⚠️" } else { " " };
     println!(
-        "{:<18} {:>6}  {:>11.1}  {:>11}  {:>12.6}  {:>14.6}  {:>7.4}{status}",
+        "{status}{:<18} {:<6} {:<11} {:<8} {:<12.1} {:<14.4} {:<7.2}",
         row.graph_type,
         row.node_count,
         row.sample_rate,
@@ -318,8 +323,8 @@ mod tests {
     }
 
     #[test]
-    fn test_level_sequence_starts_at_one() {
+    fn test_level_sequence_starts_at_16() {
         let levels: Vec<usize> = level_sequence().take(5).collect();
-        assert_eq!(levels, vec![1, 2, 4, 8, 16]);
+        assert_eq!(levels, vec![16, 32, 64, 128, 256]);
     }
 }
