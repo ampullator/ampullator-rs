@@ -79,7 +79,7 @@ noise ->out:in lpf
 `&>` connects **all outputs** of the left node to the **first N inputs** of the right node in contiguous order.  The source must have more than one output (otherwise use `->` instead).
 
 ```
-Sine() -> Pan() => pan | pan &> Reverb() => rev
+Sine() -> Pan() &> Reverb() => rev
 # Connects pan.out1 -> rev.in_l and pan.out2 -> rev.in_r
 ```
 
@@ -99,9 +99,7 @@ pan &>out1:,out2: Reverb()
 Multiple `&>` operators can be chained:
 
 ```
-Sine() -> Pan() => pan
-    | pan &> Reverb() => rev
-    | rev &> Fade(channel_count=2) => fd
+Sine() -> Pan() &> Reverb() &> Fade(channel_count=2) => fd
 ```
 
 

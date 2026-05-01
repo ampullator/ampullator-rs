@@ -41,7 +41,7 @@ enum Token {
     Pipe,             // |
     Arrow,            // ->
     FatArrow,         // =>
-    AmpersandArrow,   // &>
+    SnakeArrow,       // &>
     Colon,            // :
     LParen,           // (
     RParen,           // )
@@ -111,7 +111,7 @@ fn tokenize(input: &str) -> Result<Vec<Token>, String> {
                 i += 2;
             }
             '&' if i + 1 < chars.len() && chars[i + 1] == '>' => {
-                tokens.push(Token::AmpersandArrow);
+                tokens.push(Token::SnakeArrow);
                 i += 2;
             }
             '=' if i + 1 < chars.len() && chars[i + 1] == '>' => {
@@ -608,7 +608,7 @@ impl ChainParser {
                     self.connect.push((src_str, dst_str));
                     current = next;
                 }
-                Some(Token::AmpersandArrow) => {
+                Some(Token::SnakeArrow) => {
                     self.consume(); // consume '&>'
                     let port_pairs = self.parse_multi_port_spec_opt()?;
                     let next = self.parse_named_atom()?;
@@ -621,15 +621,15 @@ impl ChainParser {
                                 format!("Unknown node: '{current}'")
                             })?;
                             let ugen = facade.to_ugen();
-                            let outputs = ugen.output_names();
-                            if outputs.len() <= 1 {
-                                return Err(format!(
+                            ugen.get_n_outputs(2)
+                                .ok_or_else(|| format!(
                                     "'&>' requires source '{current}' to have more than \
                                      one output, but it has {} output(s); use '->' instead",
-                                    outputs.len()
-                                ));
-                            }
-                            outputs.iter().cloned().collect()
+                                    ugen.output_names().len()
+                                ))?
+                                .into_iter()
+                                .map(|s| s.to_string())
+                                .collect()
                         };
                         let dst_inputs: Vec<String> = {
                             let facade =
@@ -1241,8 +1241,8 @@ mod tests {
         // Ensure '&>' is tokenized correctly.
         let tokens = tokenize("a &> b").unwrap();
         assert!(
-            tokens.contains(&Token::AmpersandArrow),
-            "expected AmpersandArrow token"
+            tokens.contains(&Token::SnakeArrow),
+            "expected SnakeArrow token"
         );
     }
 }
