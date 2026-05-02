@@ -101,7 +101,10 @@ fn build_graph(input: &str, sample_rate: f32) -> Result<GenGraph, String> {
 /// Return the labels to feed to the device. If the user specified explicit
 /// labels, those are used as-is. Otherwise, the last node's first two outputs
 /// are chosen (one for mono chains, two for stereo).
-fn resolve_labels(graph: &mut GenGraph, requested: &[String]) -> Result<Vec<String>, String> {
+fn resolve_labels(
+    graph: &mut GenGraph,
+    requested: &[String],
+) -> Result<Vec<String>, String> {
     if !requested.is_empty() {
         return Ok(requested.to_vec());
     }
@@ -156,7 +159,11 @@ fn run(cli: Cli) -> Result<(), String> {
             .map_err(|e| format!("Cannot enumerate devices: {e}"))?
         {
             let name = device.name().unwrap_or_else(|_| "<unknown>".to_string());
-            let marker = if name == default_name { " (default)" } else { "" };
+            let marker = if name == default_name {
+                " (default)"
+            } else {
+                ""
+            };
             println!("  {name}{marker}");
         }
         return Ok(());
@@ -189,9 +196,7 @@ fn run(cli: Cli) -> Result<(), String> {
         .default_output_config()
         .map_err(|e| format!("Cannot get default output config: {e}"))?;
 
-    let sample_rate = cli
-        .sample_rate
-        .unwrap_or_else(|| supported.sample_rate().0);
+    let sample_rate = cli.sample_rate.unwrap_or_else(|| supported.sample_rate().0);
 
     let out_channels = supported.channels() as usize;
     let sample_format = supported.sample_format();
@@ -206,10 +211,7 @@ fn run(cli: Cli) -> Result<(), String> {
     let mut graph = build_graph(input, sample_rate as f32)?;
     let labels = resolve_labels(&mut graph, &cli.outputs)?;
 
-    println!(
-        "Playing outputs: {}",
-        labels.join(", ")
-    );
+    println!("Playing outputs: {}", labels.join(", "));
     println!(
         "Sample rate: {} Hz  |  Channels: {}  |  Format: {:?}",
         sample_rate, out_channels, sample_format
@@ -225,9 +227,15 @@ fn run(cli: Cli) -> Result<(), String> {
 
     // ── build typed stream ─────────────────────────────────────────────────
     let stream = match sample_format {
-        SampleFormat::F32 => build_typed_stream::<f32>(&device, &config, Arc::clone(&state)),
-        SampleFormat::I16 => build_typed_stream::<i16>(&device, &config, Arc::clone(&state)),
-        SampleFormat::U16 => build_typed_stream::<u16>(&device, &config, Arc::clone(&state)),
+        SampleFormat::F32 => {
+            build_typed_stream::<f32>(&device, &config, Arc::clone(&state))
+        }
+        SampleFormat::I16 => {
+            build_typed_stream::<i16>(&device, &config, Arc::clone(&state))
+        }
+        SampleFormat::U16 => {
+            build_typed_stream::<u16>(&device, &config, Arc::clone(&state))
+        }
         fmt => return Err(format!("Unsupported sample format: {fmt:?}")),
     }?;
 
