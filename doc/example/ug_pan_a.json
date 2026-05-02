@@ -1,0 +1,9 @@
+{
+    "title": "Panning Sine with LFO",
+    "label": "ug_pan-lfo",
+    "chain": "Sine() => s -> Pan() => p &> Fade(channels=2, level=0.7) | Lfo(rate=50, wave=Triangle, mode=Samples, min=3, max=6) ->:freq s | Lfo(rate=80, wave=Triangle, mode=Samples) ->:pan p",
+    "sample_rate": 100.0,
+    "buffer_size": 8,
+    "total_samples": 100
+}
+

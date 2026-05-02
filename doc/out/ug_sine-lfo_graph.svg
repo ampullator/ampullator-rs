@@ -13,7 +13,7 @@
 <g id="node1" class="node">
 <title>n15da666c</title>
 <polygon fill="none" stroke="#c4c5bf" points="0,-185.5 0,-241 129.25,-241 129.25,-185.5 0,-185.5"/>
-<text xml:space="preserve" text-anchor="middle" x="15.88" y="-228.45" font-family="Arial" font-size="9.00" fill="#c4c5bf">freq</text>
+<text xml:space="preserve" text-anchor="middle" x="15.88" y="-228.45" font-family="Arial" font-size="9.00" fill="#c4c5bf">rate</text>
 <polyline fill="none" stroke="#c4c5bf" points="31.75,-222.5 31.75,-241"/>
 <text xml:space="preserve" text-anchor="middle" x="48.38" y="-228.45" font-family="Arial" font-size="9.00" fill="#c4c5bf">duty</text>
 <polyline fill="none" stroke="#c4c5bf" points="65,-222.5 65,-241"/>
@@ -53,7 +53,7 @@
 <g id="node2" class="node">
 <title>nfffbd22a</title>
 <polygon fill="none" stroke="#c4c5bf" points="203,-93 203,-148.5 332.25,-148.5 332.25,-93 203,-93"/>
-<text xml:space="preserve" text-anchor="middle" x="218.88" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">freq</text>
+<text xml:space="preserve" text-anchor="middle" x="218.88" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">rate</text>
 <polyline fill="none" stroke="#c4c5bf" points="234.75,-130 234.75,-148.5"/>
 <text xml:space="preserve" text-anchor="middle" x="251.38" y="-135.95" font-family="Arial" font-size="9.00" fill="#c4c5bf">duty</text>
 <polyline fill="none" stroke="#c4c5bf" points="268,-130 268,-148.5"/>

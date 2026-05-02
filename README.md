@@ -187,7 +187,7 @@ cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metr
 On MacOS with `sox` `play`:
 
 ```bash
-cargo run --bin ampullator-record -- "Sine() => s -> Pan() => p &> Fade(channels=2, level=0.7) | Lfo(rate=0.5, wave=Triangle, mode=Seconds, min=220, max=440) ->:freq s | Lfo(rate=2, wave=Triangle, mode=Seconds) ->:pan p" --duration 4 | play -
+cargo run --bin ampullator-record -- "Sine() => s * .4 | 220 ->:freq s" --duration 4 | play -
 
 cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | play -
 ```
@@ -216,6 +216,15 @@ Clock(value=500, mode=Samples) => trigger -> SnareDrum(seed=42) => sd
 ![ug_drum-trigger](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_drum-trigger_graph.svg)
 ![ug_drum-trigger](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_drum-trigger_time-domain.svg)
 
+### Panning Sine with LFO
+```text
+Sine() => s -> Pan() => p &> Fade(channels=2, level=0.7)
+| Lfo(rate=50, wave=Triangle, mode=Samples, min=3, max=6) ->:freq s
+| Lfo(rate=80, wave=Triangle, mode=Samples) ->:pan p
+```
+![ug_pan-lfo](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_pan-lfo_graph.svg)
+![ug_pan-lfo](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_pan-lfo_time-domain.svg)
+
 ### Pulse Select
 ```text
 Clock(value=1, mode=Samples)=> metro
@@ -231,7 +240,7 @@ Clock(value=1, mode=Samples)=> metro
 ### Sine with LFO Control
 ```text
 ((Sine() => s) ^ Lfo(rate=0.666, wave=Triangle)) => o
-| Lfo(wave=Triangle, min=22, max=44) ->:rate s
+| Lfo(wave=Triangle, min=22, max=44) ->:freq s
 | o
 ```
 ![ug_sine-lfo](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_sine-lfo_graph.svg)
