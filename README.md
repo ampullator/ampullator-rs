@@ -216,6 +216,21 @@ Clock(value=500, mode=Samples) => trigger -> SnareDrum(seed=42) => sd
 ![ug_drum-trigger](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_drum-trigger_graph.svg)
 ![ug_drum-trigger](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_drum-trigger_time-domain.svg)
 
+### Linear Mixer of Clocks
+```text
+MixLinear(input_count=4, output_count=2) => mix &> Fade(channels=2) => mlevel
+| Clock(value=20, mode=Samples) ->:in1 mix
+| Clock(value=33, mode=Samples) ->:in2 mix
+| Clock(value=13, mode=Samples) ->:in3 mix
+| Clock(value=45, mode=Samples) ->:in4 mix
+| Lfo(rate=12, mode=Samples, wave=Sine) ->:level1 mix
+| Lfo(rate=30, mode=Samples, wave=Square) ->:pan2 mix
+| Lfo(rate=25, mode=Samples, wave=Triangle) ->:level3 mix
+| Lfo(rate=12, mode=Samples, wave=Triangle) ->:pan4 mix
+```
+![ug_mix_linear-clocks](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_mix_linear-clocks_graph.svg)
+![ug_mix_linear-clocks](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_mix_linear-clocks_time-domain.svg)
+
 ### Panning Sine with LFO
 ```text
 Sine() => s -> Pan() => p &> Fade(channels=2, level=0.7)
