@@ -676,16 +676,15 @@ fn chain_ugen_reference_markdown() -> String {
         ),
     ];
 
-    let mut md: Vec<String> = Vec::new();
-    md.push("## UGen Reference".to_string());
-    md.push("".to_string());
-    md.push(
+    let mut md: Vec<String> = vec![
+        "## UGen Reference".to_string(),
+        "".to_string(),
         "The following UGens are available in the Chain DSL. \
          Each entry lists construction arguments (with defaults), \
          signal inputs (with default values), and signal outputs."
             .to_string(),
-    );
-    md.push("".to_string());
+        "".to_string(),
+    ];
 
     for (name, args, ugen) in &variants {
         md.push(format!("### {name}"));
