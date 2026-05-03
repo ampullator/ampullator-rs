@@ -20,6 +20,10 @@ struct Cli {
     #[arg(short, long, default_value = "doc/usage.md")]
     usage: PathBuf,
 
+    /// Path to clis.md source file
+    #[arg(short, long, default_value = "doc/clis.md")]
+    clis: PathBuf,
+
     /// Path to write the combined README.md
     #[arg(short, long, default_value = "README.md")]
     readme: PathBuf,
@@ -35,6 +39,7 @@ fn main() {
         &cli.input,
         &cli.output,
         &cli.usage,
+        &cli.clis,
         &cli.readme,
         cli.abs_paths,
     ) {

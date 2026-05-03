@@ -669,7 +669,7 @@ fn chain_ugen_reference_markdown() -> String {
     ];
 
     let mut md: Vec<String> = Vec::new();
-    md.push("## Chain DSL UGen Reference".to_string());
+    md.push("## UGen Reference".to_string());
     md.push("".to_string());
     md.push(
         "The following UGens are available in the Chain DSL. \
@@ -729,12 +729,16 @@ pub fn build_markdown_index(
     input_dir: &Path,
     output_dir: &Path,
     usage_path: &Path,
+    clis_path: &Path,
     readme_path: &Path,
     abs_paths: bool,
 ) -> Result<(), String> {
     let usage = std::fs::read_to_string(usage_path).map_err(|e| {
         format!("Failed to read usage file '{}': {e}", usage_path.display())
     })?;
+
+    let clis = std::fs::read_to_string(clis_path)
+        .map_err(|e| format!("Failed to read cli file '{}': {e}", clis_path.display()))?;
 
     std::fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
 
@@ -797,9 +801,10 @@ pub fn build_markdown_index(
 
     let ugen_ref = chain_ugen_reference_markdown();
     let readme = format!(
-        "{}\n\n{}\n\n{}",
+        "{}\n\n{}\n\n{}\n\n{}",
         usage.trim_end(),
         ugen_ref,
+        clis.trim_end(),
         entries.join("\n")
     );
     std::fs::write(readme_path, readme).map_err(|e| e.to_string())?;
