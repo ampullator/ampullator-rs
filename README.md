@@ -441,7 +441,7 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 
 | Arg | Type | Default |
 |-----|------|---------|
-| `input_count` | integer | `2` |
+| `inputs` | integer | `2` |
 
 **Inputs:**
 
@@ -615,7 +615,7 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 
 | Arg | Type | Default |
 |-----|------|---------|
-| `input_count` | integer | `2` |
+| `inputs` | integer | `2` |
 
 **Inputs:**
 

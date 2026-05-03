@@ -383,12 +383,11 @@ pub struct UGSum {
 }
 
 impl UGSum {
-    pub fn new(input_count: usize) -> Self {
-        if input_count <= 1 {
+    pub fn new(inputs: usize) -> Self {
+        if inputs <= 1 {
             panic!("Input count should be greater than 1");
         }
-        let input_refs: Vec<String> =
-            (1..input_count + 1).map(|i| format!("in{i}")).collect();
+        let input_refs: Vec<String> = (1..inputs + 1).map(|i| format!("in{i}")).collect();
 
         Self { input_refs }
     }
@@ -450,12 +449,11 @@ pub struct UGMult {
 }
 
 impl UGMult {
-    pub fn new(input_count: usize) -> Self {
-        if input_count <= 1 {
+    pub fn new(inputs: usize) -> Self {
+        if inputs <= 1 {
             panic!("Input count should be greater than 1");
         }
-        let input_refs: Vec<String> =
-            (1..input_count + 1).map(|i| format!("in{i}")).collect();
+        let input_refs: Vec<String> = (1..inputs + 1).map(|i| format!("in{i}")).collect();
 
         Self { input_refs }
     }

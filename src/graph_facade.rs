@@ -93,13 +93,13 @@ pub enum UGFacade {
         pan: Sample,
     },
     Mult {
-        #[serde(default = "UGFacade::default_input_count")]
-        input_count: usize,
+        #[serde(default = "UGFacade::default_inputs")]
+        inputs: usize,
     },
     MixLinear {
         #[serde(default = "UGFacade::default_mix_input_count")]
         inputs: usize,
-        #[serde(default = "UGFacade::default_output_count")]
+        #[serde(default = "UGFacade::default_outputs")]
         outputs: usize,
     },
     PulseSelect {
@@ -128,8 +128,8 @@ pub enum UGFacade {
         seed: Option<u64>,
     },
     Sum {
-        #[serde(default = "UGFacade::default_input_count")]
-        input_count: usize,
+        #[serde(default = "UGFacade::default_inputs")]
+        inputs: usize,
     },
     Trigger {},
     White {
@@ -148,12 +148,12 @@ impl UGFacade {
             }
             UGFacade::Round { places, mode } => Box::new(UGRound::new(*places, *mode)),
             UGFacade::Reverb {} => Box::new(UGReverb::new()),
-            UGFacade::Sum { input_count } => Box::new(UGSum::new(*input_count)),
+            UGFacade::Sum { inputs } => Box::new(UGSum::new(*inputs)),
             UGFacade::White { seed } => Box::new(UGWhite::new(*seed)),
             UGFacade::AsHz { mode } => Box::new(UGAsHz::new(*mode)),
             UGFacade::Floor {} => Box::new(UGFloor::new()),
             UGFacade::Ceil {} => Box::new(UGCeil::new()),
-            UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
+            UGFacade::Mult { inputs } => Box::new(UGMult::new(*inputs)),
             UGFacade::MixLinear { inputs, outputs } => {
                 Box::new(UGMixLinear::new(*inputs, *outputs))
             }
@@ -249,7 +249,7 @@ impl UGFacade {
         ModeRound::Round
     }
 
-    fn default_input_count() -> usize {
+    fn default_inputs() -> usize {
         2
     }
 
@@ -265,7 +265,7 @@ impl UGFacade {
         2
     }
 
-    fn default_output_count() -> usize {
+    fn default_outputs() -> usize {
         2
     }
 
@@ -609,7 +609,7 @@ fn chain_ugen_reference_markdown() -> String {
         ),
         (
             "Mult",
-            vec![FacadeArgDoc::optional("input_count", "integer", "2")],
+            vec![FacadeArgDoc::optional("inputs", "integer", "2")],
             Box::new(UGMult::new(2)),
         ),
         (
@@ -665,7 +665,7 @@ fn chain_ugen_reference_markdown() -> String {
         ),
         (
             "Sum",
-            vec![FacadeArgDoc::optional("input_count", "integer", "2")],
+            vec![FacadeArgDoc::optional("inputs", "integer", "2")],
             Box::new(UGSum::new(2)),
         ),
         ("Trigger", vec![], Box::new(UGTrigger::new())),
@@ -1023,7 +1023,7 @@ mod tests {
             "register": {
                 "c1": ["Const", {"value": 3.0}],
                 "c2": ["Const", {"value": 4.0}],
-                "m1": ["Mult", {"input_count": 2}]
+                "m1": ["Mult", {"inputs": 2}]
             },
             "connect": [
                 ["c1.out", "m1.in1"],
