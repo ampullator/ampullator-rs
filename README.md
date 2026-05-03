@@ -192,6 +192,499 @@ cargo run --bin ampullator-record -- "Sine() => s * .4 | 220 ->:freq s" --durati
 cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | play -
 ```
 
+## Chain DSL UGen Reference
+
+The following UGens are available in the Chain DSL. Each entry lists construction arguments (with defaults), signal inputs (with default values), and signal outputs.
+
+### AsHz
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `mode` | `Hz` \| `Bpm` \| `Samples` \| `Midi` \| `Seconds` | `Hz` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### BassDrum
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `gate` | `0` |
+| `tune` | `55` |
+| `decay` | `9000` |
+| `punch` | `2.8` |
+| `sweep_decay` | `1200` |
+| `click` | `0.2` |
+| `tone` | `1` |
+| `drive` | `1.3` |
+
+**Outputs:** `out`
+
+### Ceil
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### Clock
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `value` | number | *required* |
+| `mode` | `Hz` \| `Bpm` \| `Samples` \| `Midi` \| `Seconds` | *required* |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | `1` |
+
+**Outputs:** `out`
+
+### Const
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `value` | number | *required* |
+
+**Outputs:** `out`
+
+### EnvAR
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `trigger` | `0` |
+| `attack_dur` | `1` |
+| `release_dur` | `1` |
+| `attack_curve` | `1` |
+| `release_curve` | `1` |
+
+**Outputs:** `out`
+
+### EnvBreakPoint
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `duration_values` | [number, ...] | *required* |
+| `duration_mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `level_values` | [number, ...] | *required* |
+| `level_mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `clock` | `0` |
+| `step` | `1` |
+
+**Outputs:** `out`
+
+### Fade
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `channels` | integer | `1` |
+| `level` | number | `1.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `level` | `1` |
+
+**Outputs:** `out1`
+
+### Floor
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### HighHat
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `gate` | `0` |
+| `tune` | `3969` |
+| `decay` | `4000` |
+| `tone` | `8000` |
+| `accent` | `0.8` |
+| `noise` | `0.2` |
+| `drive` | `1.2` |
+
+**Outputs:** `out`
+
+### HighPass
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+
+**Outputs:** `out`
+
+### HighPassQ
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+| `resonance` | — |
+
+**Outputs:** `out`
+
+### Lfo
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `wave` | `Sine` \| `Triangle` \| `Square` | *required* |
+| `rate` | number | `1.0` |
+| `mode` | `Hz` \| `Bpm` \| `Samples` \| `Midi` \| `Seconds` | `Hz` |
+| `duty` | number | `0.5` |
+| `min` | number | `0.0` |
+| `max` | number | `1.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `rate` | `1` |
+| `duty` | `0.5` |
+| `min` | `0` |
+| `max` | `1` |
+
+**Outputs:** `wave`
+
+### LowPass
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+
+**Outputs:** `out`
+
+### LowPassQ
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+| `resonance` | — |
+
+**Outputs:** `out`
+
+### MixLinear
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `input_count` | integer | `2` |
+| `output_count` | integer | `2` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `pan1` | `0.5` |
+| `level1` | `1` |
+| `in2` | — |
+| `pan2` | `0.5` |
+| `level2` | `1` |
+
+**Outputs:** `out1`, `out2`
+
+### Mult
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `input_count` | integer | `2` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `in2` | — |
+
+**Outputs:** `out`
+
+### Pan
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `output_count` | integer | `2` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `pan` | `0.5` |
+
+**Outputs:** `out1`, `out2`
+
+### Parametric
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `gain` | — |
+| `bw` | — |
+| `freq` | — |
+
+**Outputs:** `out`
+
+### ParametricConst
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `gain` | number | *required* |
+| `bw` | number | *required* |
+| `freq` | number | *required* |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### PulseSelect
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `duration_values` | [number, ...] | *required* |
+| `duration_mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `clock` | `0` |
+| `step` | `1` |
+
+**Outputs:** `out`
+
+### Reverb
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in_l` | `0` |
+| `in_r` | `0` |
+| `decay` | `0.6` |
+| `pre_delay` | `20` |
+| `mix` | `0.35` |
+| `size` | `1` |
+| `diffusion` | `0.75` |
+| `damping` | `7000` |
+
+**Outputs:** `out_l`, `out_r`
+
+### Round
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `places` | integer | `0` |
+| `mode` | `Round` \| `Floor` \| `Ceil` | `Round` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### Select
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `values` | [number, ...] | *required* |
+| `mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `trigger` | `0` |
+| `step` | `1` |
+
+**Outputs:** `out`
+
+### Sine
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `freq` | `440` |
+| `phase` | `0` |
+| `min` | `-1` |
+| `max` | `1` |
+
+**Outputs:** `wave`, `trigger`
+
+### SnareDrum
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `gate` | `0` |
+| `tune` | `180` |
+| `tone` | `0.7` |
+| `snappy` | `0.9` |
+| `tone_decay` | `3000` |
+| `snappy_decay` | `5000` |
+| `noise_filter` | `4000` |
+| `pitch_sweep` | `1.5` |
+
+**Outputs:** `out`
+
+### Sum
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `input_count` | integer | `2` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `in2` | — |
+
+**Outputs:** `out`
+
+### Trigger
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `freq` | `1` |
+
+**Outputs:** `out`
+
+### White
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `min` | `-1` |
+| `max` | `1` |
+
+**Outputs:** `out`
+
+
 ## Examples
 
 ### Clock Control

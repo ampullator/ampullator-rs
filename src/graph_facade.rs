@@ -433,6 +433,273 @@ impl GraphFacade {
 const GITHUB_BASE_URL: &str =
     "https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/";
 
+//------------------------------------------------------------------------------
+
+/// One construction argument for a Chain DSL UGen.
+struct FacadeArgDoc {
+    name: &'static str,
+    type_hint: &'static str,
+    /// `None` means the argument is required (no default).
+    default: Option<&'static str>,
+}
+
+impl FacadeArgDoc {
+    fn required(name: &'static str, type_hint: &'static str) -> Self {
+        Self { name, type_hint, default: None }
+    }
+    fn optional(name: &'static str, type_hint: &'static str, default: &'static str) -> Self {
+        Self { name, type_hint, default: Some(default) }
+    }
+}
+
+/// Format a float default value for display: integers without decimal point.
+fn fmt_sample(v: f32) -> String {
+    if v.fract() == 0.0 && v.abs() < 1.0e6 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
+}
+
+/// Generate a markdown section documenting all Chain DSL UGen interfaces.
+///
+/// Each entry lists the UGen name, its construction arguments (with defaults),
+/// signal inputs with their default values, and signal outputs. Content is
+/// derived directly from the [`UGFacade`] definitions and the [`UGen`] trait
+/// implementations so it can be regenerated to reflect the current interface.
+fn chain_ugen_reference_markdown() -> String {
+    use crate::ugen_core::{LfoWave, ModeRound};
+    use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
+    use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
+    use crate::ugen_filter::{
+        UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+    };
+    use crate::ugen_reverb::UGReverb;
+    use crate::ugen_rhythm::UGPulseSelect;
+    use crate::ugen_select::{ModeSelect, UGSelect};
+
+    const UNIT_RATE: &str = "`Hz` \\| `Bpm` \\| `Samples` \\| `Midi` \\| `Seconds`";
+    const MODE_SELECT: &str = "`Cycle` \\| `Random` \\| `Shuffle` \\| `Walk`";
+    const MODE_ROUND: &str = "`Round` \\| `Floor` \\| `Ceil`";
+    const LFO_WAVE: &str = "`Sine` \\| `Triangle` \\| `Square`";
+
+    // (facade_name, construction_args, representative_ugen_instance)
+    let variants: Vec<(&str, Vec<FacadeArgDoc>, Box<dyn UGen>)> = vec![
+        (
+            "AsHz",
+            vec![FacadeArgDoc::optional("mode", UNIT_RATE, "Hz")],
+            Box::new(UGAsHz::new(UnitRate::Hz)),
+        ),
+        ("BassDrum", vec![], Box::new(UGBassDrum::new())),
+        ("Ceil", vec![], Box::new(UGCeil::new())),
+        (
+            "Clock",
+            vec![
+                FacadeArgDoc::required("value", "number"),
+                FacadeArgDoc::required("mode", UNIT_RATE),
+            ],
+            Box::new(UGClock::new(120.0, UnitRate::Bpm)),
+        ),
+        (
+            "Const",
+            vec![FacadeArgDoc::required("value", "number")],
+            Box::new(UGConst::new(0.0)),
+        ),
+        ("EnvAR", vec![], Box::new(UGEnvAR::new())),
+        (
+            "EnvBreakPoint",
+            vec![
+                FacadeArgDoc::required("duration_values", "[number, ...]"),
+                FacadeArgDoc::required("duration_mode", MODE_SELECT),
+                FacadeArgDoc::required("level_values", "[number, ...]"),
+                FacadeArgDoc::required("level_mode", MODE_SELECT),
+                FacadeArgDoc::optional("seed", "integer", "none"),
+            ],
+            Box::new(UGEnvBreakPoint::new(
+                vec![1.0],
+                ModeSelect::Cycle,
+                vec![1.0],
+                ModeSelect::Cycle,
+                None,
+            )),
+        ),
+        (
+            "Fade",
+            vec![
+                FacadeArgDoc::optional("channels", "integer", "1"),
+                FacadeArgDoc::optional("level", "number", "1.0"),
+            ],
+            Box::new(UGFade::new(1, 1.0)),
+        ),
+        ("Floor", vec![], Box::new(UGFloor::new())),
+        (
+            "HighHat",
+            vec![FacadeArgDoc::optional("seed", "integer", "none")],
+            Box::new(UGHighHat::new(None)),
+        ),
+        (
+            "HighPass",
+            vec![FacadeArgDoc::optional("roll_off_db", "number", "6.0")],
+            Box::new(UGHighPass::new(6.0)),
+        ),
+        (
+            "HighPassQ",
+            vec![FacadeArgDoc::optional("roll_off_db", "number", "6.0")],
+            Box::new(UGHighPassQ::new(6.0)),
+        ),
+        (
+            "Lfo",
+            vec![
+                FacadeArgDoc::required("wave", LFO_WAVE),
+                FacadeArgDoc::optional("rate", "number", "1.0"),
+                FacadeArgDoc::optional("mode", UNIT_RATE, "Hz"),
+                FacadeArgDoc::optional("duty", "number", "0.5"),
+                FacadeArgDoc::optional("min", "number", "0.0"),
+                FacadeArgDoc::optional("max", "number", "1.0"),
+            ],
+            Box::new(UGLfo::new(LfoWave::Sine, 1.0, UnitRate::Hz, 0.5, 0.0, 1.0)),
+        ),
+        (
+            "LowPass",
+            vec![FacadeArgDoc::optional("roll_off_db", "number", "6.0")],
+            Box::new(UGLowPass::new(6.0)),
+        ),
+        (
+            "LowPassQ",
+            vec![FacadeArgDoc::optional("roll_off_db", "number", "6.0")],
+            Box::new(UGLowPassQ::new(6.0)),
+        ),
+        (
+            "MixLinear",
+            vec![
+                FacadeArgDoc::optional("input_count", "integer", "2"),
+                FacadeArgDoc::optional("output_count", "integer", "2"),
+            ],
+            Box::new(UGMixLinear::new(2, 2)),
+        ),
+        (
+            "Mult",
+            vec![FacadeArgDoc::optional("input_count", "integer", "2")],
+            Box::new(UGMult::new(2)),
+        ),
+        (
+            "Pan",
+            vec![FacadeArgDoc::optional("output_count", "integer", "2")],
+            Box::new(UGPan::new(2)),
+        ),
+        ("Parametric", vec![], Box::new(UGParametric::new())),
+        (
+            "ParametricConst",
+            vec![
+                FacadeArgDoc::required("gain", "number"),
+                FacadeArgDoc::required("bw", "number"),
+                FacadeArgDoc::required("freq", "number"),
+            ],
+            Box::new(UGParametricConst::new(0.0, 0.333, 1000.0)),
+        ),
+        (
+            "PulseSelect",
+            vec![
+                FacadeArgDoc::required("duration_values", "[number, ...]"),
+                FacadeArgDoc::required("duration_mode", MODE_SELECT),
+                FacadeArgDoc::optional("seed", "integer", "none"),
+            ],
+            Box::new(UGPulseSelect::new(vec![1.0], ModeSelect::Cycle, None)),
+        ),
+        ("Reverb", vec![], Box::new(UGReverb::new())),
+        (
+            "Round",
+            vec![
+                FacadeArgDoc::optional("places", "integer", "0"),
+                FacadeArgDoc::optional("mode", MODE_ROUND, "Round"),
+            ],
+            Box::new(UGRound::new(0, ModeRound::Round)),
+        ),
+        (
+            "Select",
+            vec![
+                FacadeArgDoc::required("values", "[number, ...]"),
+                FacadeArgDoc::required("mode", MODE_SELECT),
+                FacadeArgDoc::optional("seed", "integer", "none"),
+            ],
+            Box::new(UGSelect::new(vec![0.0], ModeSelect::Cycle, None)),
+        ),
+        ("Sine", vec![], Box::new(UGSine::new())),
+        (
+            "SnareDrum",
+            vec![FacadeArgDoc::optional("seed", "integer", "none")],
+            Box::new(UGSnareDrum::new_seeded(None)),
+        ),
+        (
+            "Sum",
+            vec![FacadeArgDoc::optional("input_count", "integer", "2")],
+            Box::new(UGSum::new(2)),
+        ),
+        ("Trigger", vec![], Box::new(UGTrigger::new())),
+        (
+            "White",
+            vec![FacadeArgDoc::optional("seed", "integer", "none")],
+            Box::new(UGWhite::new(None)),
+        ),
+    ];
+
+    let mut md: Vec<String> = Vec::new();
+    md.push("## Chain DSL UGen Reference".to_string());
+    md.push("".to_string());
+    md.push(
+        "The following UGens are available in the Chain DSL. \
+         Each entry lists construction arguments (with defaults), \
+         signal inputs (with default values), and signal outputs."
+            .to_string(),
+    );
+    md.push("".to_string());
+
+    for (name, args, ugen) in &variants {
+        md.push(format!("### {name}"));
+        md.push("".to_string());
+
+        if !args.is_empty() {
+            md.push("**Construction args:**".to_string());
+            md.push("".to_string());
+            md.push("| Arg | Type | Default |".to_string());
+            md.push("|-----|------|---------|".to_string());
+            for arg in args {
+                let default = arg
+                    .default
+                    .map_or("*required*".to_string(), |d| format!("`{d}`"));
+                md.push(format!(
+                    "| `{}` | {} | {} |",
+                    arg.name, arg.type_hint, default
+                ));
+            }
+            md.push("".to_string());
+        }
+
+        let inputs = ugen.input_names();
+        if !inputs.is_empty() {
+            md.push("**Inputs:**".to_string());
+            md.push("".to_string());
+            md.push("| Input | Default |".to_string());
+            md.push("|-------|---------|".to_string());
+            for input in inputs {
+                let default = ugen
+                    .default_input(input)
+                    .map_or("—".to_string(), |v| format!("`{}`", fmt_sample(v)));
+                md.push(format!("| `{input}` | {default} |"));
+            }
+            md.push("".to_string());
+        }
+
+        let outputs = ugen.output_names();
+        let outputs_str: Vec<String> =
+            outputs.iter().map(|o| format!("`{o}`")).collect();
+        md.push(format!("**Outputs:** {}", outputs_str.join(", ")));
+        md.push("".to_string());
+    }
+
+    md.join("\n")
+}
+
 pub fn build_markdown_index(
     input_dir: &Path,
     output_dir: &Path,
@@ -503,7 +770,13 @@ pub fn build_markdown_index(
         entries.push("".to_string()); // blank line for spacing
     }
 
-    let readme = format!("{}\n\n{}", usage.trim_end(), entries.join("\n"));
+    let ugen_ref = chain_ugen_reference_markdown();
+    let readme = format!(
+        "{}\n\n{}\n\n{}",
+        usage.trim_end(),
+        ugen_ref,
+        entries.join("\n")
+    );
     std::fs::write(readme_path, readme).map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -1121,5 +1394,33 @@ mod tests {
                 -0.01, -0.014, -0.018, -0.021, -0.023, -0.024,
             ]
         );
+    }
+
+    #[test]
+    fn test_chain_ugen_reference_markdown() {
+        let md = chain_ugen_reference_markdown();
+
+        // Section header is present.
+        assert!(md.contains("## Chain DSL UGen Reference"));
+
+        // Every UGFacade variant name appears as a subsection heading.
+        for name in [
+            "AsHz", "BassDrum", "Ceil", "Clock", "Const", "EnvAR", "EnvBreakPoint",
+            "Fade", "Floor", "HighHat", "HighPass", "HighPassQ", "Lfo", "LowPass",
+            "LowPassQ", "MixLinear", "Mult", "Pan", "Parametric", "ParametricConst",
+            "PulseSelect", "Reverb", "Round", "Select", "Sine", "SnareDrum", "Sum",
+            "Trigger", "White",
+        ] {
+            assert!(
+                md.contains(&format!("### {name}")),
+                "missing section for {name}"
+            );
+        }
+
+        // Required and optional args are distinguished.
+        assert!(md.contains("*required*"), "expected '*required*' marker");
+        assert!(md.contains("**Construction args:**"));
+        assert!(md.contains("**Inputs:**"));
+        assert!(md.contains("**Outputs:**"));
     }
 }
