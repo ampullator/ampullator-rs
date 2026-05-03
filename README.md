@@ -419,8 +419,8 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 
 | Arg | Type | Default |
 |-----|------|---------|
-| `input_count` | integer | `2` |
-| `output_count` | integer | `2` |
+| `inputs` | integer | `2` |
+| `outputs` | integer | `2` |
 
 **Inputs:**
 
@@ -458,7 +458,7 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 
 | Arg | Type | Default |
 |-----|------|---------|
-| `output_count` | integer | `2` |
+| `outputs` | integer | `2` |
 | `pan` | number | `0.5` |
 
 **Inputs:**
@@ -712,7 +712,7 @@ Clock(rate=500, mode=Samples) => trigger -> SnareDrum(seed=42) => sd
 
 ### Linear Mixer of Clocks
 ```text
-MixLinear(input_count=4, output_count=2) => mix &> Fade(channels=2) => mlevel
+MixLinear(inputs=4, outputs=2) => mix &> Fade(channels=2) => mlevel
 | Clock(rate=20, mode=Samples) ->:in1 mix
 | Clock(rate=33, mode=Samples) ->:in2 mix
 | Clock(rate=13, mode=Samples) ->:in3 mix

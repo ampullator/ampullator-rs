@@ -88,7 +88,7 @@ pub enum UGFacade {
         freq: f32,
     },
     Pan {
-        output_count: Option<usize>,
+        outputs: Option<usize>,
         #[serde(default = "UGFacade::default_pan")]
         pan: Sample,
     },
@@ -98,9 +98,9 @@ pub enum UGFacade {
     },
     MixLinear {
         #[serde(default = "UGFacade::default_mix_input_count")]
-        input_count: usize,
+        inputs: usize,
         #[serde(default = "UGFacade::default_output_count")]
-        output_count: usize,
+        outputs: usize,
     },
     PulseSelect {
         duration_values: Vec<Sample>,
@@ -154,10 +154,9 @@ impl UGFacade {
             UGFacade::Floor {} => Box::new(UGFloor::new()),
             UGFacade::Ceil {} => Box::new(UGCeil::new()),
             UGFacade::Mult { input_count } => Box::new(UGMult::new(*input_count)),
-            UGFacade::MixLinear {
-                input_count,
-                output_count,
-            } => Box::new(UGMixLinear::new(*input_count, *output_count)),
+            UGFacade::MixLinear { inputs, outputs } => {
+                Box::new(UGMixLinear::new(*inputs, *outputs))
+            }
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Lfo {
                 wave,
@@ -181,8 +180,8 @@ impl UGFacade {
             UGFacade::ParametricConst { gain, bw, freq } => {
                 Box::new(UGParametricConst::new(*gain, *bw, *freq))
             }
-            UGFacade::Pan { output_count, pan } => {
-                Box::new(UGPan::new(output_count.unwrap_or(2), *pan))
+            UGFacade::Pan { outputs, pan } => {
+                Box::new(UGPan::new(outputs.unwrap_or(2), *pan))
             }
             UGFacade::EnvBreakPoint {
                 duration_values,
@@ -603,8 +602,8 @@ fn chain_ugen_reference_markdown() -> String {
         (
             "MixLinear",
             vec![
-                FacadeArgDoc::optional("input_count", "integer", "2"),
-                FacadeArgDoc::optional("output_count", "integer", "2"),
+                FacadeArgDoc::optional("inputs", "integer", "2"),
+                FacadeArgDoc::optional("outputs", "integer", "2"),
             ],
             Box::new(UGMixLinear::new(2, 2)),
         ),
@@ -616,7 +615,7 @@ fn chain_ugen_reference_markdown() -> String {
         (
             "Pan",
             vec![
-                FacadeArgDoc::optional("output_count", "integer", "2"),
+                FacadeArgDoc::optional("outputs", "integer", "2"),
                 FacadeArgDoc::optional("pan", "number", "0.5"),
             ],
             Box::new(UGPan::new(2, 0.5)),
