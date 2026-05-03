@@ -445,10 +445,22 @@ struct FacadeArgDoc {
 
 impl FacadeArgDoc {
     fn required(name: &'static str, type_hint: &'static str) -> Self {
-        Self { name, type_hint, default: None }
+        Self {
+            name,
+            type_hint,
+            default: None,
+        }
     }
-    fn optional(name: &'static str, type_hint: &'static str, default: &'static str) -> Self {
-        Self { name, type_hint, default: Some(default) }
+    fn optional(
+        name: &'static str,
+        type_hint: &'static str,
+        default: &'static str,
+    ) -> Self {
+        Self {
+            name,
+            type_hint,
+            default: Some(default),
+        }
     }
 }
 
@@ -691,8 +703,7 @@ fn chain_ugen_reference_markdown() -> String {
         }
 
         let outputs = ugen.output_names();
-        let outputs_str: Vec<String> =
-            outputs.iter().map(|o| format!("`{o}`")).collect();
+        let outputs_str: Vec<String> = outputs.iter().map(|o| format!("`{o}`")).collect();
         md.push(format!("**Outputs:** {}", outputs_str.join(", ")));
         md.push("".to_string());
     }
@@ -1405,11 +1416,35 @@ mod tests {
 
         // Every UGFacade variant name appears as a subsection heading.
         for name in [
-            "AsHz", "BassDrum", "Ceil", "Clock", "Const", "EnvAR", "EnvBreakPoint",
-            "Fade", "Floor", "HighHat", "HighPass", "HighPassQ", "Lfo", "LowPass",
-            "LowPassQ", "MixLinear", "Mult", "Pan", "Parametric", "ParametricConst",
-            "PulseSelect", "Reverb", "Round", "Select", "Sine", "SnareDrum", "Sum",
-            "Trigger", "White",
+            "AsHz",
+            "BassDrum",
+            "Ceil",
+            "Clock",
+            "Const",
+            "EnvAR",
+            "EnvBreakPoint",
+            "Fade",
+            "Floor",
+            "HighHat",
+            "HighPass",
+            "HighPassQ",
+            "Lfo",
+            "LowPass",
+            "LowPassQ",
+            "MixLinear",
+            "Mult",
+            "Pan",
+            "Parametric",
+            "ParametricConst",
+            "PulseSelect",
+            "Reverb",
+            "Round",
+            "Select",
+            "Sine",
+            "SnareDrum",
+            "Sum",
+            "Trigger",
+            "White",
         ] {
             assert!(
                 md.contains(&format!("### {name}")),
