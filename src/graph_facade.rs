@@ -31,7 +31,7 @@ pub enum UGFacade {
     },
     Ceil {},
     Clock {
-        value: Sample,
+        rate: Sample,
         mode: UnitRate,
     },
     Const {
@@ -89,6 +89,8 @@ pub enum UGFacade {
     },
     Pan {
         output_count: Option<usize>,
+        #[serde(default = "UGFacade::default_pan")]
+        pan: Sample,
     },
     Mult {
         #[serde(default = "UGFacade::default_input_count")]
@@ -140,7 +142,7 @@ impl UGFacade {
     pub fn to_ugen(&self) -> Box<dyn UGen> {
         match self {
             UGFacade::Const { value } => Box::new(UGConst::new(*value)),
-            UGFacade::Clock { value, mode } => Box::new(UGClock::new(*value, *mode)),
+            UGFacade::Clock { rate, mode } => Box::new(UGClock::new(*rate, *mode)),
             UGFacade::Select { values, mode, seed } => {
                 Box::new(UGSelect::new(values.clone(), *mode, *seed))
             }
@@ -179,8 +181,8 @@ impl UGFacade {
             UGFacade::ParametricConst { gain, bw, freq } => {
                 Box::new(UGParametricConst::new(*gain, *bw, *freq))
             }
-            UGFacade::Pan { output_count } => {
-                Box::new(UGPan::new(output_count.unwrap_or(2)))
+            UGFacade::Pan { output_count, pan } => {
+                Box::new(UGPan::new(output_count.unwrap_or(2), *pan))
             }
             UGFacade::EnvBreakPoint {
                 duration_values,
@@ -282,6 +284,10 @@ impl UGFacade {
 
     fn default_lfo_max() -> Sample {
         1.0
+    }
+
+    fn default_pan() -> Sample {
+        0.5
     }
 }
 
@@ -520,7 +526,7 @@ fn chain_ugen_reference_markdown() -> String {
         (
             "Clock",
             vec![
-                FacadeArgDoc::required("value", "number"),
+                FacadeArgDoc::required("rate", "number"),
                 FacadeArgDoc::required("mode", &unit_rate),
             ],
             Box::new(UGClock::new(120.0, UnitRate::Bpm)),
@@ -609,8 +615,11 @@ fn chain_ugen_reference_markdown() -> String {
         ),
         (
             "Pan",
-            vec![FacadeArgDoc::optional("output_count", "integer", "2")],
-            Box::new(UGPan::new(2)),
+            vec![
+                FacadeArgDoc::optional("output_count", "integer", "2"),
+                FacadeArgDoc::optional("pan", "number", "0.5"),
+            ],
+            Box::new(UGPan::new(2, 0.5)),
         ),
         ("Parametric", vec![], Box::new(UGParametric::new())),
         (
@@ -849,7 +858,7 @@ mod tests {
     fn test_ug_facade_a() {
         let j = r#"
         {
-          "clock": ["Clock", {"value": 2.0, "mode": "Samples" }]
+          "clock": ["Clock", {"rate": 2.0, "mode": "Samples" }]
         }"#;
 
         let defs: HashMap<String, UGFacade> = serde_json::from_str(j).unwrap();
@@ -862,7 +871,7 @@ mod tests {
             "register" : {
                 "c1": ["Const", {"value": 1.0 }],
                 "c2": 4,
-                "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
+                "clock": ["Clock", {"rate": 2.0, "mode": "Samples" }],
                 "rounder": ["Round", { "places": 2, "mode": "Round" }]
             },
             "connect": []
@@ -880,7 +889,7 @@ mod tests {
         let json = r#"{
         "register": {
             "step": 1,
-            "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
+            "clock": ["Clock", {"rate": 2.0, "mode": "Samples" }],
             "sel": ["Select", { "values": [10, 5, 15, 20], "mode": "Shuffle", "seed": 42 }]
         },
         "connect": [
@@ -915,7 +924,7 @@ mod tests {
         {
             "register": {
                 "step": 1,
-                "clock": ["Clock", { "value": 2.0, "mode": "Samples" }],
+                "clock": ["Clock", {"rate": 2.0, "mode": "Samples" }],
                 "sel": ["Select", { "values": [10, 5, 15, 20], "mode": "Walk", "seed": 42 }]
             },
             "connect": [
@@ -1132,7 +1141,7 @@ mod tests {
     fn test_ug_facade_low_pass() {
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
                 "cutoff": 60.0,
                 "lpf": ["LowPass", {"roll_off_db": 12.0}],
                 "r": ["Round", {"places": 3, "mode": "Round"}]
@@ -1161,7 +1170,7 @@ mod tests {
         // resonance defaults to 0.0, so output matches LowPass
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
                 "cutoff": 60.0,
                 "lpfq": ["LowPassQ", {"roll_off_db": 12.0}],
                 "r": ["Round", {"places": 3, "mode": "Round"}]
@@ -1189,7 +1198,7 @@ mod tests {
     fn test_ug_facade_high_pass() {
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
                 "cutoff": 60.0,
                 "hpf": ["HighPass", {"roll_off_db": 12.0}],
                 "r": ["Round", {"places": 3, "mode": "Round"}]
@@ -1217,7 +1226,7 @@ mod tests {
     fn test_ug_facade_high_pass_q() {
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
                 "cutoff": 60.0,
                 "resonance": 0.5,
                 "hpfq": ["HighPassQ", {"roll_off_db": 12.0}],
@@ -1247,7 +1256,7 @@ mod tests {
     fn test_ug_facade_env_break_point() {
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 2.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 2.0, "mode": "Samples"}],
                 "env": ["EnvBreakPoint", {
                     "duration_values": [2.0, 4.0, 3.0, 2.0],
                     "duration_mode": "Cycle",
@@ -1280,7 +1289,7 @@ mod tests {
     fn test_ug_facade_env_ar() {
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
                 "env": ["EnvAR", {}],
                 "a": 4,
                 "r": 8,
@@ -1312,7 +1321,7 @@ mod tests {
     fn test_ug_facade_pulse_select() {
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 1.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 1.0, "mode": "Samples"}],
                 "step": 1,
                 "pulse": ["PulseSelect", {
                     "duration_values": [3.0, 1.0, 4.0, 2.0],
@@ -1348,7 +1357,7 @@ mod tests {
     fn test_ug_facade_bass_drum() {
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 32.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 32.0, "mode": "Samples"}],
                 "kick": ["BassDrum", {}]
             },
             "connect": [
@@ -1371,7 +1380,7 @@ mod tests {
         // 6 dB boost at 60 Hz with 1/3-octave bw via JSON facade.
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
                 "gain": 6.0,
                 "bw": 0.333,
                 "freq": 60.0,
@@ -1404,7 +1413,7 @@ mod tests {
         // 6 dB boost at 60 Hz with 1/3-octave bw via JSON facade (constant params).
         let json = r#"{
             "register": {
-                "clock": ["Clock", {"value": 20.0, "mode": "Samples"}],
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
                 "pqc": ["ParametricConst", {"gain": 6.0, "bw": 0.333, "freq": 60.0}],
                 "r": ["Round", {"places": 3, "mode": "Round"}]
             },
@@ -1431,7 +1440,7 @@ mod tests {
         let md = chain_ugen_reference_markdown();
 
         // Section header is present.
-        assert!(md.contains("## Chain DSL UGen Reference"));
+        assert!(md.contains("## UGen Reference"));
 
         // Every UGFacade variant name appears as a subsection heading.
         for name in [

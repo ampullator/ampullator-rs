@@ -567,23 +567,27 @@ fn pan_linear_accumulate(
 
 pub struct UGPan {
     output_refs: Vec<String>,
+    default_pan: Sample,
 }
 
 impl UGPan {
-    pub fn new(output_count: usize) -> Self {
+    pub fn new(output_count: usize, pan: Sample) -> Self {
         if output_count < 2 {
             panic!("Output count should be greater than 1");
         }
         let output_refs: Vec<String> =
             (1..output_count + 1).map(|i| format!("out{i}")).collect();
 
-        Self { output_refs }
+        Self {
+            output_refs,
+            default_pan: pan,
+        }
     }
 }
 
 impl Default for UGPan {
     fn default() -> Self {
-        Self::new(2)
+        Self::new(2, 0.5)
     }
 }
 
@@ -603,7 +607,7 @@ impl UGen for UGPan {
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         match input_name {
-            "pan" => Some((self.output_refs.len() as Sample - 1.0) * 0.5),
+            "pan" => Some(self.default_pan),
             _ => None,
         }
     }
@@ -625,11 +629,10 @@ impl UGen for UGPan {
             out.fill(0.0);
         }
         let n = outputs[0].len();
-        let default_pan = (output_count as Sample - 1.0) * 0.5;
 
         for i in 0..n {
             let x = input.get(i).copied().unwrap_or(0.0);
-            let pair_pos = pan.get(i).copied().unwrap_or(default_pan);
+            let pair_pos = pan.get(i).copied().unwrap_or(self.default_pan);
             pan_linear_accumulate(x, pair_pos, outputs, i);
         }
     }
@@ -1346,17 +1349,17 @@ impl UGen for UGTrigger {
 
 //------------------------------------------------------------------------------
 
-/// Given a constant rate determined by a value and a `UnitRate`, output impulses as long as the signal input is positive.
+/// Given a constant rate determined by a `rate` value and a `UnitRate`, output impulses as long as the signal input is positive.
 pub struct UGClock {
-    value: Sample,
+    rate: Sample,
     mode: UnitRate,
     phase: Sample,
 }
 
 impl UGClock {
-    pub fn new(value: Sample, mode: UnitRate) -> Self {
+    pub fn new(rate: Sample, mode: UnitRate) -> Self {
         Self {
-            value,
+            rate,
             mode,
             phase: 1.0, // init to one to fire on first sample
         }
@@ -1386,7 +1389,7 @@ impl UGen for UGClock {
     }
 
     fn describe_config(&self) -> Option<String> {
-        Some(format!("value = {}, mode = {:?}", self.value, self.mode))
+        Some(format!("rate = {}, mode = {:?}", self.rate, self.mode))
     }
 
     fn process(
@@ -1398,7 +1401,7 @@ impl UGen for UGClock {
     ) {
         let enabled = inputs.first().copied().unwrap_or(&[]);
         let out = &mut outputs[0];
-        let hz = unit_rate_to_hz(self.value, self.mode, sample_rate);
+        let hz = unit_rate_to_hz(self.rate, self.mode, sample_rate);
         let phase_inc = hz / sample_rate;
 
         for i in 0..out.len() {
@@ -1512,7 +1515,7 @@ mod tests {
         register_many![g,
             "in" => 1,
             "pan_pos" => 0.5,
-            "pan" => UGPan::new(2),
+            "pan" => UGPan::new(2, 0.5),
             "rl" => UGRound::new(3, ModeRound::Round),
             "rr" => UGRound::new(3, ModeRound::Round),
         ];
@@ -1540,7 +1543,7 @@ mod tests {
         register_many![g,
             "in" => 1,
             "pan_pos" => 1.5,
-            "pan" => UGPan::new(4),
+            "pan" => UGPan::new(4, 0.5),
             "r2" => UGRound::new(3, ModeRound::Round),
             "r3" => UGRound::new(3, ModeRound::Round),
         ];
@@ -1577,8 +1580,8 @@ mod tests {
             "in" => 1,
             "pan_pos_2" => 2.0,
             "pan_pos_3" => 3.0,
-            "pan2" => UGPan::new(4),
-            "pan3" => UGPan::new(4),
+            "pan2" => UGPan::new(4, 0.5),
+            "pan3" => UGPan::new(4, 0.5),
         ];
         connect_many![g,
         "in.out" -> "pan2.in",

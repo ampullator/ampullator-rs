@@ -1,7 +1,7 @@
 {
     "title": "Clock Control",
     "label": "ug_clock-control",
-    "chain": "(Clock(value=12, mode=Samples) * .5) + (Clock(value=3, mode=Samples) * .33)",
+    "chain": "(Clock(rate=12, mode=Samples) * .5) + (Clock(rate=3, mode=Samples) * .33)",
     "sample_rate": 100.0,
     "buffer_size": 8,
     "total_samples": 100

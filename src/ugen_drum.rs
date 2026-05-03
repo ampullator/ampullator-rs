@@ -940,7 +940,7 @@ mod tests {
     #[test]
     fn test_high_hat_trigger_and_decay() {
         let mut g = graph_from_chain_expression(
-            "Clock(value=48.0, mode=Samples) => clock \
+            "Clock(rate=48.0, mode=Samples) => clock \
              | HighHat(seed=42) => hat \
              | 16 => dec \
              | clock ->:gate hat \
@@ -966,7 +966,7 @@ mod tests {
     /// Seeded constructor should produce identical results when called twice.
     #[test]
     fn test_high_hat_seeded_reproducible() {
-        let chain = "Clock(value=32.0, mode=Samples) => clock \
+        let chain = "Clock(rate=32.0, mode=Samples) => clock \
                      | HighHat(seed=99) => hat \
                      | clock ->:gate hat";
 
@@ -984,10 +984,10 @@ mod tests {
     /// Different seeds should produce different noise-blended outputs.
     #[test]
     fn test_high_hat_different_seeds_differ() {
-        let chain1 = "Clock(value=32.0, mode=Samples) => clock \
+        let chain1 = "Clock(rate=32.0, mode=Samples) => clock \
                       | HighHat(seed=1) => hat \
                       | clock ->:gate hat";
-        let chain2 = "Clock(value=32.0, mode=Samples) => clock \
+        let chain2 = "Clock(rate=32.0, mode=Samples) => clock \
                       | HighHat(seed=2) => hat \
                       | clock ->:gate hat";
 
