@@ -438,30 +438,43 @@ const GITHUB_BASE_URL: &str =
 /// One construction argument for a Chain DSL UGen.
 struct FacadeArgDoc {
     name: &'static str,
-    type_hint: &'static str,
+    type_hint: String,
     /// `None` means the argument is required (no default).
-    default: Option<&'static str>,
+    default: Option<String>,
 }
 
 impl FacadeArgDoc {
-    fn required(name: &'static str, type_hint: &'static str) -> Self {
+    fn required(name: &'static str, type_hint: impl Into<String>) -> Self {
         Self {
             name,
-            type_hint,
+            type_hint: type_hint.into(),
             default: None,
         }
     }
     fn optional(
         name: &'static str,
-        type_hint: &'static str,
-        default: &'static str,
+        type_hint: impl Into<String>,
+        default: impl Into<String>,
     ) -> Self {
         Self {
             name,
-            type_hint,
-            default: Some(default),
+            type_hint: type_hint.into(),
+            default: Some(default.into()),
         }
     }
+}
+
+/// Format an enum's variants as a markdown alternation, e.g.
+/// `` `Hz` \| `Bpm` \| `Samples` ``. Uses [`strum::Display`] so the variant
+/// names stay in sync with the enum definition.
+fn enum_md<E>() -> String
+where
+    E: strum::IntoEnumIterator + std::fmt::Display,
+{
+    E::iter()
+        .map(|v| format!("`{v}`"))
+        .collect::<Vec<_>>()
+        .join(" \\| ")
 }
 
 /// Format a float default value for display: integers without decimal point.
@@ -490,16 +503,16 @@ fn chain_ugen_reference_markdown() -> String {
     use crate::ugen_rhythm::UGPulseSelect;
     use crate::ugen_select::{ModeSelect, UGSelect};
 
-    const UNIT_RATE: &str = "`Hz` \\| `Bpm` \\| `Samples` \\| `Midi` \\| `Seconds`";
-    const MODE_SELECT: &str = "`Cycle` \\| `Random` \\| `Shuffle` \\| `Walk`";
-    const MODE_ROUND: &str = "`Round` \\| `Floor` \\| `Ceil`";
-    const LFO_WAVE: &str = "`Sine` \\| `Triangle` \\| `Square`";
+    let unit_rate = enum_md::<UnitRate>();
+    let mode_select = enum_md::<ModeSelect>();
+    let mode_round = enum_md::<ModeRound>();
+    let lfo_wave = enum_md::<LfoWave>();
 
     // (facade_name, construction_args, representative_ugen_instance)
     let variants: Vec<(&str, Vec<FacadeArgDoc>, Box<dyn UGen>)> = vec![
         (
             "AsHz",
-            vec![FacadeArgDoc::optional("mode", UNIT_RATE, "Hz")],
+            vec![FacadeArgDoc::optional("mode", &unit_rate, "Hz")],
             Box::new(UGAsHz::new(UnitRate::Hz)),
         ),
         ("BassDrum", vec![], Box::new(UGBassDrum::new())),
@@ -508,7 +521,7 @@ fn chain_ugen_reference_markdown() -> String {
             "Clock",
             vec![
                 FacadeArgDoc::required("value", "number"),
-                FacadeArgDoc::required("mode", UNIT_RATE),
+                FacadeArgDoc::required("mode", &unit_rate),
             ],
             Box::new(UGClock::new(120.0, UnitRate::Bpm)),
         ),
@@ -522,9 +535,9 @@ fn chain_ugen_reference_markdown() -> String {
             "EnvBreakPoint",
             vec![
                 FacadeArgDoc::required("duration_values", "[number, ...]"),
-                FacadeArgDoc::required("duration_mode", MODE_SELECT),
+                FacadeArgDoc::required("duration_mode", &mode_select),
                 FacadeArgDoc::required("level_values", "[number, ...]"),
-                FacadeArgDoc::required("level_mode", MODE_SELECT),
+                FacadeArgDoc::required("level_mode", &mode_select),
                 FacadeArgDoc::optional("seed", "integer", "none"),
             ],
             Box::new(UGEnvBreakPoint::new(
@@ -562,9 +575,9 @@ fn chain_ugen_reference_markdown() -> String {
         (
             "Lfo",
             vec![
-                FacadeArgDoc::required("wave", LFO_WAVE),
+                FacadeArgDoc::required("wave", &lfo_wave),
                 FacadeArgDoc::optional("rate", "number", "1.0"),
-                FacadeArgDoc::optional("mode", UNIT_RATE, "Hz"),
+                FacadeArgDoc::optional("mode", &unit_rate, "Hz"),
                 FacadeArgDoc::optional("duty", "number", "0.5"),
                 FacadeArgDoc::optional("min", "number", "0.0"),
                 FacadeArgDoc::optional("max", "number", "1.0"),
@@ -613,7 +626,7 @@ fn chain_ugen_reference_markdown() -> String {
             "PulseSelect",
             vec![
                 FacadeArgDoc::required("duration_values", "[number, ...]"),
-                FacadeArgDoc::required("duration_mode", MODE_SELECT),
+                FacadeArgDoc::required("duration_mode", &mode_select),
                 FacadeArgDoc::optional("seed", "integer", "none"),
             ],
             Box::new(UGPulseSelect::new(vec![1.0], ModeSelect::Cycle, None)),
@@ -623,7 +636,7 @@ fn chain_ugen_reference_markdown() -> String {
             "Round",
             vec![
                 FacadeArgDoc::optional("places", "integer", "0"),
-                FacadeArgDoc::optional("mode", MODE_ROUND, "Round"),
+                FacadeArgDoc::optional("mode", &mode_round, "Round"),
             ],
             Box::new(UGRound::new(0, ModeRound::Round)),
         ),
@@ -631,7 +644,7 @@ fn chain_ugen_reference_markdown() -> String {
             "Select",
             vec![
                 FacadeArgDoc::required("values", "[number, ...]"),
-                FacadeArgDoc::required("mode", MODE_SELECT),
+                FacadeArgDoc::required("mode", &mode_select),
                 FacadeArgDoc::optional("seed", "integer", "none"),
             ],
             Box::new(UGSelect::new(vec![0.0], ModeSelect::Cycle, None)),
@@ -678,6 +691,7 @@ fn chain_ugen_reference_markdown() -> String {
             for arg in args {
                 let default = arg
                     .default
+                    .as_deref()
                     .map_or("*required*".to_string(), |d| format!("`{d}`"));
                 md.push(format!(
                     "| `{}` | {} | {} |",

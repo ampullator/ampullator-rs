@@ -11,7 +11,7 @@ pub(crate) fn split_name(s: &str) -> (&str, &str) {
 
 //------------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, strum::EnumIter, strum::Display)]
 pub enum UnitRate {
     Hz,
     Seconds,

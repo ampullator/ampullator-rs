@@ -197,7 +197,7 @@ impl UGen for UGAsHz {
 }
 
 //------------------------------------------------------------------------------
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::EnumIter, strum::Display)]
 pub enum ModeRound {
     Round,
     Floor,
@@ -1105,7 +1105,9 @@ impl UGen for UGSine {
 //------------------------------------------------------------------------------
 
 /// Waveform shape for [`UGLfo`].
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Deserialize, Serialize, strum::EnumIter, strum::Display,
+)]
 pub enum LfoWave {
     Sine,
     Triangle,

@@ -202,7 +202,7 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 
 | Arg | Type | Default |
 |-----|------|---------|
-| `mode` | `Hz` \| `Bpm` \| `Samples` \| `Midi` \| `Seconds` | `Hz` |
+| `mode` | `Hz` \| `Seconds` \| `Samples` \| `Midi` \| `Bpm` | `Hz` |
 
 **Inputs:**
 
@@ -246,7 +246,7 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 | Arg | Type | Default |
 |-----|------|---------|
 | `value` | number | *required* |
-| `mode` | `Hz` \| `Bpm` \| `Samples` \| `Midi` \| `Seconds` | *required* |
+| `mode` | `Hz` \| `Seconds` \| `Samples` \| `Midi` \| `Bpm` | *required* |
 
 **Inputs:**
 
@@ -394,7 +394,7 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 |-----|------|---------|
 | `wave` | `Sine` \| `Triangle` \| `Square` | *required* |
 | `rate` | number | `1.0` |
-| `mode` | `Hz` \| `Bpm` \| `Samples` \| `Midi` \| `Seconds` | `Hz` |
+| `mode` | `Hz` \| `Seconds` \| `Samples` \| `Midi` \| `Bpm` | `Hz` |
 | `duty` | number | `0.5` |
 | `min` | number | `0.0` |
 | `max` | number | `1.0` |
