@@ -5,6 +5,32 @@ fn db_per_octave_to_poles(db: f32) -> usize {
     ((db / 6.0).round()).clamp(1.0, 12.0) as usize
 }
 
+/// Inner low-pass sample computation: state-variable cascade with resonance feedback.
+/// Updates `state` and `z1` in place and returns the filtered sample.
+#[inline]
+fn low_pass_sample(x: Sample, g: f32, res: f32, state: &mut [Sample], z1: &mut Sample) -> Sample {
+    let mut y = x - res * *z1;
+    for s in state.iter_mut() {
+        *s += g * (y - *s);
+        y = *s;
+    }
+    *z1 = y;
+    y
+}
+
+/// Inner high-pass sample computation: state-variable cascade with resonance feedback.
+/// Updates `state` and `z1` in place and returns the filtered sample.
+#[inline]
+fn high_pass_sample(x: Sample, g: f32, res: f32, state: &mut [Sample], z1: &mut Sample) -> Sample {
+    let mut y = x - res * *z1;
+    for s in state.iter_mut() {
+        *s += g * (y - *s);
+        y -= *s;
+    }
+    *z1 = y;
+    y
+}
+
 /// A low pass filter with variable cutoff frequency. Rolloff configurable at initialization.
 pub struct UGLowPass {
     poles: usize,
@@ -129,15 +155,7 @@ impl UGen for UGLowPassQ {
             let res = resonance.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0);
 
             let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
-            let mut y = x - res * self.z1;
-
-            for p in 0..self.poles {
-                self.state[p] += g * (y - self.state[p]);
-                y = self.state[p];
-            }
-
-            self.z1 = y; // feedback storage
-            out[i] = y;
+            out[i] = low_pass_sample(x, g, res, &mut self.state, &mut self.z1);
         }
     }
 }
@@ -265,15 +283,7 @@ impl UGen for UGHighPassQ {
             let res = resonance.get(i).copied().unwrap_or(0.0).clamp(0.0, 1.0);
 
             let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
-            let mut y = x - res * self.z1;
-
-            for p in 0..self.poles {
-                self.state[p] += g * (y - self.state[p]);
-                y -= self.state[p];
-            }
-
-            self.z1 = y; // feedback storage
-            out[i] = y;
+            out[i] = high_pass_sample(x, g, res, &mut self.state, &mut self.z1);
         }
     }
 }
@@ -351,13 +361,7 @@ impl UGen for UGLowPassConst {
             let input = inputs.get(ch).copied().unwrap_or(&[]);
             for i in 0..n {
                 let x = input.get(i).copied().unwrap_or(0.0);
-                let mut y = x - res * *z1;
-                for p in 0..self.poles {
-                    state[p] += g * (y - state[p]);
-                    y = state[p];
-                }
-                *z1 = y;
-                out[i] = y;
+                out[i] = low_pass_sample(x, g, res, state, z1);
             }
         }
     }
@@ -436,13 +440,7 @@ impl UGen for UGHighPassConst {
             let input = inputs.get(ch).copied().unwrap_or(&[]);
             for i in 0..n {
                 let x = input.get(i).copied().unwrap_or(0.0);
-                let mut y = x - res * *z1;
-                for p in 0..self.poles {
-                    state[p] += g * (y - state[p]);
-                    y -= state[p];
-                }
-                *z1 = y;
-                out[i] = y;
+                out[i] = high_pass_sample(x, g, res, state, z1);
             }
         }
     }
