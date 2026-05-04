@@ -21,7 +21,8 @@ pub use ugen_core::{
 pub use ugen_select::{ModeSelect, UGSelect};
 
 pub use ugen_filter::{
-    UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+    UGHighPass, UGHighPassConst, UGHighPassQ, UGLowPass, UGLowPassConst, UGLowPassQ,
+    UGParametric, UGParametricConst,
 };
 
 pub use ugen_env::{UGEnvAR, UGEnvBreakPoint};

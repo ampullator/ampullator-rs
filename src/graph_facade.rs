@@ -11,7 +11,8 @@ use crate::ugen_core::{
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
-    UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+    UGHighPass, UGHighPassConst, UGHighPassQ, UGLowPass, UGLowPassConst, UGLowPassQ,
+    UGParametric, UGParametricConst,
 };
 use crate::ugen_reverb::UGReverb;
 use crate::ugen_rhythm::UGPulseSelect;
@@ -73,6 +74,14 @@ pub enum UGFacade {
         #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
+    HighPassConst {
+        #[serde(default = "UGFacade::default_roll_off_db")]
+        roll_off_db: f32,
+        cutoff: f32,
+        resonance: f32,
+        #[serde(default = "UGFacade::default_channels")]
+        channels: usize,
+    },
     LowPass {
         #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
@@ -80,6 +89,14 @@ pub enum UGFacade {
     LowPassQ {
         #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
+    },
+    LowPassConst {
+        #[serde(default = "UGFacade::default_roll_off_db")]
+        roll_off_db: f32,
+        cutoff: f32,
+        resonance: f32,
+        #[serde(default = "UGFacade::default_channels")]
+        channels: usize,
     },
     Parametric {},
     ParametricConst {
@@ -174,8 +191,20 @@ impl UGFacade {
             UGFacade::HighPassQ { roll_off_db } => {
                 Box::new(UGHighPassQ::new(*roll_off_db))
             }
+            UGFacade::HighPassConst {
+                roll_off_db,
+                cutoff,
+                resonance,
+                channels,
+            } => Box::new(UGHighPassConst::new(*roll_off_db, *cutoff, *resonance, *channels)),
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
+            UGFacade::LowPassConst {
+                roll_off_db,
+                cutoff,
+                resonance,
+                channels,
+            } => Box::new(UGLowPassConst::new(*roll_off_db, *cutoff, *resonance, *channels)),
             UGFacade::Parametric {} => Box::new(UGParametric::new()),
             UGFacade::ParametricConst { gain, bw, freq } => {
                 Box::new(UGParametricConst::new(*gain, *bw, *freq))
@@ -502,7 +531,8 @@ fn chain_ugen_reference_markdown() -> String {
     use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
     use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
     use crate::ugen_filter::{
-        UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+        UGHighPass, UGHighPassConst, UGHighPassQ, UGLowPass, UGLowPassConst, UGLowPassQ,
+        UGParametric, UGParametricConst,
     };
     use crate::ugen_reverb::UGReverb;
     use crate::ugen_rhythm::UGPulseSelect;
@@ -578,6 +608,16 @@ fn chain_ugen_reference_markdown() -> String {
             Box::new(UGHighPassQ::new(6.0)),
         ),
         (
+            "HighPassConst",
+            vec![
+                FacadeArgDoc::optional("roll_off_db", "number", "6.0"),
+                FacadeArgDoc::required("cutoff", "number"),
+                FacadeArgDoc::required("resonance", "number"),
+                FacadeArgDoc::optional("channels", "integer", "1"),
+            ],
+            Box::new(UGHighPassConst::new(6.0, 1000.0, 0.0, 1)),
+        ),
+        (
             "Lfo",
             vec![
                 FacadeArgDoc::required("wave", &lfo_wave),
@@ -598,6 +638,16 @@ fn chain_ugen_reference_markdown() -> String {
             "LowPassQ",
             vec![FacadeArgDoc::optional("roll_off_db", "number", "6.0")],
             Box::new(UGLowPassQ::new(6.0)),
+        ),
+        (
+            "LowPassConst",
+            vec![
+                FacadeArgDoc::optional("roll_off_db", "number", "6.0"),
+                FacadeArgDoc::required("cutoff", "number"),
+                FacadeArgDoc::required("resonance", "number"),
+                FacadeArgDoc::optional("channels", "integer", "1"),
+            ],
+            Box::new(UGLowPassConst::new(6.0, 1000.0, 0.0, 1)),
         ),
         (
             "MixLinear",
@@ -1434,6 +1484,60 @@ mod tests {
     }
 
     #[test]
+    fn test_ug_facade_low_pass_const() {
+        // LowPassConst (single channel) should match LowPassQ with the same
+        // constant cutoff and resonance.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "lpfc": ["LowPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 1}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "lpfc.in1"],
+                ["lpfc.out1", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        // Same values as UGLowPassQ with cutoff=60, resonance=0.5.
+        let out = g.get_output_by_label("r.out");
+        assert!(!out.is_empty());
+        assert!(out.iter().any(|&v| v != 0.0));
+    }
+
+    #[test]
+    fn test_ug_facade_high_pass_const() {
+        // HighPassConst (single channel) should match HighPassQ with the same
+        // constant cutoff and resonance.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "hpfc": ["HighPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 1}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "hpfc.in1"],
+                ["hpfc.out1", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        // Same values as UGHighPassQ with cutoff=60, resonance=0.5.
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
+                -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
+            ]
+        );
+    }
+
+    #[test]
     fn test_chain_ugen_reference_markdown() {
         let md = chain_ugen_reference_markdown();
 
@@ -1453,9 +1557,11 @@ mod tests {
             "Floor",
             "HighHat",
             "HighPass",
+            "HighPassConst",
             "HighPassQ",
             "Lfo",
             "LowPass",
+            "LowPassConst",
             "LowPassQ",
             "MixLinear",
             "Mult",

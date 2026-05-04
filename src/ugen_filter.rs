@@ -278,6 +278,176 @@ impl UGen for UGHighPassQ {
     }
 }
 
+/// A low-pass filter with cutoff, resonance, and roll-off fixed at initialization.
+/// Processes `channels` audio streams in parallel with the same filter parameters.
+/// More efficient than `UGLowPassQ` when parameters do not vary at runtime.
+///
+/// Inputs: `in1` … `inN`. Outputs: `out1` … `outN`.
+pub struct UGLowPassConst {
+    poles: usize,
+    cutoff: f32,
+    resonance: f32,
+    channels: usize,
+    /// Per-channel filter state: integrator states + feedback z1.
+    channel_state: Vec<(Vec<Sample>, Sample)>,
+    input_refs: Vec<String>,
+    output_refs: Vec<String>,
+}
+
+impl UGLowPassConst {
+    pub fn new(roll_off_db: f32, cutoff: f32, resonance: f32, channels: usize) -> Self {
+        assert!(channels >= 1, "channels must be at least 1");
+        let poles = db_per_octave_to_poles(roll_off_db);
+        let channel_state = (0..channels)
+            .map(|_| (vec![0.0f32; poles], 0.0f32))
+            .collect();
+        let input_refs = (1..=channels).map(|i| format!("in{i}")).collect();
+        let output_refs = (1..=channels).map(|i| format!("out{i}")).collect();
+        Self {
+            poles,
+            cutoff: cutoff.clamp(1.0, f32::MAX),
+            resonance: resonance.clamp(0.0, 1.0),
+            channels,
+            channel_state,
+            input_refs,
+            output_refs,
+        }
+    }
+}
+
+impl UGen for UGLowPassConst {
+    fn type_name(&self) -> &'static str {
+        "UGLowPassConst"
+    }
+
+    fn input_names(&self) -> &[String] {
+        &self.input_refs
+    }
+
+    fn output_names(&self) -> &[String] {
+        &self.output_refs
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let n = match outputs.first() {
+            Some(out) => out.len(),
+            None => return,
+        };
+        let fc = self.cutoff.clamp(1.0, sample_rate / 2.0);
+        let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
+        let res = self.resonance;
+
+        for (ch, (out, (state, z1))) in outputs
+            .iter_mut()
+            .zip(self.channel_state.iter_mut())
+            .enumerate()
+        {
+            let input = inputs.get(ch).copied().unwrap_or(&[]);
+            for i in 0..n {
+                let x = input.get(i).copied().unwrap_or(0.0);
+                let mut y = x - res * *z1;
+                for p in 0..self.poles {
+                    state[p] += g * (y - state[p]);
+                    y = state[p];
+                }
+                *z1 = y;
+                out[i] = y;
+            }
+        }
+    }
+}
+
+/// A high-pass filter with cutoff, resonance, and roll-off fixed at initialization.
+/// Processes `channels` audio streams in parallel with the same filter parameters.
+/// More efficient than `UGHighPassQ` when parameters do not vary at runtime.
+///
+/// Inputs: `in1` … `inN`. Outputs: `out1` … `outN`.
+pub struct UGHighPassConst {
+    poles: usize,
+    cutoff: f32,
+    resonance: f32,
+    channels: usize,
+    /// Per-channel filter state: integrator states + feedback z1.
+    channel_state: Vec<(Vec<Sample>, Sample)>,
+    input_refs: Vec<String>,
+    output_refs: Vec<String>,
+}
+
+impl UGHighPassConst {
+    pub fn new(roll_off_db: f32, cutoff: f32, resonance: f32, channels: usize) -> Self {
+        assert!(channels >= 1, "channels must be at least 1");
+        let poles = db_per_octave_to_poles(roll_off_db);
+        let channel_state = (0..channels)
+            .map(|_| (vec![0.0f32; poles], 0.0f32))
+            .collect();
+        let input_refs = (1..=channels).map(|i| format!("in{i}")).collect();
+        let output_refs = (1..=channels).map(|i| format!("out{i}")).collect();
+        Self {
+            poles,
+            cutoff: cutoff.clamp(1.0, f32::MAX),
+            resonance: resonance.clamp(0.0, 1.0),
+            channels,
+            channel_state,
+            input_refs,
+            output_refs,
+        }
+    }
+}
+
+impl UGen for UGHighPassConst {
+    fn type_name(&self) -> &'static str {
+        "UGHighPassConst"
+    }
+
+    fn input_names(&self) -> &[String] {
+        &self.input_refs
+    }
+
+    fn output_names(&self) -> &[String] {
+        &self.output_refs
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let n = match outputs.first() {
+            Some(out) => out.len(),
+            None => return,
+        };
+        let fc = self.cutoff.clamp(1.0, sample_rate / 2.0);
+        let g = (2.0 * std::f32::consts::PI * fc / sample_rate).clamp(0.0, 1.0);
+        let res = self.resonance;
+
+        for (ch, (out, (state, z1))) in outputs
+            .iter_mut()
+            .zip(self.channel_state.iter_mut())
+            .enumerate()
+        {
+            let input = inputs.get(ch).copied().unwrap_or(&[]);
+            for i in 0..n {
+                let x = input.get(i).copied().unwrap_or(0.0);
+                let mut y = x - res * *z1;
+                for p in 0..self.poles {
+                    state[p] += g * (y - state[p]);
+                    y -= state[p];
+                }
+                *z1 = y;
+                out[i] = y;
+            }
+        }
+    }
+}
+
 /// Compute normalized biquad peaking EQ coefficients (Audio EQ Cookbook, R. Bristow-Johnson).
 /// Returns `(b0, b1, b2, a1, a2)` — all normalized by `a0`.
 #[inline]
@@ -464,6 +634,7 @@ mod tests {
     use crate::ModeRound;
     use crate::UGClock;
     use crate::UGRound;
+    use crate::UGSine;
     use crate::UnitRate;
     use crate::connect_many;
     use crate::register_many;
@@ -716,5 +887,140 @@ mod tests {
                 0.006, 0.01, 0.013, 0.016, 0.018, 0.019, 0.019,
             ]
         );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_low_pass_const_matches_low_pass_q() {
+        // UGLowPassConst with single channel should match UGLowPassQ with the
+        // same constant cutoff and resonance inputs.
+        let mut g_q = GenGraph::new(2000.0, 16);
+        register_many![g_q,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "lpfq" => UGLowPassQ::new(12.0),
+            "fq" => 60,
+            "res" => 0.5_f32,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g_q,
+            "clock.out" -> "lpfq.in",
+            "fq.out" -> "lpfq.cutoff",
+            "res.out" -> "lpfq.resonance",
+            "lpfq.out" -> "r.in"
+        ];
+        g_q.process();
+        let q_out = g_q.get_output_by_label("r.out");
+
+        let mut g_c = GenGraph::new(2000.0, 16);
+        register_many![g_c,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "lpfc" => UGLowPassConst::new(12.0, 60.0, 0.5, 1),
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g_c,
+            "clock.out" -> "lpfc.in1",
+            "lpfc.out1" -> "r.in"
+        ];
+        g_c.process();
+        let c_out = g_c.get_output_by_label("r.out");
+
+        assert_eq!(c_out, q_out);
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_low_pass_const_two_channels_independent() {
+        // Two channels fed different signals should each be filtered independently
+        // with the same filter parameters.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "sine" => UGSine::new(),
+            "lpfc" => UGLowPassConst::new(12.0, 60.0, 0.5, 2),
+            "r1" => UGRound::new(3, ModeRound::Round),
+            "r2" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "lpfc.in1",
+            "sine.wave" -> "lpfc.in2",
+            "lpfc.out1" -> "r1.in",
+            "lpfc.out2" -> "r2.in"
+        ];
+        g.process();
+
+        // Each channel should produce filtered output (non-zero) independently.
+        let out1 = g.get_output_by_label("r1.out");
+        let out2 = g.get_output_by_label("r2.out");
+        // Channels fed different signals must produce different outputs.
+        assert_ne!(out1, out2);
+        // Both outputs should be non-trivially non-zero (the filter has processed signal).
+        assert!(out1.iter().any(|&v| v != 0.0));
+        assert!(out2.iter().any(|&v| v != 0.0));
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_high_pass_const_matches_high_pass_q() {
+        // UGHighPassConst with single channel should match UGHighPassQ with the
+        // same constant cutoff and resonance inputs.
+        let mut g_q = GenGraph::new(2000.0, 16);
+        register_many![g_q,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "hpfq" => UGHighPassQ::new(12.0),
+            "fq" => 60,
+            "res" => 0.5_f32,
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g_q,
+            "clock.out" -> "hpfq.in",
+            "fq.out" -> "hpfq.cutoff",
+            "res.out" -> "hpfq.resonance",
+            "hpfq.out" -> "r.in"
+        ];
+        g_q.process();
+        let q_out = g_q.get_output_by_label("r.out");
+
+        let mut g_c = GenGraph::new(2000.0, 16);
+        register_many![g_c,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "hpfc" => UGHighPassConst::new(12.0, 60.0, 0.5, 1),
+            "r" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g_c,
+            "clock.out" -> "hpfc.in1",
+            "hpfc.out1" -> "r.in"
+        ];
+        g_c.process();
+        let c_out = g_c.get_output_by_label("r.out");
+
+        assert_eq!(c_out, q_out);
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_high_pass_const_two_channels_independent() {
+        // Two channels fed different signals should each be filtered independently
+        // with the same filter parameters.
+        let mut g = GenGraph::new(2000.0, 16);
+        register_many![g,
+            "clock" => UGClock::new(20.0, UnitRate::Samples),
+            "sine" => UGSine::new(),
+            "hpfc" => UGHighPassConst::new(12.0, 60.0, 0.5, 2),
+            "r1" => UGRound::new(3, ModeRound::Round),
+            "r2" => UGRound::new(3, ModeRound::Round),
+        ];
+        connect_many![g,
+            "clock.out" -> "hpfc.in1",
+            "sine.wave" -> "hpfc.in2",
+            "hpfc.out1" -> "r1.in",
+            "hpfc.out2" -> "r2.in"
+        ];
+        g.process();
+
+        let out1 = g.get_output_by_label("r1.out");
+        let out2 = g.get_output_by_label("r2.out");
+        assert_ne!(out1, out2);
+        assert!(out1.iter().any(|&v| v != 0.0));
+        assert!(out2.iter().any(|&v| v != 0.0));
     }
 }
