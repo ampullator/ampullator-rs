@@ -96,7 +96,6 @@ impl UGen for UGLowPass {
 
 /// A low pass filter with variable cutoff and resonance. Roll-off configuraable at initialization.
 pub struct UGLowPassQ {
-    poles: usize,
     state: Vec<Sample>,
     z1: Sample,
 }
@@ -105,7 +104,6 @@ impl UGLowPassQ {
     pub fn new(roll_off_db: f32) -> Self {
         let poles = db_per_octave_to_poles(roll_off_db);
         Self {
-            poles,
             state: vec![0.0; poles],
             z1: 0.0,
         }
@@ -224,7 +222,6 @@ impl UGen for UGHighPass {
 
 /// A high pass filter with variable cutoff and resonance. Roll-off configurable at initialization.
 pub struct UGHighPassQ {
-    poles: usize,
     state: Vec<Sample>,
     z1: Sample,
 }
@@ -233,7 +230,6 @@ impl UGHighPassQ {
     pub fn new(roll_off_db: f32) -> Self {
         let poles = db_per_octave_to_poles(roll_off_db);
         Self {
-            poles,
             state: vec![0.0; poles],
             z1: 0.0,
         }
@@ -294,10 +290,8 @@ impl UGen for UGHighPassQ {
 ///
 /// Inputs: `in1` … `inN`. Outputs: `out1` … `outN`.
 pub struct UGLowPassConst {
-    poles: usize,
     cutoff: f32,
     resonance: f32,
-    channels: usize,
     /// Per-channel filter state: integrator states + feedback z1.
     channel_state: Vec<(Vec<Sample>, Sample)>,
     input_refs: Vec<String>,
@@ -314,10 +308,8 @@ impl UGLowPassConst {
         let input_refs = (1..=channels).map(|i| format!("in{i}")).collect();
         let output_refs = (1..=channels).map(|i| format!("out{i}")).collect();
         Self {
-            poles,
             cutoff: cutoff.clamp(1.0, f32::MAX),
             resonance: resonance.clamp(0.0, 1.0),
-            channels,
             channel_state,
             input_refs,
             output_refs,
@@ -373,10 +365,8 @@ impl UGen for UGLowPassConst {
 ///
 /// Inputs: `in1` … `inN`. Outputs: `out1` … `outN`.
 pub struct UGHighPassConst {
-    poles: usize,
     cutoff: f32,
     resonance: f32,
-    channels: usize,
     /// Per-channel filter state: integrator states + feedback z1.
     channel_state: Vec<(Vec<Sample>, Sample)>,
     input_refs: Vec<String>,
@@ -393,10 +383,8 @@ impl UGHighPassConst {
         let input_refs = (1..=channels).map(|i| format!("in{i}")).collect();
         let output_refs = (1..=channels).map(|i| format!("out{i}")).collect();
         Self {
-            poles,
             cutoff: cutoff.clamp(1.0, f32::MAX),
             resonance: resonance.clamp(0.0, 1.0),
-            channels,
             channel_state,
             input_refs,
             output_refs,
