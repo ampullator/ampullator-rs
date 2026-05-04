@@ -9,6 +9,7 @@ use crate::ugen_core::{
     UGMult, UGPan, UGRound, UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
+use crate::ugen_string::UGString;
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
     UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
@@ -127,6 +128,13 @@ pub enum UGFacade {
     SnareDrum {
         seed: Option<u64>,
     },
+    String {
+        #[serde(default = "UGFacade::default_string_freq")]
+        freq: f32,
+        #[serde(default = "UGFacade::default_string_damping")]
+        damping: f32,
+        seed: Option<u64>,
+    },
     Sum {
         #[serde(default = "UGFacade::default_inputs")]
         inputs: usize,
@@ -169,6 +177,9 @@ impl UGFacade {
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::HighHat { seed } => Box::new(UGHighHat::new(*seed)),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
+            UGFacade::String { freq, damping, seed } => {
+                Box::new(UGString::new(*freq, *damping, *seed))
+            }
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
             UGFacade::HighPass { roll_off_db } => Box::new(UGHighPass::new(*roll_off_db)),
             UGFacade::HighPassQ { roll_off_db } => {
@@ -287,6 +298,14 @@ impl UGFacade {
 
     fn default_pan() -> Sample {
         0.5
+    }
+
+    fn default_string_freq() -> f32 {
+        440.0
+    }
+
+    fn default_string_damping() -> f32 {
+        0.996
     }
 }
 
@@ -662,6 +681,15 @@ fn chain_ugen_reference_markdown() -> String {
             "SnareDrum",
             vec![FacadeArgDoc::optional("seed", "integer", "none")],
             Box::new(UGSnareDrum::new_seeded(None)),
+        ),
+        (
+            "String",
+            vec![
+                FacadeArgDoc::optional("freq", "number", "440.0"),
+                FacadeArgDoc::optional("damping", "number", "0.996"),
+                FacadeArgDoc::optional("seed", "integer", "none"),
+            ],
+            Box::new(UGString::new(440.0, 0.996, None)),
         ),
         (
             "Sum",
@@ -1468,6 +1496,7 @@ mod tests {
             "Select",
             "Sine",
             "SnareDrum",
+            "String",
             "Sum",
             "Trigger",
             "White",

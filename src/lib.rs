@@ -9,6 +9,7 @@ mod ugen_filter;
 mod ugen_reverb;
 mod ugen_rhythm;
 mod ugen_select;
+mod ugen_string;
 mod util;
 
 pub use recorder::{Recorder, WavFormat};
@@ -30,6 +31,8 @@ pub use ugen_reverb::UGReverb;
 pub use ugen_rhythm::UGPulseSelect;
 
 pub use ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
+
+pub use ugen_string::UGString;
 
 pub use util::{Sample, UnitRate};
 
