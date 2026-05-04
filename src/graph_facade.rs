@@ -1485,8 +1485,7 @@ mod tests {
 
     #[test]
     fn test_ug_facade_low_pass_const() {
-        // LowPassConst (single channel) should match LowPassQ with the same
-        // constant cutoff and resonance.
+        // LowPassConst (single channel) with resonance=0.5.
         let json = r#"{
             "register": {
                 "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
@@ -1502,10 +1501,13 @@ mod tests {
         let gf: GraphFacade = serde_json::from_str(json).unwrap();
         gf.register_and_connect(&mut g).unwrap();
         g.process();
-        // Same values as UGLowPassQ with cutoff=60, resonance=0.5.
-        let out = g.get_output_by_label("r.out");
-        assert!(!out.is_empty());
-        assert!(out.iter().any(|&v| v != 0.0));
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037,
+                0.03, 0.024, 0.018, 0.014, 0.01, 0.007
+            ]
+        );
     }
 
     #[test]
@@ -1535,6 +1537,107 @@ mod tests {
                 -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
             ]
         );
+    }
+
+    #[test]
+    fn test_chain_low_pass_const_chain_dsl() {
+        // LowPassConst via Chain DSL string: single-channel, same output as JSON form.
+        let chain = "Clock(rate=20, mode=Samples) => clk \
+                     | LowPassConst(roll_off_db=12, cutoff=60, resonance=0.5, channels=1) => lpfc \
+                     | Round(places=3, mode=Round) => r \
+                     | clk ->:in1 lpfc \
+                     | lpfc ->out1:in r";
+        let gf = GraphFacade::from_chain(chain).expect("from_chain failed");
+        let mut g = GenGraph::new(2000.0, 16);
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037,
+                0.03, 0.024, 0.018, 0.014, 0.01, 0.007
+            ]
+        );
+    }
+
+    #[test]
+    fn test_chain_high_pass_const_chain_dsl() {
+        // HighPassConst via Chain DSL string: single-channel, same output as JSON form.
+        let chain = "Clock(rate=20, mode=Samples) => clk \
+                     | HighPassConst(roll_off_db=12, cutoff=60, resonance=0.5, channels=1) => hpfc \
+                     | Round(places=3, mode=Round) => r \
+                     | clk ->:in1 hpfc \
+                     | hpfc ->out1:in r";
+        let gf = GraphFacade::from_chain(chain).expect("from_chain failed");
+        let mut g = GenGraph::new(2000.0, 16);
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
+                -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
+            ]
+        );
+    }
+
+    #[test]
+    fn test_chain_low_pass_const_two_channels() {
+        // LowPassConst with channels=2: independent per-channel state, same params.
+        // Both channels receive the same clock signal so their outputs are identical.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "lpfc": ["LowPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 2}],
+                "r1": ["Round", {"places": 3, "mode": "Round"}],
+                "r2": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "lpfc.in1"],
+                ["clock.out", "lpfc.in2"],
+                ["lpfc.out1", "r1.in"],
+                ["lpfc.out2", "r2.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        let expected = vec![
+            0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037,
+            0.03, 0.024, 0.018, 0.014, 0.01, 0.007,
+        ];
+        assert_eq!(g.get_output_by_label("r1.out"), expected);
+        assert_eq!(g.get_output_by_label("r2.out"), expected);
+    }
+
+    #[test]
+    fn test_chain_high_pass_const_two_channels() {
+        // HighPassConst with channels=2: independent per-channel state, same params.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "hpfc": ["HighPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 2}],
+                "r1": ["Round", {"places": 3, "mode": "Round"}],
+                "r2": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "hpfc.in1"],
+                ["clock.out", "hpfc.in2"],
+                ["hpfc.out1", "r1.in"],
+                ["hpfc.out2", "r2.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        let expected = vec![
+            0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
+            -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005,
+        ];
+        assert_eq!(g.get_output_by_label("r1.out"), expected);
+        assert_eq!(g.get_output_by_label("r2.out"), expected);
     }
 
     #[test]
