@@ -846,7 +846,7 @@ mod tests {
     #[test]
     fn test_chain_simple_ugens_no_connections() {
         let (reg, conn) = parse(
-            "White() | ParametricConst(gain=1, bw=.6, freq=2000) | Clock(value=20.0, mode=Samples)",
+            "White() | ParametricConst(gain=1, bw=.6, freq=2000) | Clock(rate=20.0, mode=Samples)",
         );
         // Three UGens registered, no connections
         assert_eq!(reg.len(), 3);
@@ -856,7 +856,7 @@ mod tests {
     #[test]
     fn test_chain_named_ugens_no_connections() {
         let (reg, conn) = parse(
-            "White() => noise | ParametricConst(gain=1, bw=.6, freq=2000) => f1 | Clock(value=20.0, mode=Samples) => metro",
+            "White() => noise | ParametricConst(gain=1, bw=.6, freq=2000) => f1 | Clock(rate=20.0, mode=Samples) => metro",
         );
         assert!(reg.contains_key("noise"), "register should contain 'noise'");
         assert!(reg.contains_key("f1"), "register should contain 'f1'");
@@ -1088,7 +1088,7 @@ mod tests {
     fn test_chain_clock_select_integration() {
         // Build a clock+step chain – forward-references to undefined names are
         // not yet supported, so we verify just the register here.
-        let chain2 = "Clock(value=2.0, mode=Samples) => clk | Const(value=1.0) => step";
+        let chain2 = "Clock(rate=2.0, mode=Samples) => clk | Const(value=1.0) => step";
         let (reg, _) = parse(chain2);
         assert!(reg.contains_key("clk"));
         assert!(reg.contains_key("step"));

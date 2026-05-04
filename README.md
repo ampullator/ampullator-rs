@@ -23,7 +23,7 @@ White() => noise | LowPass() => lpf | noise -> lpf
 A UGen is created by writing its type name, optionally followed by keyword arguments in parentheses. Argument values are numbers, identifiers (for enum variants), or lists.
 
 ```
-Clock(value=120, mode=Bpm)
+Clock(rate=120, mode=Bpm)
 ParametricConst(gain=6, bw=0.333, freq=1000)
 PulseSelect(duration_values=[3, 2, 1], duration_mode=Cycle)
 ```
@@ -154,11 +154,505 @@ White(seed=42) => noise -> LowPass() => lpf -> HighPass() => hpf | 4000 ->:cutof
 Drum machine driven by a clock and pulse selectors:
 
 ```
-Clock(value=300, mode=Bpm) => metro
+Clock(rate=300, mode=Bpm) => metro
 | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd
 | metro -> PulseSelect(duration_values=[1, 2, 1], duration_mode=Shuffle) -> SnareDrum() => sn
 | (bd + sn) => mix
 ```
+
+## UGen Reference
+
+The following UGens are available in the Chain DSL. Each entry lists construction arguments (with defaults), signal inputs (with default values), and signal outputs.
+
+### AsHz
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `mode` | `Hz` \| `Seconds` \| `Samples` \| `Midi` \| `Bpm` | `Hz` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### BassDrum
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `gate` | `0` |
+| `tune` | `55` |
+| `decay` | `9000` |
+| `punch` | `2.8` |
+| `sweep_decay` | `1200` |
+| `click` | `0.2` |
+| `tone` | `1` |
+| `drive` | `1.3` |
+
+**Outputs:** `out`
+
+### Ceil
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### Clock
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `rate` | number | *required* |
+| `mode` | `Hz` \| `Seconds` \| `Samples` \| `Midi` \| `Bpm` | *required* |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | `1` |
+
+**Outputs:** `out`
+
+### Const
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `value` | number | *required* |
+
+**Outputs:** `out`
+
+### EnvAR
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `trigger` | `0` |
+| `attack_dur` | `1` |
+| `release_dur` | `1` |
+| `attack_curve` | `1` |
+| `release_curve` | `1` |
+
+**Outputs:** `out`
+
+### EnvBreakPoint
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `duration_values` | [number, ...] | *required* |
+| `duration_mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `level_values` | [number, ...] | *required* |
+| `level_mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `clock` | `0` |
+| `step` | `1` |
+
+**Outputs:** `out`
+
+### Fade
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `channels` | integer | `1` |
+| `level` | number | `1.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `level` | `1` |
+
+**Outputs:** `out1`
+
+### Floor
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### HighHat
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `gate` | `0` |
+| `tune` | `3969` |
+| `decay` | `4000` |
+| `tone` | `8000` |
+| `accent` | `0.8` |
+| `noise` | `0.2` |
+| `drive` | `1.2` |
+
+**Outputs:** `out`
+
+### HighPass
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+
+**Outputs:** `out`
+
+### HighPassQ
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+| `resonance` | — |
+
+**Outputs:** `out`
+
+### Lfo
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `wave` | `Sine` \| `Triangle` \| `Square` | *required* |
+| `rate` | number | `1.0` |
+| `mode` | `Hz` \| `Seconds` \| `Samples` \| `Midi` \| `Bpm` | `Hz` |
+| `duty` | number | `0.5` |
+| `min` | number | `0.0` |
+| `max` | number | `1.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `rate` | `1` |
+| `duty` | `0.5` |
+| `min` | `0` |
+| `max` | `1` |
+
+**Outputs:** `wave`
+
+### LowPass
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+
+**Outputs:** `out`
+
+### LowPassQ
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `cutoff` | — |
+| `resonance` | — |
+
+**Outputs:** `out`
+
+### MixLinear
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `inputs` | integer | `2` |
+| `outputs` | integer | `2` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `pan1` | `0.5` |
+| `level1` | `1` |
+| `in2` | — |
+| `pan2` | `0.5` |
+| `level2` | `1` |
+
+**Outputs:** `out1`, `out2`
+
+### Mult
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `inputs` | integer | `2` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `in2` | — |
+
+**Outputs:** `out`
+
+### Pan
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `outputs` | integer | `2` |
+| `pan` | number | `0.5` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `pan` | `0.5` |
+
+**Outputs:** `out1`, `out2`
+
+### Parametric
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+| `gain` | — |
+| `bw` | — |
+| `freq` | — |
+
+**Outputs:** `out`
+
+### ParametricConst
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `gain` | number | *required* |
+| `bw` | number | *required* |
+| `freq` | number | *required* |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### PulseSelect
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `duration_values` | [number, ...] | *required* |
+| `duration_mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `clock` | `0` |
+| `step` | `1` |
+
+**Outputs:** `out`
+
+### Reverb
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in_l` | `0` |
+| `in_r` | `0` |
+| `decay` | `0.6` |
+| `pre_delay` | `20` |
+| `mix` | `0.35` |
+| `size` | `1` |
+| `diffusion` | `0.75` |
+| `damping` | `7000` |
+
+**Outputs:** `out_l`, `out_r`
+
+### Round
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `places` | integer | `0` |
+| `mode` | `Round` \| `Floor` \| `Ceil` | `Round` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | — |
+
+**Outputs:** `out`
+
+### Select
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `values` | [number, ...] | *required* |
+| `mode` | `Cycle` \| `Random` \| `Shuffle` \| `Walk` | *required* |
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `trigger` | `0` |
+| `step` | `1` |
+
+**Outputs:** `out`
+
+### Sine
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `freq` | `440` |
+| `phase` | `0` |
+| `min` | `-1` |
+| `max` | `1` |
+
+**Outputs:** `wave`, `trigger`
+
+### SnareDrum
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `gate` | `0` |
+| `tune` | `180` |
+| `tone` | `0.7` |
+| `snappy` | `0.9` |
+| `tone_decay` | `3000` |
+| `snappy_decay` | `5000` |
+| `noise_filter` | `4000` |
+| `pitch_sweep` | `1.5` |
+
+**Outputs:** `out`
+
+### Sum
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `inputs` | integer | `2` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+| `in2` | — |
+
+**Outputs:** `out`
+
+### Trigger
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `freq` | `1` |
+
+**Outputs:** `out`
+
+### White
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `min` | `-1` |
+| `max` | `1` |
+
+**Outputs:** `out`
+
 
 
 ## CLIs
@@ -173,7 +667,7 @@ cargo run --bin ampullator-doc
 ### Record WAV from a chain or graph file:
 
 ```bash
-cargo run --bin ampullator-record -- "Clock(value=5, mode=Samples)" -o /tmp/out.wav --duration 2
+cargo run --bin ampullator-record -- "Clock(rate=5, mode=Samples)" -o /tmp/out.wav --duration 2
 ```
 
 On Linux with `aplay` it is possible to omit the output path and pipe WAV:
@@ -181,7 +675,7 @@ On Linux with `aplay` it is possible to omit the output path and pipe WAV:
 ```bash
 cargo run --bin ampullator-record -- "Sine() => s * .4 | 220 ->:freq s" --duration 4 | aplay
 
-cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | aplay
+cargo run --bin ampullator-record -- "Clock(rate=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | aplay
 ```
 
 On MacOS with `sox` `play`:
@@ -189,28 +683,28 @@ On MacOS with `sox` `play`:
 ```bash
 cargo run --bin ampullator-record -- "Sine() => s * .4 | 220 ->:freq s" --duration 4 | play -
 
-cargo run --bin ampullator-record -- "Clock(value=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | play -
+cargo run --bin ampullator-record -- "Clock(rate=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn" --duration 8 | play -
 ```
 
 ## Examples
 
 ### Clock Control
 ```text
-(Clock(value=12, mode=Samples) * .5) + (Clock(value=3, mode=Samples) * .33)
+(Clock(rate=12, mode=Samples) * .5) + (Clock(rate=3, mode=Samples) * .33)
 ```
 ![ug_clock-control](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_clock-control_graph.svg)
 ![ug_clock-control](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_clock-control_time-domain.svg)
 
 ### Clock Mixture
 ```text
-Clock(value=12, mode=Samples) + Clock(value=5, mode=Samples)
+Clock(rate=12, mode=Samples) + Clock(rate=5, mode=Samples)
 ```
 ![ug_clock-mix](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_clock-mix_graph.svg)
 ![ug_clock-mix](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_clock-mix_time-domain.svg)
 
 ### Drum Trigger
 ```text
-Clock(value=500, mode=Samples) => trigger -> SnareDrum(seed=42) => sd
+Clock(rate=500, mode=Samples) => trigger -> SnareDrum(seed=42) => sd
 | trigger -> Select(values=[100, 1000], mode=Cycle) ->:tone_decay sd
 ```
 ![ug_drum-trigger](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_drum-trigger_graph.svg)
@@ -218,11 +712,11 @@ Clock(value=500, mode=Samples) => trigger -> SnareDrum(seed=42) => sd
 
 ### Linear Mixer of Clocks
 ```text
-MixLinear(input_count=4, output_count=2) => mix &> Fade(channels=2) => mlevel
-| Clock(value=20, mode=Samples) ->:in1 mix
-| Clock(value=33, mode=Samples) ->:in2 mix
-| Clock(value=13, mode=Samples) ->:in3 mix
-| Clock(value=45, mode=Samples) ->:in4 mix
+MixLinear(inputs=4, outputs=2) => mix &> Fade(channels=2) => mlevel
+| Clock(rate=20, mode=Samples) ->:in1 mix
+| Clock(rate=33, mode=Samples) ->:in2 mix
+| Clock(rate=13, mode=Samples) ->:in3 mix
+| Clock(rate=45, mode=Samples) ->:in4 mix
 | Lfo(rate=12, mode=Samples, wave=Sine) ->:level1 mix
 | Lfo(rate=30, mode=Samples, wave=Square) ->:pan2 mix
 | Lfo(rate=25, mode=Samples, wave=Triangle) ->:level3 mix
@@ -242,8 +736,8 @@ Sine() => s -> Pan() => p &> Fade(channels=2, level=0.7)
 
 ### Pulse Select
 ```text
-Clock(value=1, mode=Samples)=> metro
-| Clock(value=20, mode=Samples) -> Select(values=[1, 2, 4], mode=Cycle) => step
+Clock(rate=1, mode=Samples)=> metro
+| Clock(rate=20, mode=Samples) -> Select(values=[1, 2, 4], mode=Cycle) => step
 | metro -> PulseSelect(duration_values=[2, 4, 8], duration_mode=Cycle) => m1
 | step ->:step m1
 | metro -> PulseSelect(duration_values=[2, 4, 8, 16], duration_mode=Shuffle, seed=42) => m2
@@ -264,7 +758,7 @@ Clock(value=1, mode=Samples)=> metro
 ### White Noise Masking
 ```text
 White(seed=42) => noise
-| Clock(value=20, mode=Samples) => clock
+| Clock(rate=20, mode=Samples) => clock
 | clock -> Select(values=[5, 50, 25], mode=Cycle) ->:max noise
 | clock -> Select(values=[-5, -50, -25], mode=Cycle) ->:min noise
 ```
