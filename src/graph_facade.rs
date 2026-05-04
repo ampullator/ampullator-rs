@@ -6,7 +6,7 @@ use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
     LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFade, UGFloor, UGLfo, UGMixLinear,
-    UGMult, UGPan, UGRound, UGSine, UGSum, UGTrigger, UGWhite,
+    UGMult, UGPan, UGRound, UGSampleHold, UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
@@ -119,6 +119,7 @@ pub enum UGFacade {
         mode: ModeSelect,
         seed: Option<u64>,
     },
+    SampleHold {},
     Sine {},
     BassDrum {},
     HighHat {
@@ -157,6 +158,7 @@ impl UGFacade {
             UGFacade::MixLinear { inputs, outputs } => {
                 Box::new(UGMixLinear::new(*inputs, *outputs))
             }
+            UGFacade::SampleHold {} => Box::new(UGSampleHold::new()),
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Lfo {
                 wave,
@@ -648,6 +650,7 @@ fn chain_ugen_reference_markdown() -> String {
             ],
             Box::new(UGRound::new(0, ModeRound::Round)),
         ),
+        ("SampleHold", vec![], Box::new(UGSampleHold::new())),
         (
             "Select",
             vec![
