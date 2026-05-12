@@ -197,7 +197,7 @@ impl UGen for UGAsHz {
 }
 
 //------------------------------------------------------------------------------
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::EnumIter, strum::Display)]
 pub enum ModeRound {
     Round,
     Floor,
@@ -383,12 +383,11 @@ pub struct UGSum {
 }
 
 impl UGSum {
-    pub fn new(input_count: usize) -> Self {
-        if input_count <= 1 {
+    pub fn new(inputs: usize) -> Self {
+        if inputs <= 1 {
             panic!("Input count should be greater than 1");
         }
-        let input_refs: Vec<String> =
-            (1..input_count + 1).map(|i| format!("in{i}")).collect();
+        let input_refs: Vec<String> = (1..inputs + 1).map(|i| format!("in{i}")).collect();
 
         Self { input_refs }
     }
@@ -450,12 +449,11 @@ pub struct UGMult {
 }
 
 impl UGMult {
-    pub fn new(input_count: usize) -> Self {
-        if input_count <= 1 {
+    pub fn new(inputs: usize) -> Self {
+        if inputs <= 1 {
             panic!("Input count should be greater than 1");
         }
-        let input_refs: Vec<String> =
-            (1..input_count + 1).map(|i| format!("in{i}")).collect();
+        let input_refs: Vec<String> = (1..inputs + 1).map(|i| format!("in{i}")).collect();
 
         Self { input_refs }
     }
@@ -567,23 +565,27 @@ fn pan_linear_accumulate(
 
 pub struct UGPan {
     output_refs: Vec<String>,
+    default_pan: Sample,
 }
 
 impl UGPan {
-    pub fn new(output_count: usize) -> Self {
-        if output_count < 2 {
+    pub fn new(outputs: usize, pan: Sample) -> Self {
+        if outputs < 2 {
             panic!("Output count should be greater than 1");
         }
         let output_refs: Vec<String> =
-            (1..output_count + 1).map(|i| format!("out{i}")).collect();
+            (1..outputs + 1).map(|i| format!("out{i}")).collect();
 
-        Self { output_refs }
+        Self {
+            output_refs,
+            default_pan: pan,
+        }
     }
 }
 
 impl Default for UGPan {
     fn default() -> Self {
-        Self::new(2)
+        Self::new(2, 0.5)
     }
 }
 
@@ -603,7 +605,7 @@ impl UGen for UGPan {
 
     fn default_input(&self, input_name: &str) -> Option<Sample> {
         match input_name {
-            "pan" => Some((self.output_refs.len() as Sample - 1.0) * 0.5),
+            "pan" => Some(self.default_pan),
             _ => None,
         }
     }
@@ -625,11 +627,10 @@ impl UGen for UGPan {
             out.fill(0.0);
         }
         let n = outputs[0].len();
-        let default_pan = (output_count as Sample - 1.0) * 0.5;
 
         for i in 0..n {
             let x = input.get(i).copied().unwrap_or(0.0);
-            let pair_pos = pan.get(i).copied().unwrap_or(default_pan);
+            let pair_pos = pan.get(i).copied().unwrap_or(self.default_pan);
             pan_linear_accumulate(x, pair_pos, outputs, i);
         }
     }
@@ -645,27 +646,26 @@ pub struct UGMixLinear {
 }
 
 impl UGMixLinear {
-    pub fn new(input_count: usize, output_count: usize) -> Self {
-        if input_count < 1 {
+    pub fn new(inputs: usize, outputs: usize) -> Self {
+        if inputs < 1 {
             panic!("Input count should be at least 1");
         }
-        if output_count < 2 {
+        if outputs < 2 {
             panic!("Output count should be at least 2");
         }
-        let mut input_labels: Vec<String> = Vec::with_capacity(input_count * 3);
-        for i in 1..=input_count {
+        let mut input_labels: Vec<String> = Vec::with_capacity(inputs * 3);
+        for i in 1..=inputs {
             input_labels.push(format!("in{i}"));
             input_labels.push(format!("pan{i}"));
             input_labels.push(format!("level{i}"));
         }
         let input_refs = input_labels;
 
-        let output_refs: Vec<String> =
-            (1..=output_count).map(|i| format!("out{i}")).collect();
+        let output_refs: Vec<String> = (1..=outputs).map(|i| format!("out{i}")).collect();
 
         Self {
-            input_count,
-            output_count,
+            input_count: inputs,
+            output_count: outputs,
             input_refs,
             output_refs,
         }
@@ -1105,7 +1105,9 @@ impl UGen for UGSine {
 //------------------------------------------------------------------------------
 
 /// Waveform shape for [`UGLfo`].
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Deserialize, Serialize, strum::EnumIter, strum::Display,
+)]
 pub enum LfoWave {
     Sine,
     Triangle,
@@ -1344,17 +1346,17 @@ impl UGen for UGTrigger {
 
 //------------------------------------------------------------------------------
 
-/// Given a constant rate determined by a value and a `UnitRate`, output impulses as long as the signal input is positive.
+/// Given a constant rate determined by a `rate` value and a `UnitRate`, output impulses as long as the signal input is positive.
 pub struct UGClock {
-    value: Sample,
+    rate: Sample,
     mode: UnitRate,
     phase: Sample,
 }
 
 impl UGClock {
-    pub fn new(value: Sample, mode: UnitRate) -> Self {
+    pub fn new(rate: Sample, mode: UnitRate) -> Self {
         Self {
-            value,
+            rate,
             mode,
             phase: 1.0, // init to one to fire on first sample
         }
@@ -1384,7 +1386,7 @@ impl UGen for UGClock {
     }
 
     fn describe_config(&self) -> Option<String> {
-        Some(format!("value = {}, mode = {:?}", self.value, self.mode))
+        Some(format!("rate = {}, mode = {:?}", self.rate, self.mode))
     }
 
     fn process(
@@ -1396,7 +1398,7 @@ impl UGen for UGClock {
     ) {
         let enabled = inputs.first().copied().unwrap_or(&[]);
         let out = &mut outputs[0];
-        let hz = unit_rate_to_hz(self.value, self.mode, sample_rate);
+        let hz = unit_rate_to_hz(self.rate, self.mode, sample_rate);
         let phase_inc = hz / sample_rate;
 
         for i in 0..out.len() {
@@ -1413,6 +1415,77 @@ impl UGen for UGClock {
             } else {
                 out[i] = 0.0;
             }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
+/// Sample and hold: latches the value of `in` whenever `trig` makes a
+/// positive-going transition above 0.5, and holds that value on `out` until
+/// the next trigger.  Before the first trigger, `out` is 0.0.
+pub struct UGSampleHold {
+    held: Sample,
+    prev_trig: Sample,
+}
+
+impl UGSampleHold {
+    pub fn new() -> Self {
+        Self {
+            held: 0.0,
+            prev_trig: 0.0,
+        }
+    }
+}
+
+impl Default for UGSampleHold {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UGen for UGSampleHold {
+    fn type_name(&self) -> &'static str {
+        "UGSampleHold"
+    }
+
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string(), "trig".to_string()])
+    }
+
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "in" => Some(0.0),
+            "trig" => Some(0.0),
+            _ => None,
+        }
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let sig = inputs.first().copied().unwrap_or(&[]);
+        let trig = inputs.get(1).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let t = trig.get(i).copied().unwrap_or(0.0);
+            // Positive-going edge across the 0.5 threshold latches a new value.
+            if t > 0.5 && self.prev_trig <= 0.5 {
+                self.held = sig.get(i).copied().unwrap_or(0.0);
+            }
+            self.prev_trig = t;
+            out[i] = self.held;
         }
     }
 }
@@ -1510,7 +1583,7 @@ mod tests {
         register_many![g,
             "in" => 1,
             "pan_pos" => 0.5,
-            "pan" => UGPan::new(2),
+            "pan" => UGPan::new(2, 0.5),
             "rl" => UGRound::new(3, ModeRound::Round),
             "rr" => UGRound::new(3, ModeRound::Round),
         ];
@@ -1538,7 +1611,7 @@ mod tests {
         register_many![g,
             "in" => 1,
             "pan_pos" => 1.5,
-            "pan" => UGPan::new(4),
+            "pan" => UGPan::new(4, 0.5),
             "r2" => UGRound::new(3, ModeRound::Round),
             "r3" => UGRound::new(3, ModeRound::Round),
         ];
@@ -1575,8 +1648,8 @@ mod tests {
             "in" => 1,
             "pan_pos_2" => 2.0,
             "pan_pos_3" => 3.0,
-            "pan2" => UGPan::new(4),
-            "pan3" => UGPan::new(4),
+            "pan2" => UGPan::new(4, 0.5),
+            "pan3" => UGPan::new(4, 0.5),
         ];
         connect_many![g,
         "in.out" -> "pan2.in",
@@ -1835,7 +1908,7 @@ mod tests {
         // Single input at center pan (0.5) with level=1 → equal power in both outputs
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => sig | Const(value=0.5) => p | Const(value=1) => lv \
-             | MixLinear(input_count=1, output_count=2) => mix \
+             | MixLinear(inputs=1, outputs=2) => mix \
              | Round(places=3, mode=Round) => r1 | Round(places=3, mode=Round) => r2 \
              | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix \
              | mix ->out1:in r1 | mix ->out2:in r2",
@@ -1860,7 +1933,7 @@ mod tests {
         // Single input panned fully left → all signal in out1, none in out2
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => sig | Const(value=0) => p | Const(value=1) => lv \
-             | MixLinear(input_count=1, output_count=2) => mix \
+             | MixLinear(inputs=1, outputs=2) => mix \
              | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix",
             120.0,
             8,
@@ -1883,7 +1956,7 @@ mod tests {
         // Single input panned fully right → all signal in out2, none in out1
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => sig | Const(value=1) => p | Const(value=1) => lv \
-             | MixLinear(input_count=1, output_count=2) => mix \
+             | MixLinear(inputs=1, outputs=2) => mix \
              | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix",
             120.0,
             8,
@@ -1907,7 +1980,7 @@ mod tests {
         let mut g = crate::graph_from_chain_expression(
             "Const(value=0.5) => s1 | Const(value=0.5) => s2 \
              | Const(value=0) => pl | Const(value=1) => pr | Const(value=1) => lv \
-             | MixLinear(input_count=2, output_count=2) => mix \
+             | MixLinear(inputs=2, outputs=2) => mix \
              | s1 ->:in1 mix | pl ->:pan1 mix | lv ->:level1 mix \
              | s2 ->:in2 mix | pr ->:pan2 mix | lv ->:level2 mix",
             120.0,
@@ -1931,7 +2004,7 @@ mod tests {
         // level=0.5 → gain = 1000^(0.5-1) = 1000^(-0.5) ≈ 0.03162; panned hard left
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => sig | Const(value=0) => p | Const(value=0.5) => lv \
-             | MixLinear(input_count=1, output_count=2) => mix \
+             | MixLinear(inputs=1, outputs=2) => mix \
              | Round(places=3, mode=Round) => r1 \
              | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix \
              | mix ->out1:in r1",
@@ -1953,7 +2026,7 @@ mod tests {
         // level=0 → gain = 0 → silence regardless of signal
         let mut g = crate::graph_from_chain_expression(
             "Const(value=1) => sig | Const(value=0) => p | Const(value=0) => lv \
-             | MixLinear(input_count=1, output_count=2) => mix \
+             | MixLinear(inputs=1, outputs=2) => mix \
              | sig ->:in1 mix | p ->:pan1 mix | lv ->:level1 mix",
             120.0,
             8,
@@ -2046,6 +2119,93 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("fd.out2"),
             vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sample_hold_a() {
+        // Constant input is latched on the first trigger and held forever.
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "trate" => 4.0,
+            "trig" => UGTrigger::new(),
+            "sig" => 0.75,
+            "sh" => UGSampleHold::new(),
+        ];
+        connect_many![g,
+            "trate.out" -> "trig.freq",
+            "sig.out" -> "sh.in",
+            "trig.out" -> "sh.trig",
+        ];
+        g.process();
+        // UGTrigger emits 1,0,1,0,1,0,1,0 at freq=4, sr=8.
+        // Each rising edge latches `sig` (0.75); output holds 0.75 from sample 0.
+        assert_eq!(
+            g.get_output_by_label("sh.out"),
+            vec![0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sample_hold_holds_until_next_trigger() {
+        // Drive `in` with a sine to produce changing values; trigger only on
+        // rising edges should latch sparse samples and hold them between.
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "fsig" => 1.0,
+            "osc" => UGSine::new(),
+            "trate" => 2.0, // trigger at 2 Hz with sr=8 → every 4 samples
+            "trig" => UGTrigger::new(),
+            "sh" => UGSampleHold::new(),
+            "r" => UGRound::new(2, ModeRound::Round),
+        ];
+        connect_many![g,
+            "fsig.out" -> "osc.freq",
+            "osc.wave" -> "sh.in",
+            "trate.out" -> "trig.freq",
+            "trig.out" -> "sh.trig",
+            "sh.out" -> "r.in",
+        ];
+        g.process();
+        let out = g.get_output_by_label("r.out");
+        // First sample: trigger fires immediately (UGTrigger sets out[0]=1.0),
+        // latching sin(0)=0.0. UGTrigger then advances; with rate=2, sr=8,
+        // phase_inc=0.25, so phase >= 1.0 at sample 4 → second latch at sample 4.
+        // sin(2*pi*4/8) = sin(pi) ≈ 0.0.
+        // Between triggers the value is held, so all samples should be 0.0
+        // (rounded). Verify length and that values are constant within each
+        // hold interval.
+        assert_eq!(out.len(), 8);
+        // Samples 0..4 should all match (held from trigger at sample 0).
+        for i in 1..4 {
+            assert_eq!(out[i], out[0], "hold violated at index {i}");
+        }
+        // Samples 4..8 should all match (held from trigger at sample 4).
+        for i in 5..8 {
+            assert_eq!(out[i], out[4], "hold violated at index {i}");
+        }
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sample_hold_initial_zero_before_trigger() {
+        // No trigger ever fires; output should remain at the initial 0.0.
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "sig" => 0.42,
+            "trig" => 0.0, // never crosses 0.5
+            "sh" => UGSampleHold::new(),
+        ];
+        connect_many![g,
+            "sig.out" -> "sh.in",
+            "trig.out" -> "sh.trig",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("sh.out"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
 }

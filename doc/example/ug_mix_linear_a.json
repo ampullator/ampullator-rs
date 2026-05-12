@@ -1,7 +1,7 @@
 {
     "title": "Linear Mixer of Clocks",
     "label": "ug_mix_linear-clocks",
-    "chain": "MixLinear(input_count=4, output_count=2) => mix &> Fade(channels=2) => mlevel | Clock(value=20, mode=Samples) ->:in1 mix | Clock(value=33, mode=Samples) ->:in2 mix | Clock(value=13, mode=Samples) ->:in3 mix | Clock(value=45, mode=Samples) ->:in4 mix | Lfo(rate=12, mode=Samples, wave=Sine) ->:level1 mix | Lfo(rate=30, mode=Samples, wave=Square) ->:pan2 mix | Lfo(rate=25, mode=Samples, wave=Triangle) ->:level3 mix | Lfo(rate=12, mode=Samples, wave=Triangle) ->:pan4 mix",
+    "chain": "MixLinear(inputs=4, outputs=2) => mix &> Fade(channels=2) => mlevel | Clock(rate=20, mode=Samples) ->:in1 mix | Clock(rate=33, mode=Samples) ->:in2 mix | Clock(rate=13, mode=Samples) ->:in3 mix | Clock(rate=45, mode=Samples) ->:in4 mix | Lfo(rate=12, mode=Samples, wave=Sine) ->:level1 mix | Lfo(rate=30, mode=Samples, wave=Square) ->:pan2 mix | Lfo(rate=25, mode=Samples, wave=Triangle) ->:level3 mix | Lfo(rate=12, mode=Samples, wave=Triangle) ->:pan4 mix",
     "sample_rate": 100.0,
     "buffer_size": 8,
     "total_samples": 100

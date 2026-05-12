@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 //------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, strum::EnumIter, strum::Display)]
 pub enum ModeSelect {
     Cycle,
     Random,

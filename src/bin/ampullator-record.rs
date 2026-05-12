@@ -164,7 +164,7 @@ mod tests {
         let tmp = Builder::new().suffix(".json").tempfile().unwrap();
         std::fs::write(
             tmp.path(),
-            r#"{"chain":"Clock(value=1, mode=Samples) + Clock(value=2, mode=Samples)"}"#,
+            r#"{"chain":"Clock(rate=1, mode=Samples) + Clock(rate=2, mode=Samples)"}"#,
         )
         .unwrap();
 
@@ -176,7 +176,7 @@ mod tests {
     #[test]
     fn test_resolve_output_labels_defaults_to_last_node_outputs() {
         let mut g = build_graph_from_input(
-            "Clock(value=1, mode=Samples) + Clock(value=2, mode=Samples)",
+            "Clock(rate=1, mode=Samples) + Clock(rate=2, mode=Samples)",
             44_100.0,
             128,
         )
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn test_resolve_output_labels_for_specific_node_and_output() {
         let mut g = build_graph_from_input(
-            "Clock(value=1, mode=Samples) => c | c -> Round() => r",
+            "Clock(rate=1, mode=Samples) => c | c -> Round() => r",
             44_100.0,
             128,
         )
