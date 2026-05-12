@@ -198,7 +198,12 @@ impl UGFacade {
                 cutoff,
                 resonance,
                 channels,
-            } => Box::new(UGHighPassConst::new(*roll_off_db, *cutoff, *resonance, *channels)),
+            } => Box::new(UGHighPassConst::new(
+                *roll_off_db,
+                *cutoff,
+                *resonance,
+                *channels,
+            )),
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
             UGFacade::LowPassConst {
@@ -206,7 +211,12 @@ impl UGFacade {
                 cutoff,
                 resonance,
                 channels,
-            } => Box::new(UGLowPassConst::new(*roll_off_db, *cutoff, *resonance, *channels)),
+            } => Box::new(UGLowPassConst::new(
+                *roll_off_db,
+                *cutoff,
+                *resonance,
+                *channels,
+            )),
             UGFacade::Parametric {} => Box::new(UGParametric::new()),
             UGFacade::ParametricConst { gain, bw, freq } => {
                 Box::new(UGParametricConst::new(*gain, *bw, *freq))
@@ -1607,8 +1617,8 @@ mod tests {
         gf.register_and_connect(&mut g).unwrap();
         g.process();
         let expected = vec![
-            0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037,
-            0.03, 0.024, 0.018, 0.014, 0.01, 0.007,
+            0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037, 0.03,
+            0.024, 0.018, 0.014, 0.01, 0.007,
         ];
         assert_eq!(g.get_output_by_label("r1.out"), expected);
         assert_eq!(g.get_output_by_label("r2.out"), expected);
@@ -1636,8 +1646,8 @@ mod tests {
         gf.register_and_connect(&mut g).unwrap();
         g.process();
         let expected = vec![
-            0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
-            -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005,
+            0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018, -0.013,
+            -0.008, -0.004, -0.001, 0.002, 0.004, 0.005,
         ];
         assert_eq!(g.get_output_by_label("r1.out"), expected);
         assert_eq!(g.get_output_by_label("r2.out"), expected);

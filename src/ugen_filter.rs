@@ -8,7 +8,13 @@ fn db_per_octave_to_poles(db: f32) -> usize {
 /// Inner low-pass sample computation: state-variable cascade with resonance feedback.
 /// Updates `state` and `z1` in place and returns the filtered sample.
 #[inline]
-fn low_pass_sample(x: Sample, g: f32, res: f32, state: &mut [Sample], z1: &mut Sample) -> Sample {
+fn low_pass_sample(
+    x: Sample,
+    g: f32,
+    res: f32,
+    state: &mut [Sample],
+    z1: &mut Sample,
+) -> Sample {
     let mut y = x - res * *z1;
     for s in state.iter_mut() {
         *s += g * (y - *s);
@@ -21,7 +27,13 @@ fn low_pass_sample(x: Sample, g: f32, res: f32, state: &mut [Sample], z1: &mut S
 /// Inner high-pass sample computation: state-variable cascade with resonance feedback.
 /// Updates `state` and `z1` in place and returns the filtered sample.
 #[inline]
-fn high_pass_sample(x: Sample, g: f32, res: f32, state: &mut [Sample], z1: &mut Sample) -> Sample {
+fn high_pass_sample(
+    x: Sample,
+    g: f32,
+    res: f32,
+    state: &mut [Sample],
+    z1: &mut Sample,
+) -> Sample {
     let mut y = x - res * *z1;
     for s in state.iter_mut() {
         *s += g * (y - *s);
