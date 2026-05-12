@@ -66,6 +66,7 @@ impl AudioState {
         let n_frames = buffers[0].len();
         let n_src = buffers.len(); // 1 or 2
 
+        #[allow(clippy::needless_range_loop)] // `i` indexes into per-channel buffers
         for i in 0..n_frames {
             for ch in 0..self.out_channels {
                 let s = if n_src == 1 {
