@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use ampullator::{GenGraph, graph_from_chain_expression, graph_from_json_definition};
 use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{BufferSize, SampleFormat, SampleRate, StreamConfig};
+use cpal::{BufferSize, SampleFormat, StreamConfig};
 
 const DEFAULT_BUFFER_SIZE: usize = 128;
 
@@ -151,14 +151,18 @@ fn run(cli: Cli) -> Result<(), String> {
     if cli.list_devices {
         let default_name = host
             .default_output_device()
-            .and_then(|d| d.name().ok())
+            .and_then(|d| d.description().ok())
+            .map(|d| d.name().to_string())
             .unwrap_or_default();
         println!("Available output devices:");
         for device in host
             .output_devices()
             .map_err(|e| format!("Cannot enumerate devices: {e}"))?
         {
-            let name = device.name().unwrap_or_else(|_| "<unknown>".to_string());
+            let name = device
+                .description()
+                .map(|d| d.name().to_string())
+                .unwrap_or_else(|_| "<unknown>".to_string());
             let marker = if name == default_name {
                 " (default)"
             } else {
@@ -178,8 +182,8 @@ fn run(cli: Cli) -> Result<(), String> {
             .output_devices()
             .map_err(|e| format!("Cannot enumerate devices: {e}"))?
             .find(|d| {
-                d.name()
-                    .map(|n| n.to_lowercase().contains(&name.to_lowercase()))
+                d.description()
+                    .map(|n| n.name().to_lowercase().contains(&name.to_lowercase()))
                     .unwrap_or(false)
             })
             .ok_or_else(|| format!("No output device matching '{name}'"))?,
@@ -188,7 +192,10 @@ fn run(cli: Cli) -> Result<(), String> {
             .ok_or_else(|| "No default output device found".to_string())?,
     };
 
-    let device_name = device.name().unwrap_or_else(|_| "<unknown>".to_string());
+    let device_name = device
+        .description()
+        .map(|d| d.name().to_string())
+        .unwrap_or_else(|_| "<unknown>".to_string());
     println!("Output device: {device_name}");
 
     // ── device configuration ───────────────────────────────────────────────
@@ -196,14 +203,14 @@ fn run(cli: Cli) -> Result<(), String> {
         .default_output_config()
         .map_err(|e| format!("Cannot get default output config: {e}"))?;
 
-    let sample_rate = cli.sample_rate.unwrap_or_else(|| supported.sample_rate().0);
+    let sample_rate = cli.sample_rate.unwrap_or_else(|| supported.sample_rate());
 
     let out_channels = supported.channels() as usize;
     let sample_format = supported.sample_format();
 
     let config = StreamConfig {
         channels: supported.channels(),
-        sample_rate: SampleRate(sample_rate),
+        sample_rate,
         buffer_size: BufferSize::Default,
     };
 

@@ -11,11 +11,8 @@ tempfile = "3.11.0"
 hound = "3.5.1"
 wide = "1.2.0"
 clap = { version = "4", features = ["derive"] }
-<<<<<<< HEAD
-cpal = "0.15"
-=======
+cpal = "0.17.3"
 strum = { version = "0.28", features = ["derive"] }
->>>>>>> main
 
 [profile.release]
 debug = false
