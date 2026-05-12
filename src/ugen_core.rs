@@ -1420,6 +1420,77 @@ impl UGen for UGClock {
 }
 
 //------------------------------------------------------------------------------
+
+/// Sample and hold: latches the value of `in` whenever `trig` makes a
+/// positive-going transition above 0.5, and holds that value on `out` until
+/// the next trigger.  Before the first trigger, `out` is 0.0.
+pub struct UGSampleHold {
+    held: Sample,
+    prev_trig: Sample,
+}
+
+impl UGSampleHold {
+    pub fn new() -> Self {
+        Self {
+            held: 0.0,
+            prev_trig: 0.0,
+        }
+    }
+}
+
+impl Default for UGSampleHold {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UGen for UGSampleHold {
+    fn type_name(&self) -> &'static str {
+        "UGSampleHold"
+    }
+
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["in".to_string(), "trig".to_string()])
+    }
+
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["out".to_string()])
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "in" => Some(0.0),
+            "trig" => Some(0.0),
+            _ => None,
+        }
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        _sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let sig = inputs.first().copied().unwrap_or(&[]);
+        let trig = inputs.get(1).copied().unwrap_or(&[]);
+        let out = &mut outputs[0];
+
+        for i in 0..out.len() {
+            let t = trig.get(i).copied().unwrap_or(0.0);
+            // Positive-going edge across the 0.5 threshold latches a new value.
+            if t > 0.5 && self.prev_trig <= 0.5 {
+                self.held = sig.get(i).copied().unwrap_or(0.0);
+            }
+            self.prev_trig = t;
+            out[i] = self.held;
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2048,6 +2119,93 @@ mod tests {
         assert_eq!(
             g.get_output_by_label("fd.out2"),
             vec![0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sample_hold_a() {
+        // Constant input is latched on the first trigger and held forever.
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "trate" => 4.0,
+            "trig" => UGTrigger::new(),
+            "sig" => 0.75,
+            "sh" => UGSampleHold::new(),
+        ];
+        connect_many![g,
+            "trate.out" -> "trig.freq",
+            "sig.out" -> "sh.in",
+            "trig.out" -> "sh.trig",
+        ];
+        g.process();
+        // UGTrigger emits 1,0,1,0,1,0,1,0 at freq=4, sr=8.
+        // Each rising edge latches `sig` (0.75); output holds 0.75 from sample 0.
+        assert_eq!(
+            g.get_output_by_label("sh.out"),
+            vec![0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75, 0.75]
+        );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sample_hold_holds_until_next_trigger() {
+        // Drive `in` with a sine to produce changing values; trigger only on
+        // rising edges should latch sparse samples and hold them between.
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "fsig" => 1.0,
+            "osc" => UGSine::new(),
+            "trate" => 2.0, // trigger at 2 Hz with sr=8 → every 4 samples
+            "trig" => UGTrigger::new(),
+            "sh" => UGSampleHold::new(),
+            "r" => UGRound::new(2, ModeRound::Round),
+        ];
+        connect_many![g,
+            "fsig.out" -> "osc.freq",
+            "osc.wave" -> "sh.in",
+            "trate.out" -> "trig.freq",
+            "trig.out" -> "sh.trig",
+            "sh.out" -> "r.in",
+        ];
+        g.process();
+        let out = g.get_output_by_label("r.out");
+        // First sample: trigger fires immediately (UGTrigger sets out[0]=1.0),
+        // latching sin(0)=0.0. UGTrigger then advances; with rate=2, sr=8,
+        // phase_inc=0.25, so phase >= 1.0 at sample 4 → second latch at sample 4.
+        // sin(2*pi*4/8) = sin(pi) ≈ 0.0.
+        // Between triggers the value is held, so all samples should be 0.0
+        // (rounded). Verify length and that values are constant within each
+        // hold interval.
+        assert_eq!(out.len(), 8);
+        // Samples 0..4 should all match (held from trigger at sample 0).
+        for i in 1..4 {
+            assert_eq!(out[i], out[0], "hold violated at index {i}");
+        }
+        // Samples 4..8 should all match (held from trigger at sample 4).
+        for i in 5..8 {
+            assert_eq!(out[i], out[4], "hold violated at index {i}");
+        }
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_sample_hold_initial_zero_before_trigger() {
+        // No trigger ever fires; output should remain at the initial 0.0.
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "sig" => 0.42,
+            "trig" => 0.0, // never crosses 0.5
+            "sh" => UGSampleHold::new(),
+        ];
+        connect_many![g,
+            "sig.out" -> "sh.in",
+            "trig.out" -> "sh.trig",
+        ];
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("sh.out"),
+            vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
 }
