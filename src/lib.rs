@@ -16,13 +16,15 @@ pub use recorder::{Recorder, WavFormat};
 
 pub use ugen_core::{
     LfoWave, ModeRound, UGAsHz, UGCeil, UGClock, UGConst, UGFade, UGFloor, UGLfo,
-    UGMixLinear, UGMult, UGPan, UGRound, UGSine, UGSum, UGTrigger, UGWhite, UGen,
+    UGMixLinear, UGMult, UGPan, UGRound, UGSampleHold, UGSine, UGSum, UGTrigger, UGWhite,
+    UGen,
 };
 
 pub use ugen_select::{ModeSelect, UGSelect};
 
 pub use ugen_filter::{
-    UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+    UGHighPass, UGHighPassConst, UGHighPassQ, UGLowPass, UGLowPassConst, UGLowPassQ,
+    UGParametric, UGParametricConst,
 };
 
 pub use ugen_env::{UGEnvAR, UGEnvBreakPoint};

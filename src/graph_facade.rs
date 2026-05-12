@@ -6,13 +6,14 @@ use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
     LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFade, UGFloor, UGLfo, UGMixLinear,
-    UGMult, UGPan, UGRound, UGSine, UGSum, UGTrigger, UGWhite,
+    UGMult, UGPan, UGRound, UGSampleHold, UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
 use crate::ugen_string::UGString;
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
-    UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+    UGHighPass, UGHighPassConst, UGHighPassQ, UGLowPass, UGLowPassConst, UGLowPassQ,
+    UGParametric, UGParametricConst,
 };
 use crate::ugen_reverb::UGReverb;
 use crate::ugen_rhythm::UGPulseSelect;
@@ -74,6 +75,14 @@ pub enum UGFacade {
         #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
     },
+    HighPassConst {
+        #[serde(default = "UGFacade::default_roll_off_db")]
+        roll_off_db: f32,
+        cutoff: f32,
+        resonance: f32,
+        #[serde(default = "UGFacade::default_channels")]
+        channels: usize,
+    },
     LowPass {
         #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
@@ -81,6 +90,14 @@ pub enum UGFacade {
     LowPassQ {
         #[serde(default = "UGFacade::default_roll_off_db")]
         roll_off_db: f32,
+    },
+    LowPassConst {
+        #[serde(default = "UGFacade::default_roll_off_db")]
+        roll_off_db: f32,
+        cutoff: f32,
+        resonance: f32,
+        #[serde(default = "UGFacade::default_channels")]
+        channels: usize,
     },
     Parametric {},
     ParametricConst {
@@ -120,6 +137,7 @@ pub enum UGFacade {
         mode: ModeSelect,
         seed: Option<u64>,
     },
+    SampleHold {},
     Sine {},
     BassDrum {},
     HighHat {
@@ -165,6 +183,7 @@ impl UGFacade {
             UGFacade::MixLinear { inputs, outputs } => {
                 Box::new(UGMixLinear::new(*inputs, *outputs))
             }
+            UGFacade::SampleHold {} => Box::new(UGSampleHold::new()),
             UGFacade::Sine {} => Box::new(UGSine::new()),
             UGFacade::Lfo {
                 wave,
@@ -185,8 +204,30 @@ impl UGFacade {
             UGFacade::HighPassQ { roll_off_db } => {
                 Box::new(UGHighPassQ::new(*roll_off_db))
             }
+            UGFacade::HighPassConst {
+                roll_off_db,
+                cutoff,
+                resonance,
+                channels,
+            } => Box::new(UGHighPassConst::new(
+                *roll_off_db,
+                *cutoff,
+                *resonance,
+                *channels,
+            )),
             UGFacade::LowPass { roll_off_db } => Box::new(UGLowPass::new(*roll_off_db)),
             UGFacade::LowPassQ { roll_off_db } => Box::new(UGLowPassQ::new(*roll_off_db)),
+            UGFacade::LowPassConst {
+                roll_off_db,
+                cutoff,
+                resonance,
+                channels,
+            } => Box::new(UGLowPassConst::new(
+                *roll_off_db,
+                *cutoff,
+                *resonance,
+                *channels,
+            )),
             UGFacade::Parametric {} => Box::new(UGParametric::new()),
             UGFacade::ParametricConst { gain, bw, freq } => {
                 Box::new(UGParametricConst::new(*gain, *bw, *freq))
@@ -521,7 +562,8 @@ fn chain_ugen_reference_markdown() -> String {
     use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
     use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
     use crate::ugen_filter::{
-        UGHighPass, UGHighPassQ, UGLowPass, UGLowPassQ, UGParametric, UGParametricConst,
+        UGHighPass, UGHighPassConst, UGHighPassQ, UGLowPass, UGLowPassConst, UGLowPassQ,
+        UGParametric, UGParametricConst,
     };
     use crate::ugen_reverb::UGReverb;
     use crate::ugen_rhythm::UGPulseSelect;
@@ -597,6 +639,16 @@ fn chain_ugen_reference_markdown() -> String {
             Box::new(UGHighPassQ::new(6.0)),
         ),
         (
+            "HighPassConst",
+            vec![
+                FacadeArgDoc::optional("roll_off_db", "number", "6.0"),
+                FacadeArgDoc::required("cutoff", "number"),
+                FacadeArgDoc::required("resonance", "number"),
+                FacadeArgDoc::optional("channels", "integer", "1"),
+            ],
+            Box::new(UGHighPassConst::new(6.0, 1000.0, 0.0, 1)),
+        ),
+        (
             "Lfo",
             vec![
                 FacadeArgDoc::required("wave", &lfo_wave),
@@ -617,6 +669,16 @@ fn chain_ugen_reference_markdown() -> String {
             "LowPassQ",
             vec![FacadeArgDoc::optional("roll_off_db", "number", "6.0")],
             Box::new(UGLowPassQ::new(6.0)),
+        ),
+        (
+            "LowPassConst",
+            vec![
+                FacadeArgDoc::optional("roll_off_db", "number", "6.0"),
+                FacadeArgDoc::required("cutoff", "number"),
+                FacadeArgDoc::required("resonance", "number"),
+                FacadeArgDoc::optional("channels", "integer", "1"),
+            ],
+            Box::new(UGLowPassConst::new(6.0, 1000.0, 0.0, 1)),
         ),
         (
             "MixLinear",
@@ -667,6 +729,7 @@ fn chain_ugen_reference_markdown() -> String {
             ],
             Box::new(UGRound::new(0, ModeRound::Round)),
         ),
+        ("SampleHold", vec![], Box::new(UGSampleHold::new())),
         (
             "Select",
             vec![
@@ -1462,6 +1525,163 @@ mod tests {
     }
 
     #[test]
+    fn test_ug_facade_low_pass_const() {
+        // LowPassConst (single channel) with resonance=0.5.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "lpfc": ["LowPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 1}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "lpfc.in1"],
+                ["lpfc.out1", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037,
+                0.03, 0.024, 0.018, 0.014, 0.01, 0.007
+            ]
+        );
+    }
+
+    #[test]
+    fn test_ug_facade_high_pass_const() {
+        // HighPassConst (single channel) should match HighPassQ with the same
+        // constant cutoff and resonance.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "hpfc": ["HighPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 1}],
+                "r": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "hpfc.in1"],
+                ["hpfc.out1", "r.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        // Same values as UGHighPassQ with cutoff=60, resonance=0.5.
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
+                -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
+            ]
+        );
+    }
+
+    #[test]
+    fn test_chain_low_pass_const_chain_dsl() {
+        // LowPassConst via Chain DSL string: single-channel, same output as JSON form.
+        let chain = "Clock(rate=20, mode=Samples) => clk \
+                     | LowPassConst(roll_off_db=12, cutoff=60, resonance=0.5, channels=1) => lpfc \
+                     | Round(places=3, mode=Round) => r \
+                     | clk ->:in1 lpfc \
+                     | lpfc ->out1:in r";
+        let gf = GraphFacade::from_chain(chain).expect("from_chain failed");
+        let mut g = GenGraph::new(2000.0, 16);
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037,
+                0.03, 0.024, 0.018, 0.014, 0.01, 0.007
+            ]
+        );
+    }
+
+    #[test]
+    fn test_chain_high_pass_const_chain_dsl() {
+        // HighPassConst via Chain DSL string: single-channel, same output as JSON form.
+        let chain = "Clock(rate=20, mode=Samples) => clk \
+                     | HighPassConst(roll_off_db=12, cutoff=60, resonance=0.5, channels=1) => hpfc \
+                     | Round(places=3, mode=Round) => r \
+                     | clk ->:in1 hpfc \
+                     | hpfc ->out1:in r";
+        let gf = GraphFacade::from_chain(chain).expect("from_chain failed");
+        let mut g = GenGraph::new(2000.0, 16);
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        assert_eq!(
+            g.get_output_by_label("r.out"),
+            vec![
+                0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018,
+                -0.013, -0.008, -0.004, -0.001, 0.002, 0.004, 0.005
+            ]
+        );
+    }
+
+    #[test]
+    fn test_chain_low_pass_const_two_channels() {
+        // LowPassConst with channels=2: independent per-channel state, same params.
+        // Both channels receive the same clock signal so their outputs are identical.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "lpfc": ["LowPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 2}],
+                "r1": ["Round", {"places": 3, "mode": "Round"}],
+                "r2": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "lpfc.in1"],
+                ["clock.out", "lpfc.in2"],
+                ["lpfc.out1", "r1.in"],
+                ["lpfc.out2", "r2.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        let expected = vec![
+            0.036, 0.057, 0.068, 0.072, 0.07, 0.066, 0.059, 0.052, 0.044, 0.037, 0.03,
+            0.024, 0.018, 0.014, 0.01, 0.007,
+        ];
+        assert_eq!(g.get_output_by_label("r1.out"), expected);
+        assert_eq!(g.get_output_by_label("r2.out"), expected);
+    }
+
+    #[test]
+    fn test_chain_high_pass_const_two_channels() {
+        // HighPassConst with channels=2: independent per-channel state, same params.
+        let json = r#"{
+            "register": {
+                "clock": ["Clock", {"rate": 20.0, "mode": "Samples"}],
+                "hpfc": ["HighPassConst", {"roll_off_db": 12.0, "cutoff": 60.0, "resonance": 0.5, "channels": 2}],
+                "r1": ["Round", {"places": 3, "mode": "Round"}],
+                "r2": ["Round", {"places": 3, "mode": "Round"}]
+            },
+            "connect": [
+                ["clock.out", "hpfc.in1"],
+                ["clock.out", "hpfc.in2"],
+                ["hpfc.out1", "r1.in"],
+                ["hpfc.out2", "r2.in"]
+            ]
+        }"#;
+        let mut g = GenGraph::new(2000.0, 16);
+        let gf: GraphFacade = serde_json::from_str(json).unwrap();
+        gf.register_and_connect(&mut g).unwrap();
+        g.process();
+        let expected = vec![
+            0.659, -0.465, 0.057, -0.143, -0.032, -0.06, -0.031, -0.03, -0.018, -0.013,
+            -0.008, -0.004, -0.001, 0.002, 0.004, 0.005,
+        ];
+        assert_eq!(g.get_output_by_label("r1.out"), expected);
+        assert_eq!(g.get_output_by_label("r2.out"), expected);
+    }
+
+    #[test]
     fn test_chain_ugen_reference_markdown() {
         let md = chain_ugen_reference_markdown();
 
@@ -1481,9 +1701,11 @@ mod tests {
             "Floor",
             "HighHat",
             "HighPass",
+            "HighPassConst",
             "HighPassQ",
             "Lfo",
             "LowPass",
+            "LowPassConst",
             "LowPassQ",
             "MixLinear",
             "Mult",
