@@ -9,7 +9,6 @@ use crate::ugen_core::{
     UGMult, UGPan, UGRound, UGSampleHold, UGSine, UGSum, UGTrigger, UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
-use crate::ugen_string::UGString;
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
 use crate::ugen_filter::{
     UGHighPass, UGHighPassConst, UGHighPassQ, UGLowPass, UGLowPassConst, UGLowPassQ,
@@ -18,6 +17,7 @@ use crate::ugen_filter::{
 use crate::ugen_reverb::UGReverb;
 use crate::ugen_rhythm::UGPulseSelect;
 use crate::ugen_select::{ModeSelect, UGSelect};
+use crate::ugen_string::UGString;
 use crate::util::Sample;
 use crate::util::UnitRate;
 use std::collections::HashMap;
@@ -196,9 +196,11 @@ impl UGFacade {
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::HighHat { seed } => Box::new(UGHighHat::new(*seed)),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),
-            UGFacade::String { freq, damping, seed } => {
-                Box::new(UGString::new(*freq, *damping, *seed))
-            }
+            UGFacade::String {
+                freq,
+                damping,
+                seed,
+            } => Box::new(UGString::new(*freq, *damping, *seed)),
             UGFacade::Trigger {} => Box::new(UGTrigger::new()),
             UGFacade::HighPass { roll_off_db } => Box::new(UGHighPass::new(*roll_off_db)),
             UGFacade::HighPassQ { roll_off_db } => {

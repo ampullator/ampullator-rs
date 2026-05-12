@@ -49,8 +49,8 @@ impl UGString {
     ///
     /// * `freq`    – Fundamental frequency in Hz (e.g. `440.0`).
     /// * `damping` – Feedback decay coefficient in `[0.0, 1.0]`.  Values close
-    ///               to `1.0` produce long, slowly-decaying tones.  The classic
-    ///               Karplus-Strong algorithm approximates `0.996` at 44 100 Hz.
+    ///   to `1.0` produce long, slowly-decaying tones.  The classic
+    ///   Karplus-Strong algorithm approximates `0.996` at 44 100 Hz.
     /// * `seed`    – Optional RNG seed for reproducible output.
     pub fn new(freq: f32, damping: f32, seed: Option<u64>) -> Self {
         let actual_seed = seed.unwrap_or_else(|| rand::rng().random());
@@ -98,9 +98,7 @@ impl UGen for UGString {
     }
 
     fn describe_config(&self) -> Option<String> {
-        let seed_str = self
-            .seed
-            .map_or("none".to_string(), |s| s.to_string());
+        let seed_str = self.seed.map_or("none".to_string(), |s| s.to_string());
         Some(format!(
             "freq = {}, damping = {}, seed = {seed_str}",
             self.default_freq, self.default_damping
@@ -222,6 +220,10 @@ mod tests {
 
         assert_eq!(run(99), run(99), "same seed must give identical output");
         // Different seeds should (almost certainly) differ.
-        assert_ne!(run(1), run(2), "different seeds should give different output");
+        assert_ne!(
+            run(1),
+            run(2),
+            "different seeds should give different output"
+        );
     }
 }
