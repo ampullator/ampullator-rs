@@ -1,10 +1,9 @@
-use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use ampullator::{GenGraph, graph_from_chain_expression, graph_from_json_definition};
 use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{BufferSize, SampleFormat, StreamConfig};
+use cpal::{BufferSize, SampleFormat, StreamConfig, SupportedBufferSize};
 
 const DEFAULT_BUFFER_SIZE: usize = 128;
 
@@ -43,63 +42,67 @@ struct Cli {
 
 struct AudioState {
     graph: GenGraph,
-    /// Output labels to feed into the device (1 or 2 entries)
-    labels: Vec<String>,
-    /// Ring buffer of pre-interleaved f32 samples ready for the cpal callback
-    queue: VecDeque<f32>,
-    /// Number of output channels reported by the device
-    out_channels: usize,
+    /// One block of pre-interleaved f32 samples. Length is
+    /// `graph.buffer_size() * graph.channel_count()`. Drained from `head`
+    /// outward; refilled when `head` reaches `block.len()`.
+    block: Vec<f32>,
+    /// Read position in `block`; `block.len()` means "drained, refill needed".
+    head: usize,
 }
 
 impl AudioState {
-    /// Process one block from the graph and push interleaved samples onto the queue.
-    fn fill_queue(&mut self) {
-        self.graph.process();
-
-        let n_src = self.labels.len();
-        let out_channels = self.out_channels;
-
-        // Borrow each output channel's source slice directly from the graph,
-        // hoisting the mono-broadcast / channel-mapping / silence decision
-        // out of the per-sample loop. `None` means "fill with silence".
-        let sources: Vec<Option<&[f32]>> = (0..out_channels)
-            .map(|ch| {
-                if n_src == 1 {
-                    Some(self.graph.get_output_by_label(&self.labels[0]))
-                } else if ch < n_src {
-                    Some(self.graph.get_output_by_label(&self.labels[ch]))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        let n_frames = sources[0].map(|s| s.len()).unwrap_or(0);
-
-        self.queue.reserve(n_frames * out_channels);
-        #[allow(clippy::needless_range_loop)] // `i` indexes parallel slices
-        for i in 0..n_frames {
-            for src in &sources {
-                self.queue.push_back(src.map_or(0.0, |s| s[i]));
-            }
+    fn new(graph: GenGraph) -> Self {
+        let block_len = graph.buffer_size() * graph.channel_count();
+        let block = vec![0.0; block_len];
+        Self {
+            graph,
+            block,
+            // Start drained so the first callback triggers a refill.
+            head: block_len,
         }
+    }
+
+    /// Render one block from the graph and write interleaved samples into
+    /// `self.block`. Resets the read head.
+    fn refill_block(&mut self) {
+        self.graph.process();
+        self.graph.interleave_into(&mut self.block);
+        self.head = 0;
     }
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-fn build_graph(input: &str, sample_rate: f32) -> Result<GenGraph, String> {
+fn build_graph(
+    input: &str,
+    sample_rate: f32,
+    buffer_size: usize,
+) -> Result<GenGraph, String> {
     if input.ends_with(".json") {
         let content = std::fs::read_to_string(input)
             .map_err(|e| format!("Failed to read '{input}': {e}"))?;
-        graph_from_json_definition(&content, sample_rate, DEFAULT_BUFFER_SIZE)
+        graph_from_json_definition(&content, sample_rate, buffer_size)
     } else if input.ends_with(".txt") || input.ends_with(".chain") {
         let content = std::fs::read_to_string(input)
             .map_err(|e| format!("Failed to read '{input}': {e}"))?;
-        graph_from_chain_expression(content.trim(), sample_rate, DEFAULT_BUFFER_SIZE)
+        graph_from_chain_expression(content.trim(), sample_rate, buffer_size)
     } else {
-        graph_from_chain_expression(input, sample_rate, DEFAULT_BUFFER_SIZE)
+        graph_from_chain_expression(input, sample_rate, buffer_size)
     }
+}
+
+/// Pick a graph block size: prefer `preferred`, clamped into the device's
+/// supported range when known, then rounded to a multiple of 8 (required by
+/// the SIMD path in `GenGraph::process`).
+fn pick_block_size(preferred: usize, supported: &SupportedBufferSize) -> usize {
+    let raw = match supported {
+        SupportedBufferSize::Range { min, max } => {
+            preferred.clamp(*min as usize, *max as usize)
+        }
+        SupportedBufferSize::Unknown => preferred,
+    };
+    // Round down to a multiple of 8, with a floor of 8.
+    (raw & !7).max(8)
 }
 
 /// Return the labels to feed to the device. If the user specified explicit
@@ -134,11 +137,18 @@ where
             config,
             move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
                 let mut st = state.lock().unwrap();
-                for sample in output.iter_mut() {
-                    if st.queue.is_empty() {
-                        st.fill_queue();
+                let mut written = 0;
+                while written < output.len() {
+                    if st.head == st.block.len() {
+                        st.refill_block();
                     }
-                    *sample = T::from_sample(st.queue.pop_front().unwrap_or(0.0));
+                    let take = (output.len() - written).min(st.block.len() - st.head);
+                    let src = &st.block[st.head..st.head + take];
+                    for (dst, &s) in output[written..written + take].iter_mut().zip(src) {
+                        *dst = T::from_sample(s);
+                    }
+                    st.head += take;
+                    written += take;
                 }
             },
             err_fn,
@@ -212,29 +222,44 @@ fn run(cli: Cli) -> Result<(), String> {
     let out_channels = supported.channels() as usize;
     let sample_format = supported.sample_format();
 
+    // Pick a graph block size that lands inside the device's supported range
+    // (and stays a multiple of 8 for the SIMD path in graph.process).
+    let block_size = pick_block_size(DEFAULT_BUFFER_SIZE, supported.buffer_size());
+
     let config = StreamConfig {
         channels: supported.channels(),
         sample_rate,
-        buffer_size: BufferSize::Default,
+        buffer_size: BufferSize::Fixed(block_size as u32),
     };
 
     // ── build graph ────────────────────────────────────────────────────────
-    let mut graph = build_graph(input, sample_rate as f32)?;
+    let mut graph = build_graph(input, sample_rate as f32, block_size)?;
     let labels = resolve_labels(&mut graph, &cli.outputs)?;
+
+    // Resolve per-device-channel routing once. For a single-source chain,
+    // broadcast the mono signal to every device channel. Otherwise map
+    // 1:1 by index and pad with silence.
+    let channel_refs: Vec<Option<&str>> = (0..out_channels)
+        .map(|ch| {
+            if labels.len() == 1 {
+                Some(labels[0].as_str())
+            } else if ch < labels.len() {
+                Some(labels[ch].as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    graph.set_channel_sources(&channel_refs);
 
     println!("Playing outputs: {}", labels.join(", "));
     println!(
-        "Sample rate: {} Hz  |  Channels: {}  |  Format: {:?}",
-        sample_rate, out_channels, sample_format
+        "Sample rate: {} Hz  |  Channels: {}  |  Format: {:?}  |  Block: {}",
+        sample_rate, out_channels, sample_format, block_size
     );
     println!("Press Enter to stop.");
 
-    let state = Arc::new(Mutex::new(AudioState {
-        graph,
-        labels,
-        queue: VecDeque::new(),
-        out_channels,
-    }));
+    let state = Arc::new(Mutex::new(AudioState::new(graph)));
 
     // ── build typed stream ─────────────────────────────────────────────────
     let stream = match sample_format {

@@ -42,6 +42,10 @@ pub struct GenGraph {
     pub(crate) sample_rate: f32,
     pub(crate) buffer_size: usize,
     time_sample: usize,
+    /// Resolved per-output-channel routing for `interleave_into`.
+    /// `Some((node_index, output_index))` reads that buffer; `None` writes
+    /// silence. Populated by `set_channel_sources`.
+    channel_sources: Vec<Option<(usize, usize)>>,
 }
 
 impl GenGraph {
@@ -58,6 +62,7 @@ impl GenGraph {
             sample_rate,
             buffer_size,
             time_sample: 0,
+            channel_sources: Vec::new(),
         }
     }
 
@@ -238,6 +243,76 @@ impl GenGraph {
         }
 
         self.time_sample += self.buffer_size;
+    }
+
+    pub fn buffer_size(&self) -> usize {
+        self.buffer_size
+    }
+
+    /// Configure per-output-channel routing for [`interleave_into`].
+    ///
+    /// `channel_sources[ch]` selects what device channel `ch` reads:
+    ///   * `Some(label)` resolves to the named graph output once, here
+    ///   * `None` will be written as silence (`0.0`)
+    ///
+    /// Panics if any label is not a valid `node.output` reference. Resolved
+    /// references stay valid as long as nodes are only appended (never
+    /// removed or reordered) — which `add_node` guarantees.
+    pub fn set_channel_sources(&mut self, channel_sources: &[Option<&str>]) {
+        self.channel_sources = channel_sources
+            .iter()
+            .map(|opt| {
+                opt.map(|label| {
+                    let (node_name, output_name) = split_name(label);
+                    let node_index = self.name_to_node_id[node_name].0;
+                    let output_index = *self.nodes[node_index]
+                        .name_to_output_index
+                        .get(output_name)
+                        .unwrap_or_else(|| panic!("Invalid output name: {output_name}"));
+                    (node_index, output_index)
+                })
+            })
+            .collect();
+    }
+
+    /// Number of output channels configured via [`set_channel_sources`].
+    pub fn channel_count(&self) -> usize {
+        self.channel_sources.len()
+    }
+
+    /// Write one block of interleaved samples into `dest`, using the routing
+    /// configured by [`set_channel_sources`]. Call after [`process`].
+    ///
+    /// `dest.len()` must equal `self.buffer_size() * self.channel_count()`.
+    pub fn interleave_into(&self, dest: &mut [Sample]) {
+        let out_channels = self.channel_sources.len();
+        let n_frames = self.buffer_size;
+        assert_eq!(
+            dest.len(),
+            n_frames * out_channels,
+            "interleave_into: dest length must equal buffer_size * channel_count",
+        );
+
+        // Channel-major: for each output channel, walk its source buffer
+        // once and write strided into `dest`. The Some/None dispatch moves
+        // out of the per-sample hot path (one branch per channel, not one
+        // per sample), and no per-call allocation is needed.
+        for (ch, src) in self.channel_sources.iter().enumerate() {
+            match src {
+                Some((node_idx, out_idx)) => {
+                    let buf = &self.nodes[*node_idx].outputs[*out_idx];
+                    for (frame, &s) in dest.chunks_exact_mut(out_channels).zip(buf.iter())
+                    {
+                        frame[ch] = s;
+                    }
+                }
+                None => {
+                    for frame in dest.chunks_exact_mut(out_channels) {
+                        frame[ch] = 0.0;
+                    }
+                }
+            }
+        }
     }
 
     // Given a two-part name node.output, return a slice of the samples for that node and output,
