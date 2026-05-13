@@ -56,28 +56,31 @@ impl AudioState {
     fn fill_queue(&mut self) {
         self.graph.process();
 
-        // Collect a snapshot of each source channel's buffer to avoid borrow issues.
-        let buffers: Vec<Vec<f32>> = self
-            .labels
-            .iter()
-            .map(|l| self.graph.get_output_by_label(l).to_vec())
+        let n_src = self.labels.len();
+        let out_channels = self.out_channels;
+
+        // Borrow each output channel's source slice directly from the graph,
+        // hoisting the mono-broadcast / channel-mapping / silence decision
+        // out of the per-sample loop. `None` means "fill with silence".
+        let sources: Vec<Option<&[f32]>> = (0..out_channels)
+            .map(|ch| {
+                if n_src == 1 {
+                    Some(self.graph.get_output_by_label(&self.labels[0]))
+                } else if ch < n_src {
+                    Some(self.graph.get_output_by_label(&self.labels[ch]))
+                } else {
+                    None
+                }
+            })
             .collect();
 
-        let n_frames = buffers[0].len();
-        let n_src = buffers.len(); // 1 or 2
+        let n_frames = sources[0].map(|s| s.len()).unwrap_or(0);
 
-        #[allow(clippy::needless_range_loop)] // `i` indexes into per-channel buffers
+        self.queue.reserve(n_frames * out_channels);
+        #[allow(clippy::needless_range_loop)] // `i` indexes parallel slices
         for i in 0..n_frames {
-            for ch in 0..self.out_channels {
-                let s = if n_src == 1 {
-                    // Mono source → broadcast to all output channels
-                    buffers[0][i]
-                } else if ch < n_src {
-                    buffers[ch][i]
-                } else {
-                    0.0
-                };
-                self.queue.push_back(s);
+            for src in &sources {
+                self.queue.push_back(src.map_or(0.0, |s| s[i]));
             }
         }
     }
