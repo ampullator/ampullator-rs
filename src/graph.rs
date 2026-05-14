@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::ugen_core::UGen;
 use crate::util::Sample;
@@ -9,6 +10,10 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use tempfile::NamedTempFile;
+
+/// Unique id assigned to each [`GenGraph`] at construction. Used by
+/// [`ChannelRouting`] to detect mispairing at render time.
+static NEXT_GRAPH_ID: AtomicU64 = AtomicU64::new(0);
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -33,6 +38,8 @@ pub struct GraphNode {
 }
 //------------------------------------------------------------------------------
 pub struct GenGraph {
+    /// Process-unique identifier used to verify [`ChannelRouting`] pairing.
+    id: u64,
     // Store nodes as assigned, were pos is NodId
     nodes: Vec<GraphNode>,
     // Reverse mapping from node name to NodeId
@@ -42,10 +49,6 @@ pub struct GenGraph {
     pub(crate) sample_rate: f32,
     pub(crate) buffer_size: usize,
     time_sample: usize,
-    /// Resolved per-output-channel routing for `interleave_into`.
-    /// `Some((node_index, output_index))` reads that buffer; `None` writes
-    /// silence. Populated by `set_channel_sources`.
-    channel_sources: Vec<Option<(usize, usize)>>,
 }
 
 impl GenGraph {
@@ -56,13 +59,13 @@ impl GenGraph {
             "buffer_size must be a non-zero multiple of 8 (SIMD lane width), got {buffer_size}"
         );
         Self {
+            id: NEXT_GRAPH_ID.fetch_add(1, Ordering::Relaxed),
             nodes: Vec::new(),
             name_to_node_id: HashMap::new(),
             execution_order: None,
             sample_rate,
             buffer_size,
             time_sample: 0,
-            channel_sources: Vec::new(),
         }
     }
 
@@ -247,72 +250,6 @@ impl GenGraph {
 
     pub fn buffer_size(&self) -> usize {
         self.buffer_size
-    }
-
-    /// Configure per-output-channel routing for [`interleave_into`].
-    ///
-    /// `channel_sources[ch]` selects what device channel `ch` reads:
-    ///   * `Some(label)` resolves to the named graph output once, here
-    ///   * `None` will be written as silence (`0.0`)
-    ///
-    /// Panics if any label is not a valid `node.output` reference. Resolved
-    /// references stay valid as long as nodes are only appended (never
-    /// removed or reordered) — which `add_node` guarantees.
-    pub fn set_channel_sources(&mut self, channel_sources: &[Option<&str>]) {
-        self.channel_sources = channel_sources
-            .iter()
-            .map(|opt| {
-                opt.map(|label| {
-                    let (node_name, output_name) = split_name(label);
-                    let node_index = self.name_to_node_id[node_name].0;
-                    let output_index = *self.nodes[node_index]
-                        .name_to_output_index
-                        .get(output_name)
-                        .unwrap_or_else(|| panic!("Invalid output name: {output_name}"));
-                    (node_index, output_index)
-                })
-            })
-            .collect();
-    }
-
-    /// Number of output channels configured via [`set_channel_sources`].
-    pub fn channel_count(&self) -> usize {
-        self.channel_sources.len()
-    }
-
-    /// Write one block of interleaved samples into `dest`, using the routing
-    /// configured by [`set_channel_sources`]. Call after [`process`].
-    ///
-    /// `dest.len()` must equal `self.buffer_size() * self.channel_count()`.
-    pub fn interleave_into(&self, dest: &mut [Sample]) {
-        let out_channels = self.channel_sources.len();
-        let n_frames = self.buffer_size;
-        assert_eq!(
-            dest.len(),
-            n_frames * out_channels,
-            "interleave_into: dest length must equal buffer_size * channel_count",
-        );
-
-        // Channel-major: for each output channel, walk its source buffer
-        // once and write strided into `dest`. The Some/None dispatch moves
-        // out of the per-sample hot path (one branch per channel, not one
-        // per sample), and no per-call allocation is needed.
-        for (ch, src) in self.channel_sources.iter().enumerate() {
-            match src {
-                Some((node_idx, out_idx)) => {
-                    let buf = &self.nodes[*node_idx].outputs[*out_idx];
-                    for (frame, &s) in dest.chunks_exact_mut(out_channels).zip(buf.iter())
-                    {
-                        frame[ch] = s;
-                    }
-                }
-                None => {
-                    for frame in dest.chunks_exact_mut(out_channels) {
-                        frame[ch] = 0.0;
-                    }
-                }
-            }
-        }
     }
 
     // Given a two-part name node.output, return a slice of the samples for that node and output,
@@ -604,6 +541,104 @@ impl GenGraph {
         }
 
         lines.join("\n")
+    }
+}
+
+//------------------------------------------------------------------------------
+
+/// Per-output-channel routing for interleaved playback.
+///
+/// Resolves a list of `Option<&str>` labels against a [`GenGraph`] once, at
+/// construction, and caches the `(node_index, output_index)` pairs. Use
+/// [`ChannelRouting::interleave_into`] to render an already-processed graph
+/// into a destination buffer with no further lookups.
+///
+/// A single graph can have multiple `ChannelRouting` instances bound to it
+/// (e.g. one stereo mix, one mono fold-down) — render which you like.
+///
+/// Resolved references stay valid as long as nodes are only appended to the
+/// source graph (never removed or reordered) after construction, which
+/// [`GenGraph::add_node`] guarantees.
+pub struct ChannelRouting {
+    /// Id of the [`GenGraph`] this routing was resolved against. Checked
+    /// against `graph.id` in [`interleave_into`](Self::interleave_into) to
+    /// detect mispairing (resolved-against-A, rendered-with-B).
+    graph_id: u64,
+    /// `Some((node_index, output_index))` reads that buffer per device
+    /// channel; `None` writes silence.
+    sources: Vec<Option<(usize, usize)>>,
+}
+
+impl ChannelRouting {
+    /// Resolve labels against `graph` and cache index pairs.
+    ///
+    /// `channel_sources[ch]` selects what device channel `ch` reads:
+    ///   * `Some(label)` resolves to the named `node.output` once, here
+    ///   * `None` will be written as silence (`0.0`)
+    ///
+    /// Panics if any label is not a valid `node.output` reference.
+    pub fn new(graph: &GenGraph, channel_sources: &[Option<&str>]) -> Self {
+        let sources = channel_sources
+            .iter()
+            .map(|opt| {
+                opt.map(|label| {
+                    let (node_name, output_name) = split_name(label);
+                    let node_index = graph.name_to_node_id[node_name].0;
+                    let output_index = *graph.nodes[node_index]
+                        .name_to_output_index
+                        .get(output_name)
+                        .unwrap_or_else(|| panic!("Invalid output name: {output_name}"));
+                    (node_index, output_index)
+                })
+            })
+            .collect();
+        Self {
+            graph_id: graph.id,
+            sources,
+        }
+    }
+
+    /// Number of output channels in this routing.
+    pub fn channel_count(&self) -> usize {
+        self.sources.len()
+    }
+
+    /// Write one block of interleaved samples into `dest`. Call after
+    /// [`GenGraph::process`]. `dest.len()` must equal
+    /// `graph.buffer_size() * self.channel_count()`.
+    pub fn interleave_into(&self, graph: &GenGraph, dest: &mut [Sample]) {
+        assert_eq!(
+            graph.id, self.graph_id,
+            "ChannelRouting used with a different graph than the one it was resolved against",
+        );
+
+        let out_channels = self.sources.len();
+        let n_frames = graph.buffer_size;
+        assert_eq!(
+            dest.len(),
+            n_frames * out_channels,
+            "interleave_into: dest length must equal buffer_size * channel_count",
+        );
+
+        // Channel-major: for each output channel, walk its source buffer
+        // once and write strided into `dest`. The Some/None dispatch sits
+        // outside the per-sample hot path.
+        for (ch, src) in self.sources.iter().enumerate() {
+            match src {
+                Some((node_idx, out_idx)) => {
+                    let buf = &graph.nodes[*node_idx].outputs[*out_idx];
+                    for (frame, &s) in dest.chunks_exact_mut(out_channels).zip(buf.iter())
+                    {
+                        frame[ch] = s;
+                    }
+                }
+                None => {
+                    for frame in dest.chunks_exact_mut(out_channels) {
+                        frame[ch] = 0.0;
+                    }
+                }
+            }
+        }
     }
 }
 

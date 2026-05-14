@@ -35,7 +35,7 @@ pub use ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
 
 pub use util::{Sample, UnitRate};
 
-pub use graph::GenGraph;
+pub use graph::{ChannelRouting, GenGraph};
 
 pub use graph_facade::{
     build_markdown_index, graph_from_chain_expression, graph_from_json_definition,

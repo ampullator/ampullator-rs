@@ -1,6 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use ampullator::{GenGraph, graph_from_chain_expression, graph_from_json_definition};
+use ampullator::{
+    ChannelRouting, GenGraph, graph_from_chain_expression, graph_from_json_definition,
+};
 use clap::Parser;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, SampleFormat, StreamConfig, SupportedBufferSize};
@@ -42,8 +44,10 @@ struct Cli {
 
 struct AudioState {
     graph: GenGraph,
+    /// Resolved per-device-channel routing; immutable for the stream's life.
+    routing: ChannelRouting,
     /// One block of pre-interleaved f32 samples. Length is
-    /// `graph.buffer_size() * graph.channel_count()`. Drained from `head`
+    /// `graph.buffer_size() * routing.channel_count()`. Drained from `head`
     /// outward; refilled when `head` reaches `block.len()`.
     block: Vec<f32>,
     /// Read position in `block`; `block.len()` means "drained, refill needed".
@@ -51,11 +55,12 @@ struct AudioState {
 }
 
 impl AudioState {
-    fn new(graph: GenGraph) -> Self {
-        let block_len = graph.buffer_size() * graph.channel_count();
+    fn new(graph: GenGraph, routing: ChannelRouting) -> Self {
+        let block_len = graph.buffer_size() * routing.channel_count();
         let block = vec![0.0; block_len];
         Self {
             graph,
+            routing,
             block,
             // Start drained so the first callback triggers a refill.
             head: block_len,
@@ -66,7 +71,7 @@ impl AudioState {
     /// `self.block`. Resets the read head.
     fn refill_block(&mut self) {
         self.graph.process();
-        self.graph.interleave_into(&mut self.block);
+        self.routing.interleave_into(&self.graph, &mut self.block);
         self.head = 0;
     }
 }
@@ -250,7 +255,7 @@ fn run(cli: Cli) -> Result<(), String> {
             }
         })
         .collect();
-    graph.set_channel_sources(&channel_refs);
+    let routing = ChannelRouting::new(&graph, &channel_refs);
 
     println!("Playing outputs: {}", labels.join(", "));
     println!(
@@ -259,7 +264,7 @@ fn run(cli: Cli) -> Result<(), String> {
     );
     println!("Press Enter to stop.");
 
-    let state = Arc::new(Mutex::new(AudioState::new(graph)));
+    let state = Arc::new(Mutex::new(AudioState::new(graph, routing)));
 
     // ── build typed stream ─────────────────────────────────────────────────
     let stream = match sample_format {
