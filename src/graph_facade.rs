@@ -5,8 +5,9 @@ use crate::ModeRound;
 use crate::Recorder;
 use crate::ugen_core::UGen;
 use crate::ugen_core::{
-    LfoWave, UGAsHz, UGCeil, UGClock, UGConst, UGFade, UGFloor, UGLfo, UGMixLinear,
-    UGMult, UGPan, UGRound, UGSampleHold, UGSine, UGSum, UGTrigger, UGWhite,
+    AnalogWave, LfoWave, UGAnalogOsc, UGAsHz, UGCeil, UGClock, UGConst, UGFade, UGFloor,
+    UGLfo, UGMixLinear, UGMult, UGPan, UGRound, UGSampleHold, UGSine, UGSum, UGTrigger,
+    UGWhite,
 };
 use crate::ugen_drum::{UGBassDrum, UGHighHat, UGSnareDrum};
 use crate::ugen_env::{UGEnvAR, UGEnvBreakPoint};
@@ -66,6 +67,9 @@ pub enum UGFacade {
         min: Sample,
         #[serde(default = "UGFacade::default_lfo_max")]
         max: Sample,
+    },
+    AnalogOsc {
+        wave: AnalogWave,
     },
     HighPass {
         #[serde(default = "UGFacade::default_roll_off_db")]
@@ -193,6 +197,7 @@ impl UGFacade {
                 min,
                 max,
             } => Box::new(UGLfo::new(*wave, *rate, *mode, *duty, *min, *max)),
+            UGFacade::AnalogOsc { wave } => Box::new(UGAnalogOsc::new(*wave)),
             UGFacade::BassDrum {} => Box::new(UGBassDrum::new()),
             UGFacade::HighHat { seed } => Box::new(UGHighHat::new(*seed)),
             UGFacade::SnareDrum { seed } => Box::new(UGSnareDrum::new_seeded(*seed)),

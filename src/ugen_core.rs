@@ -1283,6 +1283,260 @@ impl UGen for UGLfo {
 
 //------------------------------------------------------------------------------
 
+/// Waveform shape for [`UGAnalogOsc`]. Band-limited variants of the classic
+/// analog oscillator geometries.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Deserialize, Serialize, strum::EnumIter, strum::Display,
+)]
+pub enum AnalogWave {
+    Saw,
+    Square,
+    Triangle,
+}
+
+/// Two-sample PolyBLEP residual for a step discontinuity at phase `t` with
+/// phase increment `dt`. Returns the correction to ADD to a naive (trivial)
+/// waveform sample to band-limit a downward unit step of size 1.0 occurring at
+/// the wrap point. Scale/negate at the call site for the actual step size.
+#[inline(always)]
+fn poly_blep(mut t: f32, dt: f32) -> f32 {
+    if t < dt {
+        // start of period: just after the discontinuity
+        t /= dt;
+        t + t - t * t - 1.0
+    } else if t > 1.0 - dt {
+        // end of period: just before the discontinuity
+        t = (t - 1.0) / dt;
+        t * t + t + t + 1.0
+    } else {
+        0.0
+    }
+}
+
+/// PolyBLAMP residual (integral of PolyBLEP) for a slope discontinuity, used to
+/// band-limit the triangle's corners. Returns the correction to ADD to a naive
+/// triangle for a unit slope change.
+#[inline(always)]
+fn poly_blamp(mut t: f32, dt: f32) -> f32 {
+    if t < dt {
+        t = t / dt - 1.0;
+        -1.0 / 3.0 * t * t * t
+    } else if t > 1.0 - dt {
+        t = (t - 1.0) / dt + 1.0;
+        1.0 / 3.0 * t * t * t
+    } else {
+        0.0
+    }
+}
+
+/// Band-limited "analog-style" oscillator using PolyBLEP.
+///
+/// Produces sawtooth, square (with pulse-width via `duty`), and triangle
+/// waveforms. Unlike UGLfo's "perfect geometry" shapes, these are band-limited:
+/// step discontinuities (saw, square) are corrected with a 2-sample PolyBLEP
+/// residual, and the triangle's slope discontinuities are corrected with a
+/// PolyBLAMP residual (integrated square). This suppresses the aliasing that a
+/// naive trivial ramp/pulse would produce, giving the rounded-corner, slightly
+/// ringing character of an analog oscillator without wavetables or mipmaps.
+///
+/// Frequency may sweep freely at signal rate; there is no table selection.
+///
+/// Inputs:  freq, phase, duty, min, max
+/// Outputs: wave, trigger
+///
+/// `duty` only affects Square (pulse width, fraction of period high) and is
+/// clamped to [0.01, 0.99]. It is ignored for Saw and Triangle.
+///
+/// NOTE: this is naturally band-limited but mathematically "ideal" band-limited.
+/// For extra analog character (rounded edges, drift), follow this node with a
+/// one-pole low-pass and/or a slow random-walk on the freq input in the chain
+/// rather than baking it in here.
+pub struct UGAnalogOsc {
+    wave: AnalogWave,
+    phase: Sample,
+    default_freq: Sample,
+    default_phase_offset: Sample,
+    default_duty: Sample,
+    default_min: Sample,
+    default_max: Sample,
+}
+
+impl UGAnalogOsc {
+    pub fn new(wave: AnalogWave) -> Self {
+        Self {
+            wave,
+            phase: 0.0,
+            default_freq: 440.0,
+            default_phase_offset: 0.0,
+            default_duty: 0.5,
+            default_min: -1.0,
+            default_max: 1.0,
+        }
+    }
+}
+
+impl Default for UGAnalogOsc {
+    fn default() -> Self {
+        Self::new(AnalogWave::Saw)
+    }
+}
+
+impl UGen for UGAnalogOsc {
+    fn type_name(&self) -> &'static str {
+        "UGAnalogOsc"
+    }
+
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "freq".to_string(),
+                "phase".to_string(),
+                "duty".to_string(),
+                "min".to_string(),
+                "max".to_string(),
+            ]
+        })
+    }
+
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["wave".to_string(), "trigger".to_string()])
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "freq" => Some(self.default_freq),
+            "phase" => Some(self.default_phase_offset),
+            "duty" => Some(self.default_duty),
+            "min" => Some(self.default_min),
+            "max" => Some(self.default_max),
+            _ => None,
+        }
+    }
+
+    fn describe_config(&self) -> Option<String> {
+        Some(format!(
+            "wave = {:?}, freq = {}, duty = {}, min = {}, max = {}",
+            self.wave, self.default_freq, self.default_duty, self.default_min, self.default_max
+        ))
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        let freq_in = inputs.first().copied().unwrap_or(&[]);
+        let phase_in = inputs.get(1).copied().unwrap_or(&[]);
+        let duty_in = inputs.get(2).copied().unwrap_or(&[]);
+        let min_in = inputs.get(3).copied().unwrap_or(&[]);
+        let max_in = inputs.get(4).copied().unwrap_or(&[]);
+
+        let (wave_out, rest) = outputs.split_at_mut(1);
+        let wave_out = &mut wave_out[0];
+        let trig_out = &mut rest[0];
+        
+        let n = wave_out.len();
+
+        let freq_connected = freq_in.len() >= n;
+        let phase_connected = phase_in.len() >= n;
+        let duty_connected = duty_in.len() >= n;
+        let min_connected = min_in.len() >= n;
+        let max_connected = max_in.len() >= n;
+
+        for i in 0..n {
+            let freq = if freq_connected {
+                freq_in[i]
+            } else {
+                self.default_freq
+            };
+            let phase_offset = if phase_connected {
+                phase_in[i]
+            } else {
+                self.default_phase_offset
+            };
+            let duty = if duty_connected {
+                duty_in[i].clamp(0.01, 0.99)
+            } else {
+                self.default_duty
+            };
+            let min = if min_connected {
+                min_in[i]
+            } else {
+                self.default_min
+            };
+            let max = if max_connected {
+                max_in[i]
+            } else {
+                self.default_max
+            };
+
+            let dt = freq / sample_rate;
+
+            // Advance phase
+            self.phase += dt;
+            let crossed = self.phase >= 1.0;
+            if crossed {
+                self.phase -= 1.0;
+            }
+
+            // Apply phase offset
+            let t = (self.phase + phase_offset).fract();
+
+            // Generate waveform with band-limiting
+            let bipolar = match self.wave {
+                AnalogWave::Saw => {
+                    // Naive sawtooth: 2*t - 1 (ramps from -1 to +1)
+                    // Downward step of size -2.0 at wrap
+                    let naive = 2.0 * t - 1.0;
+                    let correction = -2.0 * poly_blep(t, dt);
+                    naive + correction
+                }
+                AnalogWave::Square => {
+                    // Naive square: +1 before duty, -1 after
+                    let naive = if t < duty { 1.0 } else { -1.0 };
+                    // Rising edge at t=0: upward step of +2.0
+                    let correction_rising = 2.0 * poly_blep(t, dt);
+                    // Falling edge at t=duty: downward step of -2.0
+                    let t_fall = if t >= duty { t - duty } else { t - duty + 1.0 };
+                    let correction_falling = -2.0 * poly_blep(t_fall, dt);
+                    naive + correction_rising + correction_falling
+                }
+                AnalogWave::Triangle => {
+                    // Triangle ignores duty and always produces symmetric triangle
+                    // with peak at t=0.5
+                    let tri_duty = 0.5;
+                    // Naive triangle with corners at 0 and 0.5
+                    // Rising from -1 to +1 over [0, 0.5], falling from +1 to -1 over [0.5, 1]
+                    let naive = if t < tri_duty {
+                        -1.0 + 4.0 * t  // slope of 4 to go from -1 to +1 in 0.5 units
+                    } else {
+                        3.0 - 4.0 * t  // slope of -4 to go from +1 to -1 in 0.5 units
+                    };
+                    // Slope changes at t=0 (by +4) and t=0.5 (by -8)
+                    let slope_change_0 = 4.0; // from 0 to +4
+                    let slope_change_half = -8.0; // from +4 to -4
+                    
+                    let correction_0 = slope_change_0 * poly_blamp(t, dt);
+                    let t_half = if t >= tri_duty { t - tri_duty } else { t - tri_duty + 1.0 };
+                    let correction_half = slope_change_half * poly_blamp(t_half, dt);
+                    
+                    naive + correction_0 + correction_half
+                }
+            };
+
+            // Rescale from bipolar [-1, +1] to [min, max]
+            wave_out[i] = min + (bipolar + 1.0) * 0.5 * (max - min);
+            trig_out[i] = if crossed { 1.0 } else { 0.0 };
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
 /// Given a signal-controlled frequency, output an impulse.
 pub struct UGTrigger {
     phase: f32,
@@ -2208,4 +2462,111 @@ mod tests {
             vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
     }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_saw_basic() {
+        // Saw wave at 1 Hz with sample rate 8 → phase increments by 0.125
+        // Output should ramp from -1 to nearly +1, with PolyBLEP correction
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Saw),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // Should be approximately a ramp from -1 to +1
+        assert!(output[0] < output[6], "Saw wave should increase over time");
+        // First sample should be around -0.75
+        assert!(output[0] > -1.0 && output[0] < -0.5);
+        // Second to last sample should be near +0.75
+        assert!(output[6] > 0.5 && output[6] < 1.0);
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_square_basic() {
+        // Square wave at 1 Hz with sample rate 8, duty=0.5
+        // Should produce 4 high samples then 4 low samples
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Square),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // First half should be near +1, second half near -1 (with PolyBLEP)
+        assert!(output[1] > 0.5, "Square wave first half should be high");
+        assert!(output[5] < -0.5, "Square wave second half should be low");
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_triangle_basic() {
+        // Triangle wave at 1 Hz with sample rate 8
+        // Should produce symmetric triangle
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Triangle),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // Triangle should rise then fall
+        // With duty=0.5, it rises from 0 to peak at sample 3, then falls
+        assert!(output[1] < output[2], "Triangle should rise in first half");
+        assert!(output[4] > output[5], "Triangle should fall in second half");
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_trigger_output() {
+        // Verify trigger output fires once per period
+        let mut g = GenGraph::new(8.0, 16);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Saw),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let trig = g.get_output_by_label("osc.trigger");
+        // Should have exactly 2 triggers in 16 samples at 8 Hz with 1 Hz freq
+        let trigger_count = trig.iter().filter(|&&x| x > 0.5).count();
+        assert_eq!(trigger_count, 2, "Should have 2 triggers in 16 samples");
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_range_scaling() {
+        // Test min/max scaling with saw wave
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "min" => 0.0,
+            "max" => 10.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Saw),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+            "min.out" -> "osc.min",
+            "max.out" -> "osc.max",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // Output should be in range [0, 10]
+        assert!(output.iter().all(|&x| x >= -0.5 && x <= 10.5));
+        assert!(output[0] < output[7], "Saw should still increase");
+    }
 }
+
