@@ -129,6 +129,10 @@ A full mixing example:
 Sine() => a | Sine() => b | 330 ->:freq a | 440 ->:freq b | (a + b) => mix
 ```
 
+```
+Clock(rate=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[3, 2, 3], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[1,2,1], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn
+```
+
 
 ### Whitespace
 
@@ -663,6 +667,15 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 ```bash
 cargo run --bin ampullator-doc
 ```
+
+### Real-Time Playback:
+
+```bash
+cargo run --bin ampullator-play -- 'Clock(rate=300, mode=Bpm) => metro | metro -> PulseSelect(duration_values=[7, 1, 3, 4, 1], duration_mode=Cycle) -> BassDrum() => bd | metro -> PulseSelect(duration_values=[6,1,1,6,2,2], duration_mode=Shuffle)-> SnareDrum() => sn | bd + sn'
+```
+
+
+
 
 ### Record WAV from a chain or graph file:
 
