@@ -78,6 +78,7 @@ impl AudioState {
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
+/// `input`: Chain DSL given as json, TXT, or raw input
 fn build_graph(
     input: &str,
     sample_rate: f32,
