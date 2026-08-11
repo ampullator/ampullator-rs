@@ -18,7 +18,7 @@ fn simd_load(slice: &[f32], offset: usize) -> f32x8 {
 
 //------------------------------------------------------------------------------
 
-pub trait UGen {
+pub trait UGen: Send {
     fn process(
         &mut self,
         inputs: &[&[Sample]],
