@@ -1418,7 +1418,11 @@ impl UGen for UGAnalogOsc {
     fn describe_config(&self) -> Option<String> {
         Some(format!(
             "wave = {:?}, freq = {}, duty = {}, min = {}, max = {}",
-            self.wave, self.default_freq, self.default_duty, self.default_min, self.default_max
+            self.wave,
+            self.default_freq,
+            self.default_duty,
+            self.default_min,
+            self.default_max
         ))
     }
 
@@ -1438,7 +1442,7 @@ impl UGen for UGAnalogOsc {
         let (wave_out, rest) = outputs.split_at_mut(1);
         let wave_out = &mut wave_out[0];
         let trig_out = &mut rest[0];
-        
+
         let n = wave_out.len();
 
         let freq_connected = freq_in.len() >= n;
@@ -1512,18 +1516,22 @@ impl UGen for UGAnalogOsc {
                     // Naive triangle with corners at 0 and 0.5
                     // Rising from -1 to +1 over [0, 0.5], falling from +1 to -1 over [0.5, 1]
                     let naive = if t < tri_duty {
-                        -1.0 + 4.0 * t  // slope of 4 to go from -1 to +1 in 0.5 units
+                        -1.0 + 4.0 * t // slope of 4 to go from -1 to +1 in 0.5 units
                     } else {
-                        3.0 - 4.0 * t  // slope of -4 to go from +1 to -1 in 0.5 units
+                        3.0 - 4.0 * t // slope of -4 to go from +1 to -1 in 0.5 units
                     };
                     // Slope changes at t=0 (by +4) and t=0.5 (by -8)
                     let slope_change_0 = 4.0; // from 0 to +4
                     let slope_change_half = -8.0; // from +4 to -4
-                    
+
                     let correction_0 = slope_change_0 * poly_blamp(t, dt);
-                    let t_half = if t >= tri_duty { t - tri_duty } else { t - tri_duty + 1.0 };
+                    let t_half = if t >= tri_duty {
+                        t - tri_duty
+                    } else {
+                        t - tri_duty + 1.0
+                    };
                     let correction_half = slope_change_half * poly_blamp(t_half, dt);
-                    
+
                     naive + correction_0 + correction_half
                 }
             };
@@ -2569,4 +2577,3 @@ mod tests {
         assert!(output[0] < output[7], "Saw should still increase");
     }
 }
-
