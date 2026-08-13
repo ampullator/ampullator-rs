@@ -1,0 +1,8 @@
+{
+    "title": "Analog Oscillator Waveforms",
+    "label": "ug_analog-osc-waves",
+    "chain": "5 => f | AnalogOsc(wave=Saw) => saw | f ->:freq saw | AnalogOsc(wave=Triangle) => tri | f ->:freq tri | AnalogOsc(wave=Square) => sq | f ->:freq sq | Lfo(rate=1, wave=Triangle, min=0.2, max=0.8) => pwm ->:duty sq",
+    "sample_rate": 100.0,
+    "buffer_size": 8,
+    "total_samples": 100
+}

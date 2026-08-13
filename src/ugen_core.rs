@@ -1283,6 +1283,332 @@ impl UGen for UGLfo {
 
 //------------------------------------------------------------------------------
 
+/// Waveform shape for [`UGAnalogOsc`]. Band-limited variants of the classic
+/// analog oscillator geometries.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Deserialize, Serialize, strum::EnumIter, strum::Display,
+)]
+pub enum AnalogWave {
+    Saw,
+    Square,
+    Triangle,
+}
+
+/// Two-sample PolyBLEP residual for a step discontinuity at phase `t` with
+/// phase increment `dt`. Returns the correction to ADD to a naive (trivial)
+/// waveform sample to band-limit an UPWARD step of size 2.0 occurring at the
+/// wrap point -- i.e. the natural scale for a bipolar [-1, +1] waveform, which
+/// is why the saw (whose step is -2.0) simply subtracts one unit of this.
+///
+/// The embedded factor of 2 is easy to miss: at the discontinuity sample
+/// (`t == 0`) this returns -1.0, whereas the residual for a *unit* step is
+/// -0.5 (the band-limited step sits at the midpoint while the trivial step has
+/// already jumped to 1.0). Scale by `step_size * 0.5` at the call site.
+///
+/// Returns 0.0 (i.e. leaves the naive waveform uncorrected) unless
+/// `0 < dt < 0.5`. At or above Nyquist the two transition regions overlap and
+/// there is no band to limit; at `dt <= 0` there is either no motion or the
+/// phase is running backwards, whose discontinuity has the opposite sign and
+/// is not modelled here.
+#[inline(always)]
+fn poly_blep(mut t: f32, dt: f32) -> f32 {
+    if !(dt > 0.0 && dt < 0.5) {
+        0.0
+    } else if t < dt {
+        // start of period: just after the discontinuity
+        t /= dt;
+        t + t - t * t - 1.0
+    } else if t > 1.0 - dt {
+        // end of period: just before the discontinuity
+        t = (t - 1.0) / dt;
+        t * t + t + t + 1.0
+    } else {
+        0.0
+    }
+}
+
+/// PolyBLAMP residual (integral of PolyBLEP) for a slope discontinuity, used to
+/// band-limit the triangle's corners. Returns the correction to ADD to a naive
+/// waveform for a slope change of 2.0 in signal units per SAMPLE.
+///
+/// Two scale factors are baked in and both must be honoured at the call site:
+/// this is the running integral of [`poly_blep`] with respect to sample index
+/// (not phase), so a slope expressed per phase unit must be multiplied by `dt`;
+/// and it inherits the same 2x as [`poly_blep`], so the per-sample slope change
+/// must be halved. Net: `slope_change_per_phase * dt * 0.5`.
+///
+/// Restricted to `0 < dt < 0.5` for the same reasons as [`poly_blep`].
+#[inline(always)]
+fn poly_blamp(mut t: f32, dt: f32) -> f32 {
+    if !(dt > 0.0 && dt < 0.5) {
+        0.0
+    } else if t < dt {
+        t = t / dt - 1.0;
+        -1.0 / 3.0 * t * t * t
+    } else if t > 1.0 - dt {
+        t = (t - 1.0) / dt + 1.0;
+        1.0 / 3.0 * t * t * t
+    } else {
+        0.0
+    }
+}
+
+/// Naive sawtooth at phase `t`, band-limited with a PolyBLEP residual.
+///
+/// The trivial ramp `2t - 1` runs from -1 to +1 and drops by 2.0 at the wrap;
+/// [`poly_blep`] is already scaled for a step of 2.0, so one negated unit of it
+/// is the whole correction.
+#[inline(always)]
+fn analog_saw(t: Sample, dt: Sample, _duty: Sample) -> Sample {
+    (2.0 * t - 1.0) - poly_blep(t, dt)
+}
+
+/// Naive pulse at phase `t` with pulse width `duty`, band-limited with a
+/// PolyBLEP residual at each edge: +2.0 at `t = 0` and -2.0 at `t = duty`.
+#[inline(always)]
+fn analog_square(t: Sample, dt: Sample, duty: Sample) -> Sample {
+    let naive = if t < duty { 1.0 } else { -1.0 };
+    let t_fall = if t >= duty { t - duty } else { t - duty + 1.0 };
+    naive + poly_blep(t, dt) - poly_blep(t_fall, dt)
+}
+
+/// Symmetric triangle at phase `t` (peak at `t = 0.5`, `duty` ignored), with
+/// its corners band-limited by PolyBLAMP residuals.
+///
+/// The naive slope is +4 per phase unit while rising and -4 while falling, so
+/// *both* corners are a slope change of 8: +8 at `t = 0`, where the phase wraps
+/// in from the falling branch, and -8 at `t = 0.5`. [`poly_blamp`] wants that
+/// per sample and at half scale, hence the `dt * 0.5`.
+#[inline(always)]
+fn analog_triangle(t: Sample, dt: Sample, _duty: Sample) -> Sample {
+    const TRI_DUTY: Sample = 0.5;
+    let naive = if t < TRI_DUTY {
+        -1.0 + 4.0 * t
+    } else {
+        3.0 - 4.0 * t
+    };
+    let t_half = if t >= TRI_DUTY {
+        t - TRI_DUTY
+    } else {
+        t - TRI_DUTY + 1.0
+    };
+    let scale = 8.0 * dt * 0.5;
+    naive + scale * poly_blamp(t, dt) - scale * poly_blamp(t_half, dt)
+}
+
+/// Band-limited "analog-style" oscillator using PolyBLEP.
+///
+/// Produces sawtooth, square (with pulse-width via `duty`), and triangle
+/// waveforms. Unlike UGLfo's "perfect geometry" shapes, these are band-limited:
+/// step discontinuities (saw, square) are corrected with a 2-sample PolyBLEP
+/// residual, and the triangle's slope discontinuities are corrected with a
+/// PolyBLAMP residual (integrated square). This suppresses the aliasing that a
+/// naive trivial ramp/pulse would produce, giving the rounded-corner, slightly
+/// ringing character of an analog oscillator without wavetables or mipmaps.
+///
+/// Frequency may sweep freely at signal rate; there is no table selection.
+///
+/// Inputs:  freq, phase, duty, min, max
+/// Outputs: wave, trigger
+///
+/// `duty` only affects Square (pulse width, fraction of period high) and is
+/// clamped to [0.01, 0.99]. It is ignored for Saw and Triangle.
+///
+/// NOTE: this is naturally band-limited but not mathematically "ideal" band-
+/// limited; the 2-sample PolyBLEP/PolyBLAMP residuals are an approximation.
+/// For extra analog character (rounded edges, drift), follow this node with a
+/// one-pole low-pass and/or a slow random-walk on the freq input in the chain
+/// rather than baking it in here.
+pub struct UGAnalogOsc {
+    wave: AnalogWave,
+    phase: Sample,
+    default_freq: Sample,
+    default_phase_offset: Sample,
+    default_duty: Sample,
+    default_min: Sample,
+    default_max: Sample,
+}
+
+impl UGAnalogOsc {
+    pub fn new(wave: AnalogWave) -> Self {
+        Self {
+            wave,
+            phase: 0.0,
+            default_freq: 440.0,
+            default_phase_offset: 0.0,
+            default_duty: 0.5,
+            default_min: -1.0,
+            default_max: 1.0,
+        }
+    }
+}
+
+impl Default for UGAnalogOsc {
+    fn default() -> Self {
+        Self::new(AnalogWave::Saw)
+    }
+}
+
+impl UGAnalogOsc {
+    /// Render a block using `shape`, a pure `(t, dt, duty) -> bipolar` mapping.
+    ///
+    /// The waveform is selected once by the caller rather than per sample, so
+    /// each variant monomorphizes into its own loop with the other two shapes'
+    /// branches (and, for saw and triangle, the `duty` clamp) eliminated.
+    #[inline]
+    fn render<F>(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        shape: F,
+    ) where
+        F: Fn(Sample, Sample, Sample) -> Sample,
+    {
+        let freq_in = inputs.first().copied().unwrap_or(&[]);
+        let phase_in = inputs.get(1).copied().unwrap_or(&[]);
+        let duty_in = inputs.get(2).copied().unwrap_or(&[]);
+        let min_in = inputs.get(3).copied().unwrap_or(&[]);
+        let max_in = inputs.get(4).copied().unwrap_or(&[]);
+
+        let (wave_out, rest) = outputs.split_at_mut(1);
+        let n = wave_out[0].len();
+        // Narrow to `n` up front so the per-sample stores need no bounds check.
+        let wave_out = &mut wave_out[0][..n];
+        let trig_out = &mut rest[0][..n];
+
+        let freq_connected = freq_in.len() >= n;
+        let phase_connected = phase_in.len() >= n;
+        let duty_connected = duty_in.len() >= n;
+        let min_connected = min_in.len() >= n;
+        let max_connected = max_in.len() >= n;
+
+        let inv_sample_rate = 1.0 / sample_rate;
+
+        for i in 0..n {
+            let freq = if freq_connected {
+                freq_in[i]
+            } else {
+                self.default_freq
+            };
+            let phase_offset = if phase_connected {
+                phase_in[i]
+            } else {
+                self.default_phase_offset
+            };
+            let duty = if duty_connected {
+                duty_in[i]
+            } else {
+                self.default_duty
+            }
+            .clamp(0.01, 0.99);
+            let min = if min_connected {
+                min_in[i]
+            } else {
+                self.default_min
+            };
+            let max = if max_connected {
+                max_in[i]
+            } else {
+                self.default_max
+            };
+
+            let dt = freq * inv_sample_rate;
+
+            // Advance phase. `rem_euclid` rather than a single subtraction so
+            // that negative `freq` (through-zero FM) and `dt >= 1.0` (freq at
+            // or above the sample rate) both stay in range instead of letting
+            // the accumulator drift away without bound. Kept behind the
+            // `crossed` test so the common path stays a predicted no-op.
+            self.phase += dt;
+            let crossed = !(0.0..1.0).contains(&self.phase);
+            if crossed {
+                self.phase = self.phase.rem_euclid(1.0);
+            }
+
+            // Apply phase offset. `rem_euclid` rather than `fract` because
+            // `fract` truncates toward zero, so a negative `phase` input (any
+            // bipolar signal patched in for phase modulation) would leave `t`
+            // negative and blow the PolyBLEP polynomials up by roughly 1/dt.
+            let t = (self.phase + phase_offset).rem_euclid(1.0);
+
+            // Rescale bipolar [-1, +1] to [min, max]. Written as an affine map
+            // so that the unconnected case (both bounds constant) hoists `half`
+            // and `mid` clean out of the loop.
+            let half = (max - min) * 0.5;
+            let mid = min + half;
+            wave_out[i] = mid + shape(t, dt, duty) * half;
+            trig_out[i] = Sample::from(crossed);
+        }
+    }
+}
+
+impl UGen for UGAnalogOsc {
+    fn type_name(&self) -> &'static str {
+        "UGAnalogOsc"
+    }
+
+    fn input_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| {
+            vec![
+                "freq".to_string(),
+                "phase".to_string(),
+                "duty".to_string(),
+                "min".to_string(),
+                "max".to_string(),
+            ]
+        })
+    }
+
+    fn output_names(&self) -> &[String] {
+        static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        NAMES.get_or_init(|| vec!["wave".to_string(), "trigger".to_string()])
+    }
+
+    fn default_input(&self, input_name: &str) -> Option<Sample> {
+        match input_name {
+            "freq" => Some(self.default_freq),
+            "phase" => Some(self.default_phase_offset),
+            "duty" => Some(self.default_duty),
+            "min" => Some(self.default_min),
+            "max" => Some(self.default_max),
+            _ => None,
+        }
+    }
+
+    fn describe_config(&self) -> Option<String> {
+        Some(format!(
+            "wave = {:?}, freq = {}, duty = {}, min = {}, max = {}",
+            self.wave,
+            self.default_freq,
+            self.default_duty,
+            self.default_min,
+            self.default_max
+        ))
+    }
+
+    fn process(
+        &mut self,
+        inputs: &[&[Sample]],
+        outputs: &mut [&mut [Sample]],
+        sample_rate: f32,
+        _time_sample: usize,
+    ) {
+        match self.wave {
+            AnalogWave::Saw => self.render(inputs, outputs, sample_rate, analog_saw),
+            AnalogWave::Square => {
+                self.render(inputs, outputs, sample_rate, analog_square)
+            }
+            AnalogWave::Triangle => {
+                self.render(inputs, outputs, sample_rate, analog_triangle)
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
 /// Given a signal-controlled frequency, output an impulse.
 pub struct UGTrigger {
     phase: f32,
@@ -2207,5 +2533,300 @@ mod tests {
             g.get_output_by_label("sh.out"),
             vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         );
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_saw_basic() {
+        // Saw wave at 1 Hz with sample rate 8 → phase increments by 0.125
+        // Output should ramp from -1 to nearly +1, with PolyBLEP correction
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Saw),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // Should be approximately a ramp from -1 to +1
+        assert!(output[0] < output[6], "Saw wave should increase over time");
+        // First sample should be around -0.75
+        assert!(output[0] > -1.0 && output[0] < -0.5);
+        // Second to last sample should be near +0.75
+        assert!(output[6] > 0.5 && output[6] < 1.0);
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_square_basic() {
+        // Square wave at 1 Hz with sample rate 8, duty=0.5
+        // Should produce 4 high samples then 4 low samples
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Square),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // First half should be near +1, second half near -1 (with PolyBLEP)
+        assert!(output[1] > 0.5, "Square wave first half should be high");
+        assert!(output[5] < -0.5, "Square wave second half should be low");
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_triangle_basic() {
+        // Triangle wave at 1 Hz with sample rate 8
+        // Should produce symmetric triangle
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Triangle),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // Triangle should rise then fall
+        // With duty=0.5, it rises from 0 to peak at sample 3, then falls
+        assert!(output[1] < output[2], "Triangle should rise in first half");
+        assert!(output[4] > output[5], "Triangle should fall in second half");
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_trigger_output() {
+        // Verify trigger output fires once per period
+        let mut g = GenGraph::new(8.0, 16);
+        register_many![g,
+            "freq" => 1.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Saw),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+        ];
+        g.process();
+        let trig = g.get_output_by_label("osc.trigger");
+        // Should have exactly 2 triggers in 16 samples at 8 Hz with 1 Hz freq
+        let trigger_count = trig.iter().filter(|&&x| x > 0.5).count();
+        assert_eq!(trigger_count, 2, "Should have 2 triggers in 16 samples");
+    }
+
+    //--------------------------------------------------------------------------
+    #[test]
+    fn test_analog_osc_range_scaling() {
+        // Test min/max scaling with saw wave
+        let mut g = GenGraph::new(8.0, 8);
+        register_many![g,
+            "freq" => 1.0,
+            "min" => 0.0,
+            "max" => 10.0,
+            "osc" => UGAnalogOsc::new(AnalogWave::Saw),
+        ];
+        connect_many![g,
+            "freq.out" -> "osc.freq",
+            "min.out" -> "osc.min",
+            "max.out" -> "osc.max",
+        ];
+        g.process();
+        let output = g.get_output_by_label("osc.wave");
+        // Output should be in range [0, 10]
+        assert!(output.iter().all(|&x| (-0.5..=10.5).contains(&x)));
+        assert!(output[0] < output[7], "Saw should still increase");
+    }
+
+    //--------------------------------------------------------------------------
+    // Band-limiting regression tests for UGAnalogOsc.
+    //
+    // The PolyBLEP/PolyBLAMP coefficients carry two easy-to-miss scale factors
+    // (poly_blep is scaled for a step of 2.0, and poly_blamp integrates with
+    // respect to sample index rather than phase, so it needs a `dt`). Getting
+    // either wrong still yields a waveform that looks correct in the time
+    // domain while being *worse* than no correction at all in the spectrum,
+    // so these assert on aliasing energy rather than on sample values.
+
+    /// Render `n` samples of a bare oscillator at `freq`.
+    fn render_analog(
+        wave: AnalogWave,
+        freq: f32,
+        sample_rate: f32,
+        n: usize,
+    ) -> Vec<f32> {
+        let mut osc = UGAnalogOsc::new(wave);
+        osc.default_freq = freq;
+        let mut wave_buf = vec![0.0; n];
+        let mut trig_buf = vec![0.0; n];
+        {
+            let mut outputs: Vec<&mut [Sample]> = vec![&mut wave_buf, &mut trig_buf];
+            osc.process(&[], &mut outputs, sample_rate, 0);
+        }
+        wave_buf
+    }
+
+    /// Ratio of aliased to harmonic energy, in dB (lower is better).
+    ///
+    /// `n` samples at `f0 = k * sample_rate / n` are exactly periodic, so every
+    /// true harmonic lands on a bin that is a multiple of `k` (folded about
+    /// Nyquist). Energy in any other bin can only be aliasing.
+    fn alias_to_signal_db(x: &[f32], k: usize) -> f32 {
+        let n = x.len();
+        let mut harmonics = std::collections::HashSet::new();
+        let mut h = 1;
+        while h * k <= n / 2 {
+            harmonics.insert((h * k) % n);
+            h += 1;
+        }
+        let (mut signal, mut alias) = (0.0f64, 0.0f64);
+        for bin in 1..n / 2 {
+            let (mut re, mut im) = (0.0f64, 0.0f64);
+            for (i, &v) in x.iter().enumerate() {
+                let a = -2.0 * std::f64::consts::PI * bin as f64 * i as f64 / n as f64;
+                re += v as f64 * a.cos();
+                im += v as f64 * a.sin();
+            }
+            let power = re * re + im * im;
+            if harmonics.contains(&bin) {
+                signal += power;
+            } else {
+                alias += power;
+            }
+        }
+        (10.0 * (alias / signal).log10()) as f32
+    }
+
+    #[test]
+    fn test_analog_osc_saw_aliasing() {
+        // f0 = 327 * 44100 / 4096 = 3520.7 Hz, well into the range where a
+        // trivial ramp aliases badly (naive measures about -9.9 dB here).
+        let out = render_analog(AnalogWave::Saw, 327.0 * 44100.0 / 4096.0, 44100.0, 4096);
+        let db = alias_to_signal_db(&out, 327);
+        assert!(
+            db < -22.0,
+            "saw alias/signal was {db:.1} dB, expected < -22 dB"
+        );
+    }
+
+    #[test]
+    fn test_analog_osc_triangle_aliasing() {
+        let out = render_analog(
+            AnalogWave::Triangle,
+            327.0 * 44100.0 / 4096.0,
+            44100.0,
+            4096,
+        );
+        let db = alias_to_signal_db(&out, 327);
+        // Naive is about -31 dB here; the missing `dt` scaling measured -5 dB.
+        assert!(
+            db < -38.0,
+            "triangle alias/signal was {db:.1} dB, expected < -38 dB"
+        );
+    }
+
+    #[test]
+    fn test_analog_osc_square_aliasing() {
+        let out =
+            render_analog(AnalogWave::Square, 327.0 * 44100.0 / 4096.0, 44100.0, 4096);
+        let db = alias_to_signal_db(&out, 327);
+        assert!(
+            db < -18.0,
+            "square alias/signal was {db:.1} dB, expected < -18 dB"
+        );
+    }
+
+    #[test]
+    fn test_analog_osc_stays_in_range() {
+        // An over-scaled residual overshoots the nominal [-1, 1] bounds; the
+        // original triangle coefficients peaked near 1.5.
+        for wave in [AnalogWave::Saw, AnalogWave::Square, AnalogWave::Triangle] {
+            for &freq in &[55.0, 440.0, 3520.0, 9000.0] {
+                let out = render_analog(wave, freq, 44100.0, 2048);
+                let peak = out.iter().fold(0.0f32, |a, &b| a.max(b.abs()));
+                assert!(
+                    peak <= 1.05,
+                    "{wave:?} at {freq} Hz peaked at {peak:.3}, expected <= 1.05"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_analog_osc_negative_phase_input_is_bounded() {
+        // `phase` is a signal-rate input, so any bipolar signal patched into it
+        // drives it negative. With `fract` (truncating) this produced values in
+        // the thousands; `rem_euclid` keeps the phase in [0, 1).
+        let mut osc = UGAnalogOsc::new(AnalogWave::Saw);
+        let phase_in = vec![-0.5; 64];
+        let freq_in = vec![440.0; 64];
+        let mut wave_buf = vec![0.0; 64];
+        let mut trig_buf = vec![0.0; 64];
+        {
+            let inputs: Vec<&[Sample]> = vec![&freq_in, &phase_in];
+            let mut outputs: Vec<&mut [Sample]> = vec![&mut wave_buf, &mut trig_buf];
+            osc.process(&inputs, &mut outputs, 44100.0, 0);
+        }
+        let peak = wave_buf.iter().fold(0.0f32, |a, &b| a.max(b.abs()));
+        assert!(
+            peak <= 1.05,
+            "negative phase offset produced peak {peak:.3}"
+        );
+    }
+
+    #[test]
+    fn test_analog_osc_negative_freq_phase_stays_bounded() {
+        // Through-zero FM: a single `phase -= 1.0` never fires for negative
+        // increments, so the accumulator used to drift toward -inf.
+        let mut osc = UGAnalogOsc::new(AnalogWave::Saw);
+        let freq_in = vec![-440.0; 512];
+        let mut wave_buf = vec![0.0; 512];
+        let mut trig_buf = vec![0.0; 512];
+        {
+            let inputs: Vec<&[Sample]> = vec![&freq_in];
+            let mut outputs: Vec<&mut [Sample]> = vec![&mut wave_buf, &mut trig_buf];
+            osc.process(&inputs, &mut outputs, 44100.0, 0);
+        }
+        assert!(
+            (0.0..1.0).contains(&osc.phase),
+            "phase escaped to {} under negative freq",
+            osc.phase
+        );
+        let peak = wave_buf.iter().fold(0.0f32, |a, &b| a.max(b.abs()));
+        assert!(peak <= 1.05, "negative freq produced peak {peak:.3}");
+        assert!(trig_buf.iter().any(|&t| t > 0.5), "no wrap trigger fired");
+    }
+
+    #[test]
+    fn test_analog_osc_freq_above_sample_rate_is_bounded() {
+        // dt >= 1.0: one subtraction is not enough to bring phase back in range.
+        let out = render_analog(AnalogWave::Saw, 60000.0, 44100.0, 256);
+        assert!(
+            out.iter().all(|v| v.is_finite() && v.abs() <= 1.05),
+            "freq above sample rate escaped range"
+        );
+    }
+
+    #[test]
+    fn test_analog_osc_min_max_rescale() {
+        let mut osc = UGAnalogOsc::new(AnalogWave::Saw);
+        osc.default_min = 0.0;
+        osc.default_max = 10.0;
+        let mut wave_buf = vec![0.0; 512];
+        let mut trig_buf = vec![0.0; 512];
+        {
+            let mut outputs: Vec<&mut [Sample]> = vec![&mut wave_buf, &mut trig_buf];
+            osc.process(&[], &mut outputs, 44100.0, 0);
+        }
+        let lo = wave_buf.iter().fold(f32::MAX, |a, &b| a.min(b));
+        let hi = wave_buf.iter().fold(f32::MIN, |a, &b| a.max(b));
+        assert!(
+            lo >= -0.25 && hi <= 10.25,
+            "rescaled range was [{lo}, {hi}]"
+        );
+        assert!(hi - lo > 9.0, "rescaled span was only {}", hi - lo);
     }
 }
