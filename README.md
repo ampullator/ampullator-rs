@@ -164,6 +164,26 @@ Clock(rate=300, mode=Bpm) => metro
 
 The following UGens are available in the Chain DSL. Each entry lists construction arguments (with defaults), signal inputs (with default values), and signal outputs.
 
+### AnalogOsc
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `wave` | `Saw` \| `Square` \| `Triangle` | *required* |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `freq` | `440` |
+| `phase` | `0` |
+| `duty` | `0.5` |
+| `min` | `-1` |
+| `max` | `1` |
+
+**Outputs:** `wave`, `trigger`
+
 ### AsHz
 
 **Construction args:**
@@ -354,6 +374,25 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 
 **Outputs:** `out`
 
+### HighPassConst
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+| `cutoff` | number | *required* |
+| `resonance` | number | *required* |
+| `channels` | integer | `1` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+
+**Outputs:** `out1`
+
 ### Lfo
 
 **Construction args:**
@@ -412,6 +451,25 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 | `resonance` | — |
 
 **Outputs:** `out`
+
+### LowPassConst
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `roll_off_db` | number | `6.0` |
+| `cutoff` | number | *required* |
+| `resonance` | number | *required* |
+| `channels` | integer | `1` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in1` | — |
+
+**Outputs:** `out1`
 
 ### MixLinear
 
@@ -554,6 +612,17 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 
 **Outputs:** `out`
 
+### SampleHold
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `in` | `0` |
+| `trig` | `0` |
+
+**Outputs:** `out`
+
 ### Select
 
 **Construction args:**
@@ -606,6 +675,26 @@ The following UGens are available in the Chain DSL. Each entry lists constructio
 | `snappy_decay` | `5000` |
 | `noise_filter` | `4000` |
 | `pitch_sweep` | `1.5` |
+
+**Outputs:** `out`
+
+### String
+
+**Construction args:**
+
+| Arg | Type | Default |
+|-----|------|---------|
+| `freq` | number | `440.0` |
+| `damping` | number | `0.996` |
+| `seed` | integer | `none` |
+
+**Inputs:**
+
+| Input | Default |
+|-------|---------|
+| `trigger` | `0` |
+| `freq` | `440` |
+| `damping` | `0.996` |
 
 **Outputs:** `out`
 
@@ -687,6 +776,20 @@ cargo run --bin ampullator-record -- "Clock(rate=300, mode=Bpm) => metro | metro
 ```
 
 ## Examples
+
+### Analog Oscillator Waveforms
+```text
+5 => f
+| AnalogOsc(wave=Saw) => saw
+| f ->:freq saw
+| AnalogOsc(wave=Triangle) => tri
+| f ->:freq tri
+| AnalogOsc(wave=Square) => sq
+| f ->:freq sq
+| Lfo(rate=1, wave=Triangle, min=0.2, max=0.8) => pwm ->:duty sq
+```
+![ug_analog-osc-waves](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_analog-osc-waves_graph.svg)
+![ug_analog-osc-waves](https://raw.githubusercontent.com/ampullator/ampullator-rs/refs/heads/main/doc/out/ug_analog-osc-waves_time-domain.svg)
 
 ### Clock Control
 ```text
